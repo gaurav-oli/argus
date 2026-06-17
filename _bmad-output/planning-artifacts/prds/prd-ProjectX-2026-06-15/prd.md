@@ -823,11 +823,10 @@ All `[ASSUMPTION]` tags from the document:
 > The 31B dense variant remains an option if maximum reasoning quality is ever needed for batch (overnight) analysis, but for an interactive, RAM-constrained, single-box deployment, **26B MoE is strictly the better default.** Architecture phase confirms final choice against live benchmarks.
 
 ### Databases
-*(Versions verified current as of June 2026.)*
-- **PostgreSQL 18** (18.4 stable) — structured data: portfolio positions, prices, recommendations, trade journal, ACB lots
-- **MongoDB 8.3** — documents: news articles, financial reports, social posts, analysis outputs
-- **Redis 8** (8.8 stable) — caching + real-time pub/sub agent event bus. NOTE: Redis 8 is licensed AGPLv3 — fine for private personal use; no redistribution. [ASSUMPTION: confirm license posture is acceptable; Valkey is a permissively-licensed drop-in fallback if ever needed]
-- **Vector DB** — AI semantic search and embedding storage. **Leaning pgvector** (rides inside PostgreSQL 18 — zero extra service in the 28GB budget) vs. Chroma — open question #3; use latest stable of whichever is chosen.
+*(Versions verified current as of June 2026. Architecture phase consolidated the original four-store plan to two — see architecture.md Decision 3.)*
+- **PostgreSQL 18** (18.4 stable) — does triple duty: relational (portfolio, positions, ACB lots, recommendations, calibration bins, trade journal, decision snapshots) + **JSONB documents** (news, social posts, financial reports, analysis payloads) + **pgvector 0.8.2** embeddings (semantic search, colocated). Migrations via Flyway.
+- **Redis 8** (8.8 stable) — Streams (agent event bus) + cache + WebSocket fan-out. NOTE: Redis 8 is AGPLv3 — fine for private personal use; Valkey is a permissive drop-in fallback if ever needed.
+- **MongoDB and a separate vector DB were dropped** (architecture Decision 3): at single-user volume, Postgres JSONB + pgvector cover the document and vector roles, freeing ~1.5–2GB RAM and simplifying backups on the 28GB Mini.
 
 ### Infrastructure
 - **Orchestration:** Docker Compose v2 — latest stable (databases + Spring Boot + Next.js only)
