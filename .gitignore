@@ -1,0 +1,59 @@
+### IntelliJ IDEA ###
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+.kotlin
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### IntelliJ project files ###
+.idea/
+*.iml
+
+### BMAD-METHOD reference clone (has its own .git — not part of this project) ###
+BMAD-METHOD/
+
+### Mac OS ###
+.DS_Store
+
+### Secrets — NEVER commit ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+### Build output ###
+target/
+build/
+node_modules/
+.next/
+dist/
+
+### Local data / models / backups ###
+*.log
+data/
+backups/
+ollama-models/
