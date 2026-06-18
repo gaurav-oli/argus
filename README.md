@@ -35,7 +35,7 @@ Ollama runs **natively** on the host (not in Docker) — it is not part of compo
 ## Prerequisites
 
 - JDK 25, Maven (or use the bundled `./mvnw` wrapper)
-- Node.js 20+ and npm (developed on Node 25 / npm 11)
+- Node.js 20.9+ and npm (Next.js 16 floor; developed on Node 25 / npm 11)
 
 ## How this monorepo was scaffolded (Story 1.1)
 
@@ -51,6 +51,12 @@ curl https://start.spring.io/starter.zip \
   -o backend.zip
 unzip backend.zip -d backend && rm backend.zip
 ```
+
+> **Version note:** Spring Initializr may hand back a legacy `.RELEASE`-suffixed
+> id (e.g. `4.0.7.RELEASE`) that does **not** exist in Maven Central. If the
+> first build fails with `Non-resolvable parent POM`, set the `pom.xml` parent
+> `<version>` to the plain `4.0.7` (confirm the latest `4.0.x` via Maven
+> Central's `maven-metadata.xml`). The committed `pom.xml` is already corrected.
 
 Frontend — generated via `create-next-app`:
 

@@ -4,7 +4,7 @@ baseline_commit: f69471aa5178223b8a53167aa690342d8d0f6cc7
 
 # Story 1.1: Scaffold the monorepo
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -43,6 +43,22 @@ so that I have a runnable baseline to build on.
 - [x] Task 4 — Verify clean state
   - [x] `git status` shows `backend/`, `frontend/`, `README.md`, `_bmad-output/implementation-artifacts/` as new; `node_modules/`, `target/`, `.next/`, `.env` confirmed ignored (not tracked).
   - [x] Both apps started and stopped cleanly this session (backend health UP; frontend page 200); no lingering processes.
+
+### Review Findings (code review 2026-06-18)
+
+_3 adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Outcome: **7/7 ACs satisfied, no code bugs.** 0 decision-needed, 4 patch, 2 defer, 4 dismissed._
+
+Patch (doc/hygiene, unambiguous) — all applied 2026-06-18:
+- [x] [Review][Patch] README backend `curl` isn't self-contained reproducible — added a version-correction note about the `.RELEASE` gotcha [README.md §"How this monorepo was scaffolded"]
+- [x] [Review][Patch] Story File List lists `HELP.md` as committed, but `backend/.gitignore` ignores it — corrected the File List note [this file → File List]
+- [x] [Review][Patch] Debug Log session header was stale — rewritten to reflect both sessions / completion [this file → Debug Log]
+- [x] [Review][Patch] README Node floor "20+" → "20.9+" (Next.js 16 minimum) [README.md §Prerequisites]
+
+Deferred (real, tracked, not actionable now):
+- [x] [Review][Defer] `backend/.gitattributes` forces `*.cmd eol=crlf` but `mvnw.cmd` blob is LF → fresh-clone dirty/renormalize warning on Windows [backend/.gitattributes] — deferred: Spring Initializr default, Mac-only solo project, Windows-only impact
+- [x] [Review][Defer] Temporary DB-disabling config (`DataSourceAutoConfiguration` exclude + redis health off) lives in the single default `application.yml` with no profile guard — only an inline comment prevents it being silently carried past Story 1.2 [application.yml] — deferred: Story 1.2 reverts it (its first task wires the real datasource); also flagged in project memory
+
+Dismissed (noise / false positive / by-design): Turbopack "missing" from npm scripts (false positive — Turbopack is the **default** bundler in Next 16, so `--turbopack` is a no-op; AC #2 satisfied); `/actuator/health` UP "masks" absent data layer (by-design for scaffold, AC #3 only requires UP); missing trailing newlines (cosmetic); implicit `<packaging>jar` (Maven default, AC satisfied).
 
 ## Dev Notes
 
@@ -130,7 +146,7 @@ claude-opus-4-8[1m] (Claude Opus 4.8, 1M context)
 
 ### Debug Log References
 
-**Session 2026-06-17 — Task 1 (backend) only. Paused at user request; Tasks 2–4 pending.**
+**Story implemented across two sessions: 2026-06-17 (Task 1, backend — then paused at user request) and 2026-06-18 (Tasks 2–4, frontend + hygiene + verification). All tasks complete.**
 
 - **Boot version correction (important for future stories):** `start.spring.io/metadata/client` returned legacy version IDs (`4.0.7.RELEASE`, default `4.1.0.RELEASE`, Java default 17). These `.RELEASE`-suffixed artifacts **do not exist in Maven Central** (Spring dropped the suffix at 2.4). The build failed `Non-resolvable parent POM ... 4.0.7.RELEASE`. Queried Central's `maven-metadata.xml` directly → real latest 4.0.x is **`4.0.7`** (4.1.0 is GA but architecture locked the 4.0.x line). Fixed `pom.xml` parent version to `4.0.7`. **Lesson: trust Maven Central for version IDs, not the Initializr metadata in this env.**
 - **Base-package restructure:** Boot 4 generated everything under `com.argus.argus_backend` (artifactId-derived). Architecture mandates base package `com.argus` with feature subpackages directly beneath. Moved `ArgusApplication`/`ArgusApplicationTests` to `com.argus`, deleted the `argus_backend` subpackage.
@@ -154,7 +170,7 @@ _Backend scaffold (new), relative to repo root:_
 - `backend/src/main/resources/application.yml` (replaces generated `application.properties`; temporary datasource-exclusion + redis-health-disable for scaffold)
 - `backend/src/test/java/com/argus/ArgusApplicationTests.java`
 - `backend/src/test/java/com/argus/<15 feature pkgs>/.gitkeep` (test-package mirror)
-- `backend/{mvnw,mvnw.cmd,.mvn/,.gitignore,.gitattributes,HELP.md}` (standard Initializr output)
+- `backend/{mvnw,mvnw.cmd,.mvn/,.gitignore,.gitattributes}` (standard Initializr output; the generated `HELP.md` is gitignored by `backend/.gitignore`, so it is intentionally not tracked)
 
 _Frontend scaffold (new), relative to repo root:_
 - `frontend/` — full `create-next-app` output: `package.json`, `package-lock.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `next-env.d.ts`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `public/`

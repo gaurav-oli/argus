@@ -1,0 +1,6 @@
+# Deferred Work
+
+## Deferred from: code review of story-1.1 (2026-06-18)
+
+- **`mvnw.cmd` line-ending mismatch** — `backend/.gitattributes` declares `*.cmd text eol=crlf`, but the committed `mvnw.cmd` blob is stored LF. On a fresh clone (especially Windows) git will renormalize and show the file as modified / emit "LF will be replaced by CRLF". Deferred: this is stock Spring Initializr output, the project is Mac-only and solo, and the impact is Windows-only. Revisit only if a Windows dev joins.
+- **No profile guard on the temporary DB-disabling config** — `backend/src/main/resources/application.yml` excludes `DataSourceAutoConfiguration` and disables the Redis health indicator so the app boots without a database. This lives in the single default `application.yml` with no `dev`/`prod` profile boundary; the only thing preventing it from being silently carried past Story 1.2 is an inline comment. Deferred: **Story 1.2 owns reverting this** (its first task wires the real Postgres + Redis datasource and will hit the exclusion immediately). Also recorded in project memory as a Story 1.2 gotcha. No safe action possible before 1.2 since Spring profiles themselves aren't introduced until Story 1.4.

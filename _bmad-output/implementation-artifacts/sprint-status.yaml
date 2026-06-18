@@ -44,7 +44,7 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   # Epic 1: Foundation & Walking Skeleton
   epic-1: in-progress
-  1-1-scaffold-the-monorepo: review
+  1-1-scaffold-the-monorepo: done
   1-2-stand-up-the-data-layer: backlog
   1-3-ram-latency-validation-spike-on-the-mac-mini-gap-1-2: backlog
   1-4-model-gateway-skeleton: backlog
