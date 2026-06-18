@@ -1,0 +1,145 @@
+# generated: 2026-06-17
+# last_updated: 2026-06-18
+# project: ProjectX
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-06-17
+last_updated: 2026-06-18
+project: ProjectX
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: Foundation & Walking Skeleton
+  epic-1: in-progress
+  1-1-scaffold-the-monorepo: review
+  1-2-stand-up-the-data-layer: backlog
+  1-3-ram-latency-validation-spike-on-the-mac-mini-gap-1-2: backlog
+  1-4-model-gateway-skeleton: backlog
+  1-5-agent-runtime-redis-streams-plumbing: backlog
+  1-6-rest-websocket-round-trip: backlog
+  1-7-dark-theme-dashboard-shell: backlog
+  1-8-tailscale-access-deploy-to-mini-runbook: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Security & Access
+  epic-2: backlog
+  2-1-pin-setup-and-login: backlog
+  2-2-biometric-unlock: backlog
+  2-3-configurable-session-timeout: backlog
+  2-4-tap-to-reveal-privacy: backlog
+  2-5-panic-mode: backlog
+  2-6-failed-attempt-lockout: backlog
+  2-7-remote-session-kill: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Portfolio Monitoring
+  epic-3: backlog
+  3-1-portfolio-pdf-upload: backlog
+  3-2-acb-with-purchase-time-fx: backlog
+  3-3-corporate-actions-handling: backlog
+  3-4-real-time-portfolio-value: backlog
+  3-5-holdings-table: backlog
+  3-6-portfolio-chart: backlog
+  3-7-manual-position-edit: backlog
+  3-8-health-score-calculation: backlog
+  3-9-health-score-breakdown-widget: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: News Intelligence (Agent 1)
+  epic-4: backlog
+  4-1-news-ingestion-pipeline: backlog
+  4-2-sentiment-relevance-tagging: backlog
+  4-3-source-credibility-engine: backlog
+  4-4-stranger-danger-protocol: backlog
+  4-5-finnhub-resilience-gap-4: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Economic Calendar (Agent 7)
+  epic-5: backlog
+  5-1-calendar-ingestion: backlog
+  5-2-pre-event-alerts: backlog
+  5-3-agent-5-calendar-integration-quiet-period: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: Recommendations & Trust (Agent 5)
+  epic-6: backlog
+  6-1-probability-scoring-engine-gap-6: backlog
+  6-2-multi-signal-diagnostic-report: backlog
+  6-3-probability-forecast-card-ui: backlog
+  6-4-hybrid-trigger: backlog
+  6-5-position-sizing-guidance: backlog
+  6-6-graduation-state-machine: backlog
+  6-7-trade-confirmation-rationale-snapshot: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Conversational AI & Personas
+  epic-7: backlog
+  7-1-recommendation-chat: backlog
+  7-2-portfolio-chat: backlog
+  7-3-haiku-escalation: backlog
+  7-4-four-personas: backlog
+  7-5-canadian-investor-persona: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Briefing, Notifications & Alert Discipline
+  epic-8: backlog
+  8-1-web-push-setup: backlog
+  8-2-alert-urgency-tiers: backlog
+  8-3-alert-fatigue-gate: backlog
+  8-4-alert-deduplication: backlog
+  8-5-morning-briefing: backlog
+  epic-8-retrospective: optional
+
+  # Epic 9: Operations Dashboards
+  epic-9: backlog
+  9-1-per-agent-status-panel: backlog
+  9-2-agent-5-accuracy-tracking: backlog
+  9-3-contribution-attribution: backlog
+  9-4-calibration-tracking: backlog
+  9-5-hardware-resource-monitor: backlog
+  9-6-api-budget-tracker: backlog
+  9-7-data-freshness-backup-status: backlog
+  epic-9-retrospective: optional
+
+  # Epic 10: Resilience, Backup & Budget
+  epic-10: backlog
+  10-1-automated-incremental-backup: backlog
+  10-2-backup-status-visibility: backlog
+  10-3-recovery-runbook: backlog
+  10-4-degraded-mode-coordinator-gap-3: backlog
+  10-5-real-time-budget-tracking: backlog
+  10-6-budget-alerts-auto-switch: backlog
+  epic-10-retrospective: optional

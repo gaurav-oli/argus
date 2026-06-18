@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: argus
+  # --- TEMPORARY (Story 1.1 scaffold) -------------------------------------
+  # The data-jpa/data-redis/postgresql dependencies are on the classpath, but
+  # Postgres + Redis are not stood up until Story 1.2 (Docker Compose + Flyway).
+  # Excluding DataSourceAutoConfiguration lets the context boot with no DB URL
+  # (JPA autoconfig backs off automatically without a DataSource bean).
+  # Story 1.2 MUST remove this exclusion and wire the real datasource + Redis.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
+  # ------------------------------------------------------------------------
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    # No Redis running yet (Story 1.2). Disable the indicator so /actuator/health
+    # reports UP during scaffold. Re-enable in Story 1.2.
+    redis:
+      enabled: false
