@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-17
-last_updated: 2026-06-18
+last_updated: 2026-06-19
 project: ProjectX
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   1-4-model-gateway-skeleton: review
   1-5-agent-runtime-redis-streams-plumbing: review
   1-6-rest-websocket-round-trip: review
-  1-7-dark-theme-dashboard-shell: backlog
+  1-7-dark-theme-dashboard-shell: done
   1-8-tailscale-access-deploy-to-mini-runbook: backlog
   epic-1-retrospective: optional
 
