@@ -1,50 +1,48 @@
-import { Skeleton } from "@/components/ui/Skeleton";
+import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
+import { AllocationDonut } from "@/components/dashboard/AllocationDonut";
+import { HealthScoreRing } from "@/components/dashboard/HealthScoreRing";
+import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
+import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
+import { TopMovers } from "@/components/dashboard/TopMovers";
+import { MotionCard } from "@/components/ui/MotionCard";
 
-export default function HomePage() {
+/**
+ * Home — the design-prototype dashboard. Visual-first, populated with dummy
+ * data (see lib/mockData). Animated hero value, radial health gauge, sector
+ * donut, 30-day trend, top movers, and a live-alerts feed.
+ */
+export default function Home() {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
-          Good morning
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Here&apos;s your morning briefing.
-        </p>
-      </div>
+    <div className="mx-auto max-w-6xl">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Good morning, Gaurav</h1>
+        <p className="text-sm text-text-secondary">Here&apos;s how your book is doing today.</p>
+      </header>
 
-      <section className="rounded-xl border border-border bg-surface p-6">
-        <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-          Morning Briefing
-        </h2>
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+        {/* Hero spans wide; health ring beside it */}
+        <MotionCard index={0} className="min-h-[200px] md:col-span-4">
+          <PortfolioHero />
+        </MotionCard>
+        <MotionCard index={1} className="min-h-[200px] md:col-span-2">
+          <HealthScoreRing />
+        </MotionCard>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-            Top Movers
-          </h2>
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-4 w-1/3" />
-          </div>
-        </section>
-        <section className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-            Today&apos;s Calendar
-          </h2>
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        </section>
+        {/* Trend + allocation */}
+        <MotionCard index={2} className="min-h-[240px] md:col-span-4">
+          <PortfolioTrendChart />
+        </MotionCard>
+        <MotionCard index={3} className="min-h-[240px] md:col-span-2">
+          <AllocationDonut />
+        </MotionCard>
+
+        {/* Movers + alerts */}
+        <MotionCard index={4} className="md:col-span-3" interactive={false}>
+          <TopMovers />
+        </MotionCard>
+        <MotionCard index={5} className="md:col-span-3" interactive={false}>
+          <AlertsFeed />
+        </MotionCard>
       </div>
     </div>
   );
