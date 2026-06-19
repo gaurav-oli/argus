@@ -45,15 +45,16 @@ type Mover = {
   name: string;
   price: number;
   changePct: number;
+  weight: number; // % of book — drives bubble size
   spark: number[];
 };
 
 export const topMovers: Mover[] = [
-  { symbol: "SHOP", name: "Shopify", price: 142.8, changePct: 6.4, spark: [120, 124, 122, 130, 134, 138, 143] },
-  { symbol: "NVDA", name: "NVIDIA", price: 1284.5, changePct: 3.9, spark: [1190, 1210, 1205, 1240, 1255, 1270, 1285] },
-  { symbol: "TD", name: "TD Bank", price: 81.2, changePct: 1.2, spark: [79, 79.5, 80, 79.8, 80.4, 81, 81.2] },
-  { symbol: "ENB", name: "Enbridge", price: 58.6, changePct: -2.1, spark: [60.5, 60, 59.4, 59.8, 59, 58.7, 58.6] },
-  { symbol: "BCE", name: "BCE Inc", price: 44.3, changePct: -3.4, spark: [46.2, 45.8, 45.5, 45, 44.7, 44.5, 44.3] },
+  { symbol: "SHOP", name: "Shopify", price: 142.8, changePct: 6.4, weight: 11, spark: [120, 124, 122, 130, 134, 138, 143] },
+  { symbol: "NVDA", name: "NVIDIA", price: 1284.5, changePct: 3.9, weight: 14, spark: [1190, 1210, 1205, 1240, 1255, 1270, 1285] },
+  { symbol: "TD", name: "TD Bank", price: 81.2, changePct: 1.2, weight: 9, spark: [79, 79.5, 80, 79.8, 80.4, 81, 81.2] },
+  { symbol: "ENB", name: "Enbridge", price: 58.6, changePct: -2.1, weight: 7, spark: [60.5, 60, 59.4, 59.8, 59, 58.7, 58.6] },
+  { symbol: "BCE", name: "BCE Inc", price: 44.3, changePct: -3.4, weight: 5, spark: [46.2, 45.8, 45.5, 45, 44.7, 44.5, 44.3] },
 ];
 
 type Alert = {
@@ -61,13 +62,43 @@ type Alert = {
   tier: "critical" | "warning" | "info";
   title: string;
   body: string;
+  detail: string;
+  source: string;
   time: string;
+  actions: string[];
 };
 
 export const alerts: Alert[] = [
-  { id: "a1", tier: "critical", title: "ENB earnings miss", body: "Enbridge Q2 EPS below consensus — review position.", time: "2m" },
-  { id: "a2", tier: "warning", title: "Tech concentration", body: "Technology now 34% of book, above your 30% target.", time: "18m" },
-  { id: "a3", tier: "info", title: "BoC rate decision", body: "Bank of Canada announcement tomorrow 10:00 ET.", time: "1h" },
+  {
+    id: "a1",
+    tier: "critical",
+    title: "ENB earnings miss",
+    body: "Enbridge Q2 EPS below consensus — review position.",
+    detail: "Reported $0.62 vs $0.71 est (−12.7%). Revenue light on lower mainline throughput. Your 7% position is down 2.1% intraday.",
+    source: "Earnings · Agent 1",
+    time: "2m",
+    actions: ["View position", "Ask Argus"],
+  },
+  {
+    id: "a2",
+    tier: "warning",
+    title: "Tech concentration",
+    body: "Technology now 34% of book, above your 30% target.",
+    detail: "Driven by SHOP +6.4% and NVDA +3.9% today. Trimming ~$19k would bring you back to target. Agent 5 suggests a partial SHOP trim.",
+    source: "Risk · Agent 5",
+    time: "18m",
+    actions: ["See suggestion", "Mute"],
+  },
+  {
+    id: "a3",
+    tier: "info",
+    title: "BoC rate decision",
+    body: "Bank of Canada announcement tomorrow 10:00 ET.",
+    detail: "Consensus holds at 2.75%. Rate-sensitive holdings (TD, BCE, ENB ≈ 21% of book) may move. Quiet period active until release.",
+    source: "Calendar · Agent 7",
+    time: "1h",
+    actions: ["Add to watch", "Dismiss"],
+  },
 ];
 
 export const recommendations = [

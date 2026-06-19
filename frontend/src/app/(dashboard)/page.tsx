@@ -1,9 +1,9 @@
-import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
-import { AllocationDonut } from "@/components/dashboard/AllocationDonut";
+import { AlertCards } from "@/components/dashboard/AlertCards";
+import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HealthScoreRing } from "@/components/dashboard/HealthScoreRing";
+import { MoversBubbles } from "@/components/dashboard/MoversBubbles";
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
 import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
-import { TopMovers } from "@/components/dashboard/TopMovers";
 import { MotionCard } from "@/components/ui/MotionCard";
 
 /**
@@ -33,15 +33,15 @@ export default function Home() {
           <PortfolioTrendChart />
         </MotionCard>
         <MotionCard index={3} className="min-h-[240px] md:col-span-2">
-          <AllocationDonut />
+          <AllocationChart />
         </MotionCard>
 
         {/* Movers + alerts */}
         <MotionCard index={4} className="md:col-span-3" interactive={false}>
-          <TopMovers />
+          <MoversBubbles />
         </MotionCard>
         <MotionCard index={5} className="md:col-span-3" interactive={false}>
-          <AlertsFeed />
+          <AlertCards />
         </MotionCard>
       </div>
     </div>
