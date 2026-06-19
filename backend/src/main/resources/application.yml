@@ -1,16 +1,27 @@
 spring:
   application:
     name: argus
-  # --- TEMPORARY (Story 1.1 scaffold) -------------------------------------
-  # The data-jpa/data-redis/postgresql dependencies are on the classpath, but
-  # Postgres + Redis are not stood up until Story 1.2 (Docker Compose + Flyway).
-  # Excluding DataSourceAutoConfiguration lets the context boot with no DB URL
-  # (JPA autoconfig backs off automatically without a DataSource bean).
-  # Story 1.2 MUST remove this exclusion and wire the real datasource + Redis.
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
-  # ------------------------------------------------------------------------
+
+  # Postgres 18 (pgvector) — see docker-compose.yml. Local defaults match the
+  # compose defaults so `mvn spring-boot:run` works without exporting env vars;
+  # the Mini supplies real values via its own .env. dev/prod profiles arrive in Story 1.4.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:argus}
+    username: ${POSTGRES_USER:argus}
+    password: ${POSTGRES_PASSWORD:argus}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate      # Flyway owns the schema — Hibernate NEVER generates it
+    open-in-view: false
+
+  flyway:
+    enabled: true             # migrations in classpath:db/migration (V<n>__*.sql)
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 management:
   endpoints:
@@ -20,8 +31,3 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-  health:
-    # No Redis running yet (Story 1.2). Disable the indicator so /actuator/health
-    # reports UP during scaffold. Re-enable in Story 1.2.
-    redis:
-      enabled: false

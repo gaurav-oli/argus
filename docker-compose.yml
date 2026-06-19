@@ -1,0 +1,47 @@
+# Argus data layer — local development.
+#
+# Scope: Postgres + Redis only. In dev the backend runs via `mvn spring-boot:run`
+# and the frontend via `npm run dev` (see README). The `backend`/`frontend`
+# container services and native-Ollama deploy are added in Story 1.8
+# (Tailscale + deploy-to-Mini) — their absence here is intentional, not an omission.
+#
+# Usage: cp .env.example .env  (set POSTGRES_PASSWORD), then: docker compose up -d
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg18   # PostgreSQL 18 + pgvector 0.8.2
+    container_name: argus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-argus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-argus}
+    ports:
+      - "5432:5432"
+    volumes:
+      # PG18+ images store data in a major-version subdir, so mount at
+      # /var/lib/postgresql (NOT /var/lib/postgresql/data, which errors on boot).
+      - argus-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-argus} -d ${POSTGRES_DB:-argus}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8
+    container_name: argus-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - argus-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  argus-pgdata:
+  argus-redisdata:
