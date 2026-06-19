@@ -113,6 +113,57 @@ export const agents = [
   { name: "Sentiment", status: "idle" as const },
 ];
 
+/* ----- Portfolio page: price chart, holdings treemap, gauges ----- */
+
+/** ~1y of daily portfolio value — deterministic (SSR === client). Chart slices by range. */
+export const fullPriceSeries: { time: string; value: number }[] = (() => {
+  const start = Date.UTC(2025, 5, 20);
+  let v = 372000;
+  const out: { time: string; value: number }[] = [];
+  for (let i = 0; i < 365; i++) {
+    v += Math.sin(i / 9) * 2100 + Math.cos(i / 3.5) * 1050 + i * 92 + (i % 7 === 0 ? 1400 : -380);
+    out.push({ time: new Date(start + i * 86_400_000).toISOString().slice(0, 10), value: Math.max(300000, Math.round(v)) });
+  }
+  return out;
+})();
+
+export type Holding = { symbol: string; value: number; changePct: number; sector: string };
+export const holdings: Holding[] = [
+  { symbol: "NVDA", value: 68200, changePct: 3.9, sector: "Technology" },
+  { symbol: "SHOP", value: 53600, changePct: 6.4, sector: "Technology" },
+  { symbol: "TD", value: 43900, changePct: 1.2, sector: "Financials" },
+  { symbol: "RY", value: 38100, changePct: 0.6, sector: "Financials" },
+  { symbol: "ENB", value: 34100, changePct: -2.1, sector: "Energy" },
+  { symbol: "CNQ", value: 27500, changePct: -0.8, sector: "Energy" },
+  { symbol: "BCE", value: 24300, changePct: -3.4, sector: "Telecom" },
+  { symbol: "ATD", value: 21900, changePct: 2.2, sector: "Consumer" },
+  { symbol: "WCN", value: 18700, changePct: 0.9, sector: "Industrials" },
+  { symbol: "CASH", value: 24400, changePct: 0.0, sector: "Cash" },
+];
+
+export const gauges = [
+  { id: "pnl", label: "Day P&L", value: 1.76, max: 4, display: "+1.76%", color: "#00FF88" },
+  { id: "win", label: "Win Rate", value: 68, max: 100, display: "68%", color: "#00D4FF" },
+  { id: "bench", label: "vs TSX", value: 3.2, max: 6, display: "+3.2%", color: "#00FF88" },
+  { id: "risk", label: "Risk", value: 42, max: 100, display: "Moderate", color: "#FFB800" },
+];
+
+/* ----- Agents page: live activity pipeline ----- */
+export type AgentNode = {
+  id: string;
+  name: string;
+  role: string;
+  status: "active" | "idle";
+  throughput: number; // items/min
+};
+export const agentNodes: AgentNode[] = [
+  { id: "news", name: "News", role: "Agent 1", status: "active", throughput: 42 },
+  { id: "sentiment", name: "Sentiment", role: "Agent 2", status: "active", throughput: 31 },
+  { id: "calendar", name: "Calendar", role: "Agent 7", status: "active", throughput: 6 },
+  { id: "recommender", name: "Recommender", role: "Agent 5", status: "active", throughput: 12 },
+  { id: "risk", name: "Risk", role: "Agent 5", status: "idle", throughput: 0 },
+];
+
 export const usd = (n: number) =>
   n.toLocaleString("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
 
