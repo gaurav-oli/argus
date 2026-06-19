@@ -6,6 +6,11 @@
 
 **Plan (per user, 2026-06-18):** clone the repo on the Mini later and execute 1.3 there. Stories 1.4+ are being built on the laptop in the meantime (1.4 reordered ahead of 1.3 — low risk, since the Model Gateway is model-swappable). Revisit 1.3 once the Mini is set up; its outcome may adjust the `prod` model binding/keep-alive policy that 1.4 introduces.
 
+## Deferred from: story-1.6 (2026-06-18)
+
+- **springdoc-openapi (Swagger UI)** — Architecture Decision 6 lists it for personal API reference, but it was deferred from Story 1.6 (not in that AC, and springdoc needs a confirmed Boot-4-compatible version — same major-version caution as Boot 4 / Spring AI 2.0 / Testcontainers 2.x). Add in a small later story once a compatible springdoc release is verified.
+- **Browser end-to-end of the REST+STOMP round-trip** — Story 1.6 proved the wire via a Java STOMP client + live curl, and shipped `frontend/src/lib/apiClient.ts` + `wsClient.ts`. The visual browser round-trip is wired when the dashboard shell exists (Story 1.7).
+
 ## Deferred from: code review of story-1.1 (2026-06-18)
 
 - **`mvnw.cmd` line-ending mismatch** — `backend/.gitattributes` declares `*.cmd text eol=crlf`, but the committed `mvnw.cmd` blob is stored LF. On a fresh clone (especially Windows) git will renormalize and show the file as modified / emit "LF will be replaced by CRLF". Deferred: this is stock Spring Initializr output, the project is Mac-only and solo, and the impact is Windows-only. Revisit only if a Windows dev joins.
