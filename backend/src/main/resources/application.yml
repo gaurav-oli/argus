@@ -7,6 +7,11 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+  # Agents run on virtual threads (Loom) — @Scheduled tasks execute on virtual threads.
+  threads:
+    virtual:
+      enabled: true
+
   # Postgres 18 (pgvector) — see docker-compose.yml. Local defaults match the
   # compose defaults so `mvn spring-boot:run` works without exporting env vars;
   # the Mini supplies real values via its own .env. dev/prod profiles arrive in Story 1.4.
