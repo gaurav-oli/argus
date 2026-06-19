@@ -1,5 +1,11 @@
 # Deferred Work
 
+## ⏳ TODO — Story 1.3 (RAM + latency validation spike) — MUST run on the Mac Mini
+
+**Status: deferred, not started (still `backlog` in sprint-status).** Story 1.3 measures Gemma 4 26B MoE memory + latency under worst-case load (DBs + JVM + a generation request) and is the GAP-1/2 gate. It **cannot run on this dev machine** (M5 MacBook, 16GB — can't host the ~15GB 26B model). It requires the **Mac Mini (M3, 28GB)** with Ollama + the model, reached over Tailscale.
+
+**Plan (per user, 2026-06-18):** clone the repo on the Mini later and execute 1.3 there. Stories 1.4+ are being built on the laptop in the meantime (1.4 reordered ahead of 1.3 — low risk, since the Model Gateway is model-swappable). Revisit 1.3 once the Mini is set up; its outcome may adjust the `prod` model binding/keep-alive policy that 1.4 introduces.
+
 ## Deferred from: code review of story-1.1 (2026-06-18)
 
 - **`mvnw.cmd` line-ending mismatch** — `backend/.gitattributes` declares `*.cmd text eol=crlf`, but the committed `mvnw.cmd` blob is stored LF. On a fresh clone (especially Windows) git will renormalize and show the file as modified / emit "LF will be replaced by CRLF". Deferred: this is stock Spring Initializr output, the project is Mac-only and solo, and the impact is Windows-only. Revisit only if a Windows dev joins.

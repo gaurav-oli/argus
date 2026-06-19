@@ -1,0 +1,13 @@
+# dev profile — laptop. The Model Gateway uses an in-memory mock model, so no
+# Ollama is required. Exclude Spring AI's Ollama chat autoconfiguration so it does
+# NOT create a second ChatModel bean (which would make the gateway's ChatModel
+# injection ambiguous).
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+
+argus:
+  model:
+    concurrency: 1
+    dev-response: "[dev-mock] Argus Model Gateway is alive."

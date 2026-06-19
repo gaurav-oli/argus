@@ -14,7 +14,7 @@ import org.testcontainers.utility.DockerImageName;
  * Requires the Docker daemon to be running.
  */
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
 
 	@Bean
 	@ServiceConnection
