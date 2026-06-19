@@ -4,7 +4,7 @@ baseline_commit: 9788bdea32b3a7eaa3492ed06529e30fbb06cc12
 
 # Story 1.2: Stand up the data layer
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -47,6 +47,20 @@ so that the app has persistence.
   - [x] `docker compose up -d` both healthy; `./mvnw spring-boot:run` connected to pg+redis; logs show Flyway applying `V1`.
   - [x] `/actuator/health` (details exposed via runtime arg) → `db: UP` (PostgreSQL) + `redis: UP` (8.8.0), overall UP. Reverted to default config (no file change for the verify).
   - [x] `./mvnw test` green with Docker running (Testcontainers).
+
+### Review Findings (code review 2026-06-18)
+
+_3 adversarial layers. Outcome: **6/6 ACs satisfied.** The one High finding was empirically disproven. 0 decision-needed, 3 patch, 1 defer, 6 dismissed._
+
+Patch (apply) — all applied + verified 2026-06-18:
+- [x] [Review][Patch] README refreshed — removed the stale "boots without a database (Story 1.1)… 1.2 reverses this" block, de-future-tensed the data layer, added a "start the data layer first" step, the `db`+`redis` health note, and the Docker prerequisite for `./mvnw test` [README.md]
+- [x] [Review][Patch] Password foot-gun fixed — `.env.example` now ships `POSTGRES_PASSWORD=argus` (matches the app default) with a comment explaining Spring doesn't read `.env` and that the Mini must set it in both places [.env.example]
+- [x] [Review][Patch] Loopback binding — published ports are now `127.0.0.1:5432` / `127.0.0.1:6379`; re-verified both containers come up healthy [docker-compose.yml]
+
+Deferred (tracked):
+- [x] [Review][Defer] PG18 stores data in a `18/` subdir inside the volume; the FR-40 backup story (Epic 10) must not assume a fixed data path across major-version bumps [deferred-work.md]
+
+Dismissed: **High "data may not persist" — FALSE POSITIVE, empirically verified**: PG18 image declares `VOLUME /var/lib/postgresql` (= the mount point, no shadowing); a sentinel row survived a full `down`/`up` cycle and Flyway's `installed_on` was unchanged → data persists. Also dismissed: flyway `version='1'` assertion robustness (works); `@ServiceConnection(name="redis")` false-green hypothetical (wiring verified via Testcontainers logs — the test connected to the container, not a host Redis); `ddl-auto: validate` future entity drift (by design); `pg_isready` first-boot timing (self-healing via retries, verified healthy); transitive `flyway-core` via `spring-boot-flyway` (intended).
 
 ## Dev Notes
 

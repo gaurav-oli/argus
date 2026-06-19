@@ -15,13 +15,15 @@ devices over Tailscale.
 argus/  (this repo)
 ├── backend/            # Spring Boot 4 · Java 25 · Maven  — API, agents, Model Gateway
 ├── frontend/           # Next.js 16 · TypeScript · Tailwind v4 · App Router · PWA
+├── docker-compose.yml  # local data layer: Postgres 18 (pgvector) + Redis 8
 ├── .env.example        # copy to .env (gitignored) and fill in keys
 ├── _bmad-output/       # planning + implementation artifacts (PRD, architecture, epics, stories)
 └── README.md
 ```
 
-The data layer (PostgreSQL 18 + pgvector, Redis 8) and `docker-compose.yml` arrive in **Story 1.2**.
-Ollama runs **natively** on the host (not in Docker) — it is not part of compose.
+In dev, `docker-compose.yml` runs **Postgres + Redis only**; the backend runs via `mvn spring-boot:run`
+and the frontend via `npm run dev`. Ollama runs **natively** on the host (not in Docker), and the
+backend/frontend container services are added later for the Mac Mini deploy (Story 1.8).
 
 ## Stack
 
@@ -29,13 +31,15 @@ Ollama runs **natively** on the host (not in Docker) — it is not part of compo
 |----------|--------|
 | Backend  | Java 25 · Maven · **Spring Boot 4.0.7** (Web MVC, WebSocket, Data JPA, Data Redis, Actuator, Validation, PostgreSQL driver) |
 | Frontend | **Next.js 16** · TypeScript · Tailwind v4 · Turbopack · App Router |
-| Data     | PostgreSQL 18 (relational + JSONB + pgvector) · Redis 8 — *wired in Story 1.2* |
+| Data     | PostgreSQL 18 (relational + JSONB + pgvector 0.8.2) · Redis 8 · Flyway migrations |
 | AI       | Ollama (small model always-resident + Gemma 4 26B MoE on demand) · Claude Haiku fallback — *later epics* |
 
 ## Prerequisites
 
 - JDK 25, Maven (or use the bundled `./mvnw` wrapper)
 - Node.js 20.9+ and npm (Next.js 16 floor; developed on Node 25 / npm 11)
+- Docker + Docker Compose — required to run the data layer **and** to run the backend tests
+  (they use Testcontainers, which needs a running Docker daemon)
 
 ## How this monorepo was scaffolded (Story 1.1)
 
@@ -70,6 +74,14 @@ npx create-next-app@latest frontend \
 ## Running locally
 
 First time only: `cp .env.example .env` and fill in what you have (blank values degrade gracefully).
+The defaults already work for local development.
+
+### Data layer (start this first)
+
+```bash
+docker compose up -d          # Postgres 18 (pgvector) + Redis 8
+docker compose ps             # both should report "healthy"
+```
 
 ### Backend
 
@@ -78,13 +90,12 @@ cd backend
 ./mvnw spring-boot:run        # starts on http://localhost:8080
 ```
 
-Health check: <http://localhost:8080/actuator/health> → `{"status":"UP"}`.
+The backend connects to Postgres + Redis on startup and Flyway applies the baseline migration, so the
+data layer must be up first. Health check: <http://localhost:8080/actuator/health> → `{"status":"UP"}`
+(with `db` and `redis` indicators UP).
 
-Run tests: `./mvnw test`
-
-> During Story 1.1 the backend boots **without** a database: `DataSourceAutoConfiguration` is excluded and
-> the Redis health indicator is disabled in `application.yml`. Story 1.2 reverses this and stands up
-> Postgres + Redis via Docker Compose.
+Run tests: `./mvnw test` — **requires a running Docker daemon** (Testcontainers spins up throwaway
+Postgres + Redis; the whole suite, including the context-load test, depends on it).
 
 ### Frontend
 
