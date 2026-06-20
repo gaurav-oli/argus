@@ -1,11 +1,16 @@
-# Argus data layer — local development.
+# Argus — Docker Compose.
 #
-# Scope: Postgres + Redis only. In dev the backend runs via `mvn spring-boot:run`
-# and the frontend via `npm run dev` (see README). The `backend`/`frontend`
-# container services and native-Ollama deploy are added in Story 1.8
-# (Tailscale + deploy-to-Mini) — their absence here is intentional, not an omission.
+# DEV (laptop):   docker compose up -d            → Postgres + Redis ONLY.
+#                 Backend runs via `mvn spring-boot:run`, frontend via `npm run dev`.
+# DEPLOY (Mini):  docker compose --profile deploy up -d --build
+#                 → adds the backend + frontend containers (full stack).
+#                 Ollama runs NATIVELY on the host (never containerized — no Metal
+#                 passthrough in Docker); containers reach it via host.docker.internal.
 #
-# Usage: cp .env.example .env  (set POSTGRES_PASSWORD), then: docker compose up -d
+# The backend/frontend services are gated behind the `deploy` profile so the dev
+# workflow above is unchanged. See docs/deploy-runbook.md for the full procedure.
+#
+# Usage: cp .env.example .env  (set POSTGRES_PASSWORD), then run one of the above.
 
 services:
   postgres:
@@ -41,6 +46,73 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # ----- deploy profile (Mac Mini full stack) -----
+
+  backend:
+    profiles: ["deploy"]
+    build: ./backend
+    image: argus-backend:local
+    container_name: argus-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # Reach the DB/cache by compose service name (the app defaults to localhost).
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-argus}
+      POSTGRES_USER: ${POSTGRES_USER:-argus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-argus}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Ollama runs natively on the host, not in a container.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma3:27b}
+      ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-10m}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets the container reach native Ollama
+    ports:
+      - "127.0.0.1:8080:8080"   # loopback only — fronted by Tailscale serve
+    healthcheck:
+      # JRE image has no curl/wget; use a bash /dev/tcp port probe.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  frontend:
+    profiles: ["deploy"]
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_* are inlined at build time. Defaults suit local verification;
+        # on the Mini set these in .env to the single-origin Tailscale values
+        # (empty API base → same-origin /api; wss URL for the tailnet host).
+        # NOTE: API base uses `-` (not `:-`) so a SET-but-EMPTY value is honored
+        # (same-origin). `:-` would rewrite empty back to localhost and break the deploy.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL-http://localhost:8080}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8080/ws}
+    image: argus-frontend:local
+    container_name: argus-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3000:3000"   # loopback only — fronted by Tailscale serve
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 volumes:
   argus-pgdata:

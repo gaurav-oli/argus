@@ -51,7 +51,7 @@ development_status:
   1-5-agent-runtime-redis-streams-plumbing: review
   1-6-rest-websocket-round-trip: review
   1-7-dark-theme-dashboard-shell: done
-  1-8-tailscale-access-deploy-to-mini-runbook: backlog
+  1-8-tailscale-access-deploy-to-mini-runbook: done
   epic-1-retrospective: optional
 
   # Epic 2: Security & Access

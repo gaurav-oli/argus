@@ -21,9 +21,11 @@ argus/  (this repo)
 └── README.md
 ```
 
-In dev, `docker-compose.yml` runs **Postgres + Redis only**; the backend runs via `mvn spring-boot:run`
-and the frontend via `npm run dev`. Ollama runs **natively** on the host (not in Docker), and the
-backend/frontend container services are added later for the Mac Mini deploy (Story 1.8).
+In dev, `docker compose up` runs **Postgres + Redis only**; the backend runs via `mvn spring-boot:run`
+and the frontend via `npm run dev`. Ollama runs **natively** on the host (not in Docker). For the
+Mac Mini deploy, the full stack (backend + frontend containers) comes up behind the `deploy` profile —
+`docker compose --profile deploy up -d --build` — reachable from your devices over Tailscale.
+See the **[deploy & Tailscale runbook](docs/deploy-runbook.md)** for the full procedure.
 
 ## Stack
 
