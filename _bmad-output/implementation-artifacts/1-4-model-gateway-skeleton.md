@@ -4,7 +4,7 @@ baseline_commit: effa9f1f89205de88e44d2cbcc20bb8e6fed9b26
 
 # Story 1.4: Model Gateway skeleton
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -121,6 +121,17 @@ backend/
 - [Source: architecture.md#Complete Monorepo Tree] — `model` package responsibilities (★ load-bearing).
 - [Source: 1-2-stand-up-the-data-layer.md] — current `application.yml` shape; Testcontainers test pattern; profiles deferred to 1.4.
 - [Source: deferred-work.md] — Story 1.3 deferral (Mini dependency).
+
+## Review Findings
+
+_Code review 2026-06-20 (Blind Hunter + Edge Case Hunter + Acceptance Auditor, Opus 4.8). All 6 ACs PASS — no blocking violations. Backend suite 15/15 green after the patch._
+
+**Patch applied:**
+- [x] [Review][Patch] Clarified that `argus.model.keep-alive` / `big-model` are informational — the *effective* values are Spring AI's `spring.ai.ollama.chat.options.*` keys (removes a dead-config footgun). [ModelGatewayProperties.java, application-prod.yml]
+
+**Deferred → `docs/epic-1-hardening-backlog.md`:** no call/acquire timeout (a hung model starves the concurrency=1 permit); fallback error contract when the real Haiku lands; `concurrency`/prompt validation.
+
+**Dismissed (verified):** hand-rolled test mocks instead of Mockito (intentional + documented); `Semaphore` fairness (no AC); spec File-List wording drift.
 
 ## Dev Agent Record
 

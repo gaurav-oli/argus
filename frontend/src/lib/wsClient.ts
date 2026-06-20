@@ -27,7 +27,13 @@ export function subscribeToTopic<T>(
   const ready = new Promise<void>((resolve, reject) => {
     client.onConnect = () => {
       subscription = client.subscribe(topic, (message: IMessage) => {
-        onMessage(JSON.parse(message.body) as T);
+        // Guard parsing: a malformed/non-JSON frame must not throw inside the
+        // STOMP callback (which would kill the subscription handler).
+        try {
+          onMessage(JSON.parse(message.body) as T);
+        } catch {
+          console.warn(`[wsClient] dropped non-JSON message on ${topic}`);
+        }
       });
       resolve();
     };

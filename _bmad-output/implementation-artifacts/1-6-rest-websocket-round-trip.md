@@ -4,7 +4,7 @@ baseline_commit: 281db9f
 
 # Story 1.6: REST + WebSocket round-trip
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -104,6 +104,17 @@ frontend/package.json               # UPDATE  +@stomp/stompjs
 - [Source: architecture.md#Format Patterns / #Naming Patterns] — no envelope, problem details, kebab-case `/api`, no version prefix.
 - [Source: architecture.md#Architectural Boundaries] — REST + STOMP is the only FE↔BE channel.
 - [Source: 1-5-agent-runtime-redis-streams-plumbing.md] — no auto ObjectMapper bean; Testcontainers test pattern.
+
+## Review Findings
+
+_Code review 2026-06-20 (Blind Hunter + Edge Case Hunter + Acceptance Auditor, Opus 4.8). All 5 ACs PASS — no blocking violations. Frontend `tsc` + `eslint` clean after the patch._
+
+**Patch applied:**
+- [x] [Review][Patch] Guarded `wsClient` `JSON.parse` so a malformed / non-JSON STOMP frame is logged and dropped instead of throwing inside (and killing) the subscription handler. [frontend/src/lib/wsClient.ts]
+
+**Deferred → `docs/epic-1-hardening-backlog.md`:** wide-open WebSocket origin (`*`) — proper fix needs env-configurable origins shared with CORS + WS auth, best done **with Epic 2 (Security)**; `wsClient` reconnect cleanup + reject-on-transport-error; `apiClient` 204/empty-body + content-type guards; align the demo STOMP payload to JSON.
+
+**Dismissed (verified):** `SystemInfo.time` `Instant`→`string` — **FALSE POSITIVE** (Spring Boot defaults to ISO-8601; the live `/api/system-info` returns `"…Z"`, confirmed during the Story 1.8 stack test); `localhost` env fallback (by-design; the deploy overrides per Story 1.8); `Thread.sleep(300)` test timing (functional).
 
 ## Dev Agent Record
 

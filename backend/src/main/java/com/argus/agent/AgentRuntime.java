@@ -48,10 +48,28 @@ public class AgentRuntime {
 				log.info("Created consumer group '{}' on stream '{}'", agent.consumerGroup(), agent.streamKey());
 			}
 			catch (Exception ex) {
-				// BUSYGROUP — group already exists; idempotent startup.
-				log.debug("Consumer group '{}' already exists on '{}'", agent.consumerGroup(), agent.streamKey());
+				if (isGroupAlreadyExists(ex)) {
+					// BUSYGROUP — group already exists; idempotent startup.
+					log.debug("Consumer group '{}' already exists on '{}'", agent.consumerGroup(), agent.streamKey());
+				}
+				else {
+					// A real failure (Redis down, auth, wrong host) — surface it instead of
+					// masking it as "already exists". The agent won't receive events until fixed.
+					log.error("Failed to create consumer group '{}' on '{}' — agent '{}' will not receive events",
+							agent.consumerGroup(), agent.streamKey(), agent.name(), ex);
+				}
 			}
 		}
+	}
+
+	/** True only for Redis's BUSYGROUP ("group already exists") error, scanning the cause chain. */
+	private static boolean isGroupAlreadyExists(Throwable ex) {
+		for (Throwable t = ex; t != null; t = t.getCause()) {
+			if (t.getMessage() != null && t.getMessage().contains("BUSYGROUP")) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.agent.poll-interval-ms:500}")

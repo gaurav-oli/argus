@@ -15,5 +15,7 @@ spring:
 argus:
   model:
     concurrency: 1                       # big model serialized (Decision 1)
+    # keep-alive / big-model below are informational only — the EFFECTIVE values are the
+    # spring.ai.ollama.chat.options.* keys above. Kept for a future gateway-owned config move.
     keep-alive: ${ARGUS_MODEL_KEEP_ALIVE:10m}
     big-model: ${ARGUS_BIG_MODEL:gemma3:27b}

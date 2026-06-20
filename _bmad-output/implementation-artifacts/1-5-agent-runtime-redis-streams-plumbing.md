@@ -4,7 +4,7 @@ baseline_commit: 89e8bc6
 
 # Story 1.5: Agent runtime + Redis Streams plumbing
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -116,6 +116,17 @@ backend/src/test/java/com/argus/agent/
 - [Source: architecture.md#Process Patterns] — catch/log/retry/never-crash.
 - [Source: architecture.md#Complete Monorepo Tree / #Architectural Boundaries] — `agent` package responsibilities + agent boundary.
 - [Source: 1-4-model-gateway-skeleton.md] — dev profile, public TestcontainersConfiguration, @ConfigurationProperties record pattern.
+
+## Review Findings
+
+_Code review 2026-06-20 (Blind Hunter + Edge Case Hunter + Acceptance Auditor, Opus 4.8). All 5 ACs PASS — the "left pending, no redelivery loop" behavior IS AC #5. Backend suite 15/15 green after the patch._
+
+**Patch applied:**
+- [x] [Review][Patch] `createConsumerGroups` no longer swallows *all* errors as BUSYGROUP — only a genuine "group already exists" is treated as idempotent (cause-chain check); real Redis failures (down/auth/host) now log at ERROR with the agent name instead of a misleading DEBUG "already exists". [AgentRuntime.java]
+
+**Deferred → `docs/epic-1-hardening-backlog.md`:** PEL/crash recovery (XAUTOCLAIM) + idempotency; serial-dispatch isolation (one slow agent blocks others); unbounded stream growth (XADD MAXLEN/trim); envelope `version` validation. (All consistent with the architecture's deferred-retry / Degraded-Mode posture.)
+
+**Dismissed (verified):** DemoAgent one-shot latch (test fixture); UTC "enforcement" via the `Instant` type (de-facto correct); hand-rolled `ObjectMapper` lacks JavaTime (payload is simple JSON, `occurredAt` handled manually).
 
 ## Dev Agent Record
 
