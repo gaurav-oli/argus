@@ -1,21 +1,31 @@
-import { Skeleton } from "@/components/ui/Skeleton";
+import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
+import { PerformanceGauges } from "@/components/dashboard/PerformanceGauges";
+import { PriceChart } from "@/components/dashboard/PriceChart";
+import { MotionCard } from "@/components/ui/MotionCard";
 
+/**
+ * Portfolio — design prototype (dummy data). Price chart with range toggles,
+ * holdings heatmap, and performance gauges.
+ */
 export default function PortfolioPage() {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">Portfolio</h1>
+    <div className="mx-auto max-w-6xl">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Portfolio</h1>
+        <p className="text-sm text-text-secondary">Value, allocation, and how each position is moving.</p>
+      </header>
 
-      <section className="rounded-xl border border-border bg-surface p-6">
-        <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-          Holdings
-        </h2>
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-4/6" />
-          <Skeleton className="h-4 w-3/6" />
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+        <MotionCard index={0} className="md:col-span-4">
+          <PriceChart />
+        </MotionCard>
+        <MotionCard index={1} className="md:col-span-2" interactive={false}>
+          <PerformanceGauges />
+        </MotionCard>
+        <MotionCard index={2} className="md:col-span-6" interactive={false}>
+          <HoldingsTreemap />
+        </MotionCard>
+      </div>
     </div>
   );
 }

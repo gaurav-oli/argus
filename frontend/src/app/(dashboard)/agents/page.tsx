@@ -1,20 +1,22 @@
-import { Skeleton } from "@/components/ui/Skeleton";
+import { AgentActivity } from "@/components/dashboard/AgentActivity";
+import { MotionCard } from "@/components/ui/MotionCard";
 
+/**
+ * Agents — design prototype (dummy data). Live agent pipeline visualization.
+ */
 export default function AgentsPage() {
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">Agents</h1>
+    <div className="mx-auto max-w-6xl">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Agents</h1>
+        <p className="text-sm text-text-secondary">Your AI fleet, working in real time.</p>
+      </header>
 
-      <section className="rounded-xl border border-border bg-surface p-6">
-        <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-          Agent Status
-        </h2>
-        <div className="space-y-3 font-mono">
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-4 w-3/5" />
-        </div>
-      </section>
+      <div className="grid grid-cols-1 gap-4">
+        <MotionCard index={0} interactive={false} entrance="none">
+          <AgentActivity />
+        </MotionCard>
+      </div>
     </div>
   );
 }

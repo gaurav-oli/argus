@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider, ThemeScript } from "@/components/theme/ThemeProvider";
 
 // Self-hosted at build time (no runtime CDN request) — works offline on the Mini.
 const inter = Inter({
@@ -18,11 +19,13 @@ export const metadata: Metadata = {
   description: "AI-powered investment intelligence.",
 };
 
-// Dark browser chrome to match the #0A0A0F page; `viewportFit: cover` exposes
-// the iOS safe-area insets the mobile bottom nav pads against.
+// Browser chrome follows the theme; `viewportFit: cover` exposes the iOS
+// safe-area insets the mobile bottom nav pads against.
 export const viewport: Viewport = {
-  themeColor: "#0A0A0F",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0f" },
+  ],
   viewportFit: "cover",
 };
 
@@ -34,9 +37,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full">{children}</body>
+      <head>
+        <ThemeScript />
+      </head>
+      <body className="min-h-full">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
