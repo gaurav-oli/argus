@@ -1,5 +1,6 @@
 "use client";
 
+import { useReducedMotion } from "motion/react";
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { healthScore } from "@/lib/mockData";
@@ -11,8 +12,10 @@ import { useMounted } from "@/lib/useMounted";
  */
 export function HealthScoreRing() {
   const mounted = useMounted();
+  const reduce = useReducedMotion();
   const { score, label, delta } = healthScore;
-  const color = score >= 75 ? "#00FF88" : score >= 50 ? "#00D4FF" : "#FFB800";
+  const color =
+    score >= 75 ? "var(--chart-gains)" : score >= 50 ? "var(--chart-accent)" : "var(--color-warning)";
   const data = [{ name: "score", value: score, fill: color }];
 
   return (
@@ -42,8 +45,9 @@ export function HealthScoreRing() {
             <RadialBar
               dataKey="value"
               cornerRadius={20}
-              background={{ fill: "rgba(255,255,255,0.05)" }}
+              background={{ fill: "var(--chart-grid)" }}
               fill="url(#healthGrad)"
+              isAnimationActive={!reduce}
               animationDuration={1400}
               animationEasing="ease-out"
             />

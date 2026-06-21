@@ -27,7 +27,7 @@ export function MoversBubbles() {
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3 py-2">
         {topMovers.map((m, i) => {
           const up = m.changePct >= 0;
-          const color = up ? "#00FF88" : "#FF3B5C";
+          const color = up ? "var(--chart-gains)" : "var(--chart-losses)";
           const d = size(m.weight);
           const isActive = active === m.symbol;
           return (
@@ -55,9 +55,11 @@ export function MoversBubbles() {
                 whileHover={reduce ? undefined : { scale: 1.12 }}
                 className="flex h-full w-full flex-col items-center justify-center rounded-full text-center"
                 style={{
-                  background: `radial-gradient(circle at 35% 30%, ${color}40, ${color}14 60%, transparent 75%)`,
-                  border: `1.5px solid ${color}66`,
-                  boxShadow: isActive ? `0 0 28px ${color}66, inset 0 0 18px ${color}22` : `0 0 14px ${color}22`,
+                  background: `radial-gradient(circle at 35% 30%, color-mix(in srgb, ${color} 25%, transparent), color-mix(in srgb, ${color} 8%, transparent) 60%, transparent 75%)`,
+                  border: `1.5px solid color-mix(in srgb, ${color} 40%, transparent)`,
+                  boxShadow: isActive
+                    ? `0 0 28px color-mix(in srgb, ${color} 40%, transparent), inset 0 0 18px color-mix(in srgb, ${color} 13%, transparent)`
+                    : `0 0 14px color-mix(in srgb, ${color} 13%, transparent)`,
                 }}
               >
                 <span className="font-mono text-xs font-bold text-text-primary">{m.symbol}</span>
@@ -73,7 +75,7 @@ export function MoversBubbles() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 6, scale: 0.9 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute left-1/2 top-full z-10 mt-2 w-36 -translate-x-1/2 rounded-xl border border-white/10 bg-background/95 p-2.5 text-center shadow-xl backdrop-blur"
+                    className="absolute left-1/2 top-full z-10 mt-2 w-36 -translate-x-1/2 rounded-xl border border-border bg-background/95 p-2.5 text-center shadow-xl backdrop-blur"
                   >
                     <p className="text-xs font-medium text-text-primary">{m.name}</p>
                     <p className="font-mono text-[11px] text-text-secondary tabular-nums">

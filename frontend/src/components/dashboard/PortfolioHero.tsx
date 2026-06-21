@@ -19,7 +19,7 @@ export function PortfolioHero() {
   const mounted = useMounted();
   const reduce = useReducedMotion();
   const up = portfolio.dayChange >= 0;
-  const accent = up ? "#00FF88" : "#FF3B5C";
+  const accent = up ? "var(--chart-gains)" : "var(--chart-losses)";
 
   useEffect(() => {
     if (up) {
@@ -72,7 +72,7 @@ export function PortfolioHero() {
       >
         <span
           className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold"
-          style={{ color: accent, backgroundColor: `${accent}1a` }}
+          style={{ color: accent, backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` }}
         >
           <motion.span
             animate={reduce ? undefined : { y: up ? [-1, -3, -1] : [1, 3, 1] }}

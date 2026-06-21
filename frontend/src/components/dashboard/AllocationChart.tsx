@@ -30,13 +30,14 @@ export function AllocationChart() {
                   paddingAngle={3}
                   cornerRadius={4}
                   stroke="none"
+                  isAnimationActive={!reduce}
                   animationDuration={900}
                 >
                   {allocation.map((slice, i) => (
                     <Cell
                       key={slice.name}
                       fill={slice.color}
-                      stroke={i === active ? "#E8E8F0" : "none"}
+                      stroke={i === active ? "var(--color-text-primary)" : "none"}
                       strokeWidth={i === active ? 1.5 : 0}
                       fillOpacity={i === active ? 1 : 0.4}
                       style={{ cursor: "pointer", transition: "fill-opacity 0.25s" }}
@@ -79,7 +80,7 @@ export function AllocationChart() {
                   </span>
                   <span className="font-mono font-medium text-text-primary tabular-nums">{s.value}%</span>
                 </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.05]">
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--hairline)]">
                   <motion.div
                     initial={reduce ? false : { width: 0 }}
                     animate={{ width: `${s.value}%` }}

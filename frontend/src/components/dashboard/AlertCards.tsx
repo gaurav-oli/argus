@@ -6,9 +6,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { alerts as seedAlerts } from "@/lib/mockData";
 
 const tier = {
-  critical: { color: "#FF3B5C", label: "Critical", glyph: "!" },
-  warning: { color: "#FFB800", label: "Watch", glyph: "▲" },
-  info: { color: "#00D4FF", label: "Info", glyph: "i" },
+  critical: { color: "var(--chart-losses)", label: "Critical", glyph: "!" },
+  warning: { color: "var(--color-warning)", label: "Watch", glyph: "▲" },
+  info: { color: "var(--chart-accent)", label: "Info", glyph: "i" },
 } as const;
 
 /**
@@ -48,19 +48,19 @@ export function AlertCards() {
                 exit={{ opacity: 0, x: 60, transition: { duration: 0.22 } }}
                 whileHover={reduce ? undefined : { y: -2 }}
                 onClick={() => setOpen((cur) => (cur === a.id ? null : a.id))}
-                className="group relative cursor-pointer overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"
-                style={{ boxShadow: isOpen ? `inset 3px 0 0 ${t.color}, 0 8px 30px -12px ${t.color}55` : `inset 3px 0 0 ${t.color}` }}
+                className="group relative cursor-pointer overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--hover-wash)] p-3.5"
+                style={{ boxShadow: isOpen ? `inset 3px 0 0 ${t.color}, 0 8px 30px -12px color-mix(in srgb, ${t.color} 33%, transparent)` : `inset 3px 0 0 ${t.color}` }}
               >
                 {/* subtle tier wash */}
                 <span
                   aria-hidden
                   className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                  style={{ background: `radial-gradient(120% 80% at 0% 0%, ${t.color}14, transparent 60%)` }}
+                  style={{ background: `radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, ${t.color} 8%, transparent), transparent 60%)` }}
                 />
                 <div className="relative flex gap-3">
                   <span
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold"
-                    style={{ backgroundColor: `${t.color}1f`, color: t.color }}
+                    style={{ backgroundColor: `color-mix(in srgb, ${t.color} 12%, transparent)`, color: t.color }}
                   >
                     {t.glyph}
                   </span>
@@ -92,8 +92,8 @@ export function AlertCards() {
                                 className="rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors"
                                 style={
                                   idx === 0
-                                    ? { backgroundColor: t.color, color: "#0A0A0F" }
-                                    : { backgroundColor: "rgba(255,255,255,0.06)", color: "#E8E8F0" }
+                                    ? { backgroundColor: t.color, color: "var(--color-background)" }
+                                    : { backgroundColor: "var(--hover-wash)", color: "var(--color-text-primary)" }
                                 }
                               >
                                 {label}

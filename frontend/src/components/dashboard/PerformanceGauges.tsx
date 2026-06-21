@@ -1,11 +1,13 @@
 "use client";
 
+import { useReducedMotion } from "motion/react";
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { gauges } from "@/lib/mockData";
 import { useMounted } from "@/lib/useMounted";
 
 function Gauge({ value, max, label, display, color }: (typeof gauges)[number]) {
   const mounted = useMounted();
+  const reduce = useReducedMotion();
   const data = [{ value: Math.max(0, Math.min(value, max)), fill: color }];
   return (
     <div className="flex flex-col items-center">
@@ -14,7 +16,7 @@ function Gauge({ value, max, label, display, color }: (typeof gauges)[number]) {
           <ResponsiveContainer width="100%" height="100%">
             <RadialBarChart innerRadius="72%" outerRadius="100%" data={data} startAngle={215} endAngle={-35}>
               <PolarAngleAxis type="number" domain={[0, max]} tick={false} />
-              <RadialBar dataKey="value" cornerRadius={12} background={{ fill: "rgba(255,255,255,0.05)" }} fill={color} animationDuration={1300} />
+              <RadialBar dataKey="value" cornerRadius={12} background={{ fill: "var(--chart-grid)" }} fill={color} isAnimationActive={!reduce} animationDuration={1300} />
             </RadialBarChart>
           </ResponsiveContainer>
         )}

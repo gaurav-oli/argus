@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+const emptySubscribe = () => () => {};
 
 /**
- * True only after the first client render. Used to gate Recharts'
- * ResponsiveContainer, which measures the DOM (size 0 during SSR) and would
- * otherwise cause a hydration mismatch that freezes the surrounding UI.
+ * False during SSR and the first client render, true thereafter. Gates Recharts'
+ * ResponsiveContainer (which measures the DOM — size 0 during SSR) to avoid a
+ * hydration mismatch. Uses useSyncExternalStore so there's no setState-in-effect:
+ * server snapshot = false, client snapshot = true.
  */
 export function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 }

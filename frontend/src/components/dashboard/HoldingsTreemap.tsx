@@ -21,8 +21,12 @@ function Tile({ x = 0, y = 0, width = 0, height = 0, name = "" }: TileProps) {
   const change = h?.changePct ?? 0;
   const up = change >= 0;
   const mag = Math.min(Math.abs(change) / 6, 1);
-  const base = up ? "0,255,136" : "255,59,92";
-  const fill = change === 0 ? "rgba(107,114,128,0.18)" : `rgba(${base},${0.14 + mag * 0.5})`;
+  const baseVar = up ? "var(--chart-gains)" : "var(--chart-losses)";
+  const pctMix = Math.round((0.14 + mag * 0.5) * 100);
+  const fill =
+    change === 0
+      ? "color-mix(in srgb, var(--chart-axis) 18%, transparent)"
+      : `color-mix(in srgb, ${baseVar} ${pctMix}%, transparent)`;
   const showText = width > 46 && height > 34;
   return (
     <g>
@@ -33,7 +37,7 @@ function Tile({ x = 0, y = 0, width = 0, height = 0, name = "" }: TileProps) {
         height={height - 3}
         rx={8}
         fill={fill}
-        className="stroke-transparent transition-[stroke] duration-200 hover:stroke-white/40"
+        className="stroke-transparent transition-[stroke] duration-200 hover:stroke-text-primary/40"
         strokeWidth={1.5}
       />
       {showText && (
@@ -41,7 +45,7 @@ function Tile({ x = 0, y = 0, width = 0, height = 0, name = "" }: TileProps) {
           <text x={x + 10} y={y + 22} className="fill-text-primary font-mono" fontSize={13} fontWeight={700}>
             {name}
           </text>
-          <text x={x + 10} y={y + 38} fontSize={11} className="font-mono" fill={change === 0 ? "#6B7280" : up ? "#00FF88" : "#FF3B5C"}>
+          <text x={x + 10} y={y + 38} fontSize={11} className="font-mono" fill={change === 0 ? "var(--chart-axis)" : up ? "var(--chart-gains)" : "var(--chart-losses)"}>
             {change >= 0 ? "+" : ""}
             {change.toFixed(1)}%
           </text>

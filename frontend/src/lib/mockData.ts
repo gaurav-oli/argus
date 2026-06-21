@@ -32,12 +32,12 @@ export const trend = Array.from({ length: 30 }, (_, i) => {
 
 /** Allocation by sector — feeds the donut. */
 export const allocation = [
-  { name: "Technology", value: 34, color: "#00D4FF" },
-  { name: "Financials", value: 22, color: "#00FF88" },
-  { name: "Energy", value: 16, color: "#FFB800" },
-  { name: "Healthcare", value: 14, color: "#8B5CF6" },
-  { name: "Consumer", value: 9, color: "#FF6B9D" },
-  { name: "Cash", value: 5, color: "#6B7280" },
+  { name: "Technology", value: 34, color: "var(--cat-1)" },
+  { name: "Financials", value: 22, color: "var(--cat-2)" },
+  { name: "Energy", value: 16, color: "var(--cat-3)" },
+  { name: "Healthcare", value: 14, color: "var(--cat-4)" },
+  { name: "Consumer", value: 9, color: "var(--cat-5)" },
+  { name: "Cash", value: 5, color: "var(--cat-6)" },
 ];
 
 type Mover = {
@@ -142,10 +142,10 @@ export const holdings: Holding[] = [
 ];
 
 export const gauges = [
-  { id: "pnl", label: "Day P&L", value: 1.76, max: 4, display: "+1.76%", color: "#00FF88" },
-  { id: "win", label: "Win Rate", value: 68, max: 100, display: "68%", color: "#00D4FF" },
-  { id: "bench", label: "vs TSX", value: 3.2, max: 6, display: "+3.2%", color: "#00FF88" },
-  { id: "risk", label: "Risk", value: 42, max: 100, display: "Moderate", color: "#FFB800" },
+  { id: "pnl", label: "Day P&L", value: 1.76, max: 4, display: "+1.76%", color: "var(--chart-gains)" },
+  { id: "win", label: "Win Rate", value: 68, max: 100, display: "68%", color: "var(--chart-accent)" },
+  { id: "bench", label: "vs TSX", value: 3.2, max: 6, display: "+3.2%", color: "var(--chart-gains)" },
+  { id: "risk", label: "Risk", value: 42, max: 100, display: "Moderate", color: "var(--color-warning)" },
 ];
 
 /* ----- Agents page: live activity pipeline ----- */
