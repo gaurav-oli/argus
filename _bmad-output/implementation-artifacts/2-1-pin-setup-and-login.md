@@ -125,6 +125,7 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 - **Frontend (Task 6):** `apiClient` now sends `credentials: "include"` + `apiPost` + auth calls. `AuthGate` (wraps the dashboard layout) checks `/api/auth/status` on mount → setup / lock / app. `PinScreen` (setup with confirm step, or login) styled with the §12 tokens. `LogoutButton` on the profile page → `logout()` + reload.
 - **Tests (Task 7):** `PinTest`, `PinHasherTest` (unit); `AuthFlowIntegrationTest` (Testcontainers) — full happy path (setup→login→authorized→logout→401), wrong-PIN 401, duplicate-setup 409, invalid-format 400, unauthenticated `/api/**` 401.
 - **Decisions confirmed by user before dev:** Argon2id; gate all `/api/**`; change/forgot-PIN out of scope.
+- **On-device fix (found during iPhone testing):** same-origin browser POSTs failed with **403** on the Mini. Cause: behind `tailscale serve`, Spring sees the request landing on `127.0.0.1` while Safari attaches `Origin: https://…ts.net`, so it treats it as a cross-origin request and rejected it against the hardcoded `localhost:3000` CORS allowlist. Fix: made CORS origins env-configurable (`argus.web.allowed-origins` → `WebProperties`; `ARGUS_WEB_ALLOWED_ORIGINS` in compose/.env, set to the tailnet host on the Mini) — this also delivers the Epic-1 hardening-backlog "env-configurable allowed origins" item that Story 2.2's WebAuthn/WS work will reuse. `PinScreen` error handling also hardened (distinguishes setup vs sign-in failure, self-heals on 409, surfaces the HTTP status). **Verified on a real iPhone over Tailscale: set PIN → confirm → dashboard → lock & sign out → re-enter.**
 
 ### File List
 
@@ -154,13 +155,19 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 - `frontend/src/features/auth/PinScreen.tsx`
 - `frontend/src/features/auth/LogoutButton.tsx`
 
+**New (cont.):**
+- `backend/src/main/java/com/argus/config/WebProperties.java` (env-configurable CORS origins)
+
 **Modified:**
 - `backend/pom.xml` (spring-security-crypto + BouncyCastle)
 - `backend/src/main/java/com/argus/common/GlobalExceptionHandler.java` (401/409 handlers)
-- `backend/src/main/java/com/argus/config/CorsConfig.java` (allowCredentials)
+- `backend/src/main/java/com/argus/config/CorsConfig.java` (allowCredentials + env-driven origins)
 - `frontend/src/lib/apiClient.ts` (credentials + POST + auth calls)
 - `frontend/src/app/(dashboard)/layout.tsx` (wrap in AuthGate)
 - `frontend/src/app/(dashboard)/profile/page.tsx` (LogoutButton)
+- `frontend/src/features/auth/PinScreen.tsx` (hardened error handling — added post-implementation)
+- `docker-compose.yml` (ARGUS_WEB_ALLOWED_ORIGINS passthrough)
+- `.env.example` (ARGUS_WEB_ALLOWED_ORIGINS documented)
 
 ## Change Log
 
@@ -168,6 +175,7 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 | --- | --- |
 | 2026-06-21 | Story drafted (ready-for-dev) — context-engineered from epics/PRD/architecture + current backend patterns. |
 | 2026-06-21 | Implemented PIN setup + login: Flyway V2 credential table, Argon2id hashing, Redis session store + HttpOnly/Secure/SameSite cookie, `/api/auth/*` endpoints, `/api/**` session gate, and the frontend AuthGate/PinScreen/logout. 34 backend tests pass; frontend lint+build clean; deploy stack verified (V2 applied, gate enforces 401). Status → review. |
+| 2026-06-21 | On-device testing (iPhone/Tailscale) surfaced a 403 on same-origin POSTs behind the reverse proxy. Fixed via env-configurable CORS origins (`argus.web.allowed-origins`/`WebProperties`, `ARGUS_WEB_ALLOWED_ORIGINS`) set to the tailnet host; hardened PinScreen error handling. Re-verified: 34 tests pass; full PIN flow works on a real iPhone. |
 
 ## Questions for the user (confirm before/at dev time — non-blocking; sensible defaults chosen)
 

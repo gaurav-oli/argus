@@ -8,6 +8,14 @@ type Mode = "setup" | "login";
 
 const PIN_OK = /^\d{4,6}$/;
 
+/** Surface a useful message: the server's problem detail/status if any, else the fallback. */
+function describe(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    return `${fallback} (${err.status}${err.problem.detail ? `: ${err.problem.detail}` : ""})`;
+  }
+  return `${fallback} — can't reach Argus`;
+}
+
 /**
  * Full-screen PIN gate (Story 2.1). `setup` collects + confirms a new 4–6 digit PIN on first
  * launch; `login` unlocks an existing one. On success the backend has set the session cookie,
@@ -56,10 +64,20 @@ export function PinScreen({ mode, onAuthenticated }: { mode: Mode; onAuthenticat
       setBusy(true);
       try {
         await setupPin(firstPin);
+      } catch (err) {
+        // 409 = a PIN already exists (e.g. a prior attempt created it). Don't dead-end in
+        // setup — fall through to logging in with the PIN just entered.
+        if (!(err instanceof ApiError && err.status === 409)) {
+          reset(describe(err, "Couldn't set your PIN"));
+          setBusy(false);
+          return;
+        }
+      }
+      try {
         await login(firstPin);
         onAuthenticated();
-      } catch {
-        reset("Couldn't set your PIN — try again");
+      } catch (err) {
+        reset(describe(err, "PIN set, but sign-in failed"));
       } finally {
         setBusy(false);
       }
@@ -72,7 +90,7 @@ export function PinScreen({ mode, onAuthenticated }: { mode: Mode; onAuthenticat
       await login(pin);
       onAuthenticated();
     } catch (err) {
-      const msg = err instanceof ApiError && err.status === 401 ? "Incorrect PIN" : "Something went wrong";
+      const msg = err instanceof ApiError && err.status === 401 ? "Incorrect PIN" : describe(err, "Sign-in failed");
       setError(msg);
       setPin("");
     } finally {
