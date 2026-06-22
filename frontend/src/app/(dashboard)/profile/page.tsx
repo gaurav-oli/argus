@@ -2,6 +2,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { LogoutButton } from "@/features/auth/LogoutButton";
 import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
+import { PanicSettings } from "@/features/panic/PanicSettings";
 
 export default function ProfilePage() {
   return (
@@ -29,6 +30,7 @@ export default function ProfilePage() {
             <h3 className="mb-3 text-sm font-medium text-text-primary">Biometric unlock</h3>
             <PasskeyManager />
           </div>
+          <PanicSettings />
           <LogoutButton />
         </div>
       </section>
