@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { LogoutButton } from "@/features/auth/LogoutButton";
 
 export default function ProfilePage() {
   return (
@@ -14,6 +15,13 @@ export default function ProfilePage() {
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-1/3" />
         </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+          Security
+        </h2>
+        <LogoutButton />
       </section>
     </div>
   );

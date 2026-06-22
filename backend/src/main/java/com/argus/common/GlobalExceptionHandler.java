@@ -22,4 +22,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		problem.setType(URI.create("https://argus.local/problems/not-found"));
 		return problem;
 	}
+
+	@ExceptionHandler(UnauthorizedException.class)
+	ProblemDetail handleUnauthorized(UnauthorizedException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+		problem.setTitle("Unauthorized");
+		problem.setType(URI.create("https://argus.local/problems/unauthorized"));
+		return problem;
+	}
+
+	@ExceptionHandler(ConflictException.class)
+	ProblemDetail handleConflict(ConflictException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+		problem.setTitle("Conflict");
+		problem.setType(URI.create("https://argus.local/problems/conflict"));
+		return problem;
+	}
 }
