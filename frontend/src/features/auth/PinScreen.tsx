@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { ApiError, biometricLogin, login, setupPin, webauthnSupported } from "@/lib/apiClient";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Mode = "setup" | "login";
 
@@ -40,11 +40,15 @@ function loginErrorMessage(err: unknown): string {
 export function PinScreen({
   mode,
   passkeyEnrolled = false,
+  initialFullyLocked = false,
+  initialLockoutSeconds = 0,
   onAuthenticated,
   onPinExists,
 }: {
   mode: Mode;
   passkeyEnrolled?: boolean;
+  initialFullyLocked?: boolean;
+  initialLockoutSeconds?: number;
   onAuthenticated: () => void;
   onPinExists: () => void;
 }) {
@@ -52,6 +56,21 @@ export function PinScreen({
   const [firstPin, setFirstPin] = useState<string | null>(null); // setup: the entry being confirmed
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Lockout reflected on the lock screen at load (FR-38 / Story 2.6); ticks down live.
+  const [lockSeconds, setLockSeconds] = useState(initialFullyLocked ? 0 : initialLockoutSeconds);
+  const fullyLocked = initialFullyLocked;
+
+  useEffect(() => {
+    if (lockSeconds <= 0) return;
+    const t = setInterval(() => setLockSeconds((s) => Math.max(s - 1, 0)), 1000);
+    return () => clearInterval(t);
+  }, [lockSeconds]);
+
+  const lockNotice = fullyLocked
+    ? "Locked — unlock from another signed-in device"
+    : lockSeconds > 0
+      ? `Too many attempts — try again in ${lockSeconds}s`
+      : null;
 
   const canUseBiometric = mode === "login" && passkeyEnrolled && webauthnSupported();
 
@@ -170,7 +189,7 @@ export function PinScreen({
           />
 
           <p className="min-h-5 text-sm text-losses" role="alert">
-            {error ?? ""}
+            {error ?? lockNotice ?? ""}
           </p>
 
           <button

@@ -78,6 +78,18 @@ class LockoutIntegrationTest {
 	}
 
 	@Test
+	void fifthFailureEscalatesToTenMinuteLockout() throws Exception {
+		setPin();
+		// Seed 4 prior failures (simulating earlier windows) so the next wrong PIN crosses the
+		// alert threshold (5) → 10-minute lockout, without waiting out the 30s tier.
+		redis.opsForValue().set(LockoutService.KEY_FAILS, "4");
+		attempt("0000")
+				.andExpect(status().isTooManyRequests())
+				.andExpect(jsonPath("$.fullyLocked").value(false))
+				.andExpect(jsonPath("$.retryAfterSeconds").value(600));
+	}
+
+	@Test
 	void successResetsTheCounter() throws Exception {
 		setPin();
 		attempt("0000").andExpect(status().isUnauthorized());

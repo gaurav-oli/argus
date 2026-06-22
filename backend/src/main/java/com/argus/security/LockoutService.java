@@ -62,8 +62,11 @@ public class LockoutService {
 	public void recordFailure() {
 		long fails = increment();
 		if (fails >= props.fullLockThreshold()) {
-			redis.opsForValue().set(KEY_LOCK, LOCK_FULL); // no expiry — needs another device
-			log.warn("Auth fully locked after {} failed attempts — clear from another device", fails);
+			// Safety-valve TTL: still requires another device to clear quickly, but auto-recovers
+			// so a single-device, no-passkey owner can't brick themselves permanently.
+			redis.opsForValue().set(KEY_LOCK, LOCK_FULL, props.fullLockout());
+			log.warn("Auth fully locked after {} failed attempts — clear from another device (auto-clears in {})",
+					fails, props.fullLockout());
 			throw LockedException.full();
 		}
 		if (fails >= props.alertThreshold()) {
@@ -87,19 +90,28 @@ public class LockoutService {
 	/** Clear a lockout from another authenticated device (FR-38 full-lock recovery). */
 	public void clear() {
 		reset();
+		log.warn("Auth lockout cleared by an authenticated device");
 	}
 
-	/** Current lockout state for status reporting (no side effects). */
+	/**
+	 * Current lockout state for status reporting (no side effects). Fails <b>open</b> (reports
+	 * "not locked") if Redis is unreachable, so a cache hiccup can't blank the unauthenticated
+	 * lock screen via the allowlisted {@code /api/auth/status} path.
+	 */
 	public Lockout current() {
-		String lock = redis.opsForValue().get(KEY_LOCK);
-		if (lock == null) {
+		try {
+			String lock = redis.opsForValue().get(KEY_LOCK);
+			if (lock == null) {
+				return new Lockout(false, 0);
+			}
+			if (LOCK_FULL.equals(lock)) {
+				return new Lockout(true, 0);
+			}
+			Long ttl = redis.getExpire(KEY_LOCK, TimeUnit.SECONDS);
+			return new Lockout(false, ttl == null ? 0 : Math.max(ttl, 0));
+		} catch (RuntimeException ex) {
 			return new Lockout(false, 0);
 		}
-		if (LOCK_FULL.equals(lock)) {
-			return new Lockout(true, 0);
-		}
-		Long ttl = redis.getExpire(KEY_LOCK, TimeUnit.SECONDS);
-		return new Lockout(false, ttl == null ? 0 : ttl);
 	}
 
 	private long increment() {

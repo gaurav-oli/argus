@@ -4,7 +4,7 @@ baseline_commit: 237531e
 
 # Story 2.6: Failed-attempt lockout
 
-Status: review
+Status: done
 
 ## Story
 
@@ -67,8 +67,22 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 **Modified (backend):** `security/AuthService.java`, `AuthController.java`, `AuthStatus.java`, `common/GlobalExceptionHandler.java`
 **Modified (frontend):** `lib/apiClient.ts`, `features/auth/PinScreen.tsx`
 
+## Code Review (2026-06-22)
+
+Adversarial review — Blind + Edge + Auditor (Opus 4.8), diff `237531e..HEAD`. **All ACs pass** (Auditor); FR-38 push-to-secondary disclosed as Epic 8. 4 findings patched:
+
+- [x] [Review][High] **No-passkey single-device full-lock brick** — `/clear` needs a session, PIN is blocked, no biometric → unrecoverable without manual `redis-cli`. Fix: the full lock now has a **safety-valve TTL** (`argus.security.lockout.full-lockout`, default 1h) so it always self-recovers; another signed-in device still clears it instantly. Still returns 423/`fullyLocked`.
+- [x] [Review][Med] **`/api/auth/status` did an unwrapped Redis read** (allowlisted, AuthGate-mount path) — Redis down → status 500 → blank login screen. Fix: `LockoutService.current()` fails **open** (no-lock) on Redis error, mirroring the filter's resilience.
+- [x] [Review][Med, AC#4 gap] **Lock screen didn't reflect a lockout on load** — status exposed `fullyLocked`/`lockoutSecondsRemaining` but the UI ignored them. Fix: `AuthGate` plumbs them into `PinScreen`, which shows the state on mount with a **live countdown**.
+- [x] [Review][Low] **5→10m tier untested + clear() unlogged** — added `fifthFailureEscalatesToTenMinuteLockout` (asserts `retryAfterSeconds=600`); `clear()` now logs.
+
+**Deferred (documented):** INCR+arm non-atomicity (single-user + Tailscale-only; INCR is atomic so the count is never lost and full-lock is always reached — only a side-effect log could race under true concurrency); unauthenticated `/status` lockout oracle (inherent to the lock-screen feature; tailnet-only threat model). Setup path intentionally unguarded (409 on existing PIN).
+
+_Re-verified: 63 backend tests pass; frontend lint+build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented escalating failed-attempt lockout (FR-38): Redis-backed 3/5/10 → 30s/10m/full, 429/423 responses, gated clear-from-another-device, status + lock-screen messaging. 62 tests. Status → review. |
+| 2026-06-22 | Code review (3 layers): all ACs pass. Patched 4 (full-lock safety-valve TTL to prevent self-brick; status fail-open on Redis error; lock screen shows lockout on load with live countdown; +5→10m test, clear() logging). 63 tests pass. Status → done. |
