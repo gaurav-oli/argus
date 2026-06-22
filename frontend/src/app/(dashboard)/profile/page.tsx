@@ -1,6 +1,7 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { LogoutButton } from "@/features/auth/LogoutButton";
 import { PasskeyManager } from "@/features/auth/PasskeyManager";
+import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 
 export default function ProfilePage() {
   return (
@@ -23,6 +24,7 @@ export default function ProfilePage() {
           Security
         </h2>
         <div className="flex flex-col gap-6">
+          <SessionTimeoutSetting />
           <div>
             <h3 className="mb-3 text-sm font-medium text-text-primary">Biometric unlock</h3>
             <PasskeyManager />

@@ -80,7 +80,7 @@ public class WebAuthnController {
 	public ResponseEntity<Void> loginFinish(@RequestHeader(CEREMONY_HEADER) String ceremonyId,
 			@RequestBody String credentialJson) {
 		String sessionId = webAuthn.finishAssertion(ceremonyId, credentialJson);
-		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.ttl(), securityProperties.cookieSecure());
+		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.noContent()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
 				.build();

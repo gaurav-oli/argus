@@ -2,6 +2,7 @@ package com.argus.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
+import java.util.Optional;
 import org.springframework.http.ResponseCookie;
 
 /**
@@ -16,9 +17,14 @@ public final class SessionCookie {
 	private SessionCookie() {
 	}
 
-	/** Cookie carrying a live session id, expiring with the session TTL. */
-	public static ResponseCookie issue(String sessionId, Duration ttl, boolean secure) {
-		return base(sessionId, secure).maxAge(ttl).build();
+	/**
+	 * Cookie carrying a live session id. {@code maxAge} empty = a session cookie (no Max-Age) so the
+	 * server-side idle TTL is authoritative (Story 2.3); present = a persistent cookie ("Never").
+	 */
+	public static ResponseCookie issue(String sessionId, Optional<Duration> maxAge, boolean secure) {
+		ResponseCookie.ResponseCookieBuilder builder = base(sessionId, secure);
+		maxAge.ifPresent(builder::maxAge);
+		return builder.build();
 	}
 
 	/** Cookie that immediately clears the session id (logout). */

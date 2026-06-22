@@ -55,7 +55,7 @@ public class AuthController {
 	@PostMapping("/login")
 	public ResponseEntity<AuthStatus> login(@Valid @RequestBody PinRequest body) {
 		String sessionId = auth.login(body.pin());
-		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.ttl(), securityProperties.cookieSecure());
+		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
 				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled()));

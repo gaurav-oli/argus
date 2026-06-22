@@ -109,6 +109,32 @@ export const login = (pin: string): Promise<AuthStatus> =>
 
 export const logout = (): Promise<void> => apiPost("/api/auth/logout");
 
+// ---- Settings (Story 2.3) ----
+
+/** Session idle timeout in seconds; null/absent = Never. Mirrors the backend record. */
+export interface SessionTimeout {
+  seconds: number | null;
+}
+
+async function apiPut<T = void>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "include",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw await toApiError(res);
+  if (res.status === 204 || res.headers.get("content-length") === "0") return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export const getSessionTimeout = (): Promise<SessionTimeout> =>
+  apiGet<SessionTimeout>("/api/settings/session-timeout");
+
+export const setSessionTimeout = (seconds: number | null): Promise<void> =>
+  apiPut("/api/settings/session-timeout", { seconds });
+
 // ---- Biometric / WebAuthn (Story 2.2) ----
 
 // The JSON-based WebAuthn helpers (iOS 17.4+/modern browsers) aren't in every TS DOM lib yet.
