@@ -153,7 +153,7 @@ public class WebAuthnService {
 	 * and start a session. Returns the new session id.
 	 */
 	@Transactional
-	public String finishAssertion(String ceremonyId, String credentialJson) {
+	public String finishAssertion(String ceremonyId, String credentialJson, String device) {
 		if (ceremonyId == null || ceremonyId.isBlank()) {
 			throw new UnauthorizedException("No unlock in progress");
 		}
@@ -177,7 +177,7 @@ public class WebAuthnService {
 			stored.setSignatureCount(result.getSignatureCount());
 			stored.setLastUsedAt(Instant.now());
 			credentials.save(stored);
-			return sessions.create();
+			return sessions.create(device);
 		} catch (IOException | AssertionFailedException ex) {
 			throw new UnauthorizedException("Biometric unlock failed");
 		} finally {

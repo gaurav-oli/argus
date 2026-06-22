@@ -6,7 +6,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,8 +57,8 @@ public class AuthController {
 	}
 
 	@PostMapping("/login")
-	public ResponseEntity<AuthStatus> login(@Valid @RequestBody PinRequest body) {
-		String sessionId = auth.login(body.pin());
+	public ResponseEntity<AuthStatus> login(@Valid @RequestBody PinRequest body, HttpServletRequest request) {
+		String sessionId = auth.login(body.pin(), DeviceLabel.from(request.getHeader("User-Agent")));
 		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
@@ -78,6 +80,23 @@ public class AuthController {
 	@PostMapping("/lockout/clear")
 	public ResponseEntity<Void> clearLockout() {
 		auth.clearLockout();
+		return ResponseEntity.noContent().build();
+	}
+
+	/** List active sessions (FR-39 / Story 2.7), marking the caller's own. Session-gated. */
+	@GetMapping("/sessions")
+	public java.util.List<SessionStore.SessionInfo> sessions(HttpServletRequest request) {
+		return sessions.list(SessionCookie.read(request));
+	}
+
+	/**
+	 * Remotely terminate a session by its handle (FR-39). Session-gated, so any signed-in device
+	 * (e.g. another Tailscale device) can kill a lost device's session; the target is rejected on
+	 * its next request (the filter validates every call), well within the 5s target.
+	 */
+	@DeleteMapping("/sessions/{handle}")
+	public ResponseEntity<Void> revokeSession(@PathVariable String handle) {
+		sessions.revokeByHandle(handle);
 		return ResponseEntity.noContent().build();
 	}
 }
