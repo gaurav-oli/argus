@@ -48,6 +48,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem;
 	}
 
+	// Note: the servlet-level MaxUploadSizeExceededException is already mapped to a 413 ProblemDetail
+	// by the ResponseEntityExceptionHandler base class — we only add the controller-level guard here.
+	@ExceptionHandler(PayloadTooLargeException.class)
+	ProblemDetail handlePayloadTooLarge(PayloadTooLargeException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYLOAD_TOO_LARGE, ex.getMessage());
+		problem.setTitle("Payload Too Large");
+		problem.setType(URI.create("https://argus.local/problems/payload-too-large"));
+		return problem;
+	}
+
 	@ExceptionHandler(com.argus.security.LockedException.class)
 	ResponseEntity<ProblemDetail> handleLocked(com.argus.security.LockedException ex) {
 		HttpStatus status = ex.isFull() ? HttpStatus.LOCKED : HttpStatus.TOO_MANY_REQUESTS;

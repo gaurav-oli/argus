@@ -2,10 +2,12 @@ import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
 import { PerformanceGauges } from "@/components/dashboard/PerformanceGauges";
 import { PriceChart } from "@/components/dashboard/PriceChart";
 import { MotionCard } from "@/components/ui/MotionCard";
+import { ImportStatement } from "@/features/portfolio/ImportStatement";
 
 /**
- * Portfolio — design prototype (dummy data). Price chart with range toggles,
- * holdings heatmap, and performance gauges.
+ * Portfolio — real holdings import (Story 3.1) sits above the design-prototype widgets
+ * (PriceChart / HoldingsTreemap / PerformanceGauges still render dummy data; they get wired to
+ * real positions in Stories 3.4–3.6).
  */
 export default function PortfolioPage() {
   return (
@@ -16,13 +18,16 @@ export default function PortfolioPage() {
       </header>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-        <MotionCard index={0} className="md:col-span-4">
+        <MotionCard index={0} className="md:col-span-6" interactive={false}>
+          <ImportStatement />
+        </MotionCard>
+        <MotionCard index={1} className="md:col-span-4">
           <PriceChart />
         </MotionCard>
-        <MotionCard index={1} className="md:col-span-2" interactive={false}>
+        <MotionCard index={2} className="md:col-span-2" interactive={false}>
           <PerformanceGauges />
         </MotionCard>
-        <MotionCard index={2} className="md:col-span-6" interactive={false}>
+        <MotionCard index={3} className="md:col-span-6" interactive={false}>
           <HoldingsTreemap />
         </MotionCard>
       </div>

@@ -32,6 +32,14 @@ spring:
     problemdetails:
       enabled: true           # framework errors rendered as RFC 9457 problem+json
 
+  # Brokerage statement PDFs (Story 3.1) run a few MB — the Spring 1MB default rejects
+  # them. The portfolio import controller also enforces its own byte ceiling so the limit
+  # is testable via MockMvc (which bypasses the servlet multipart resolver).
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 20MB
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
