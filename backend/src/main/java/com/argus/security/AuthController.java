@@ -43,7 +43,9 @@ public class AuthController {
 	@GetMapping("/status")
 	public AuthStatus status(HttpServletRequest request) {
 		boolean authenticated = auth.isAuthenticated(SessionCookie.read(request));
-		return new AuthStatus(auth.isPinSet(), authenticated, webAuthn.anyPasskeyEnrolled());
+		LockoutService.Lockout lock = auth.lockoutState();
+		return new AuthStatus(auth.isPinSet(), authenticated, webAuthn.anyPasskeyEnrolled(),
+				lock.full(), lock.secondsRemaining());
 	}
 
 	@PostMapping("/pin")
@@ -58,7 +60,7 @@ public class AuthController {
 		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
-				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled()));
+				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled(), false, 0));
 	}
 
 	@PostMapping("/logout")
@@ -67,5 +69,15 @@ public class AuthController {
 		return ResponseEntity.noContent()
 				.header(HttpHeaders.SET_COOKIE, SessionCookie.expired(securityProperties.cookieSecure()).toString())
 				.build();
+	}
+
+	/**
+	 * Clear a failed-attempt lockout (FR-38 full-lock recovery). Session-gated, so only an
+	 * already-authenticated device (e.g. another Tailscale-connected device) can call it.
+	 */
+	@PostMapping("/lockout/clear")
+	public ResponseEntity<Void> clearLockout() {
+		auth.clearLockout();
+		return ResponseEntity.noContent().build();
 	}
 }

@@ -16,6 +16,22 @@ function describe(err: unknown, fallback: string): string {
   return `${fallback} — can't reach Argus`;
 }
 
+/** Map a login failure to a message, handling the FR-38 lockout responses (429 timed / 423 full). */
+function loginErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "Incorrect PIN";
+    if (err.status === 423 || err.problem.fullyLocked) {
+      return "Locked — unlock from another signed-in device";
+    }
+    if (err.status === 429) {
+      const secs = err.problem.retryAfterSeconds ?? 30;
+      return `Too many attempts — try again in ${secs}s`;
+    }
+    return describe(err, "Sign-in failed");
+  }
+  return describe(err, "Sign-in failed");
+}
+
 /**
  * Full-screen PIN gate (Story 2.1). `setup` collects + confirms a new 4–6 digit PIN on first
  * launch; `login` unlocks an existing one. On success the backend has set the session cookie,
@@ -119,8 +135,7 @@ export function PinScreen({
       await login(pin);
       onAuthenticated();
     } catch (err) {
-      const msg = err instanceof ApiError && err.status === 401 ? "Incorrect PIN" : describe(err, "Sign-in failed");
-      setError(msg);
+      setError(loginErrorMessage(err));
       setPin("");
     } finally {
       setBusy(false);

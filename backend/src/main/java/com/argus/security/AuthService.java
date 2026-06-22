@@ -18,11 +18,14 @@ public class AuthService {
 	private final AppCredentialRepository credentials;
 	private final PinHasher pinHasher;
 	private final SessionStore sessions;
+	private final LockoutService lockout;
 
-	public AuthService(AppCredentialRepository credentials, PinHasher pinHasher, SessionStore sessions) {
+	public AuthService(AppCredentialRepository credentials, PinHasher pinHasher, SessionStore sessions,
+			LockoutService lockout) {
 		this.credentials = credentials;
 		this.pinHasher = pinHasher;
 		this.sessions = sessions;
+		this.lockout = lockout;
 	}
 
 	@Transactional(readOnly = true)
@@ -56,17 +59,28 @@ public class AuthService {
 	 * @return the new opaque session id
 	 * @throws UnauthorizedException if no PIN is set or the PIN does not match
 	 */
-	// Not @Transactional: a single read + a Redis write (not enrolled in the JPA tx). readOnly here
-	// would also become a trap for the Story 2.6 failed-attempt write added at the seam below.
+	// Not @Transactional: a single read + Redis writes (not enrolled in the JPA tx).
 	public String login(String rawPin) {
-		AppCredential credential = credentials.findSingleton()
-				.orElseThrow(() -> new UnauthorizedException("Invalid PIN"));
-		// TODO(Story 2.6): record failed attempts here and apply escalating lockout
-		// (3 → 30s, 5 → 10m + alert, 10 → full lock) before/around this check.
-		if (!pinHasher.matches(rawPin, credential.getPinHash())) {
+		// Escalating failed-attempt lockout (FR-38 / Story 2.6): refuse before any PIN check while
+		// locked; record failures (which may itself throw a LockedException at a threshold); reset
+		// on success.
+		lockout.assertNotLocked();
+		AppCredential credential = credentials.findSingleton().orElse(null);
+		if (credential == null || !pinHasher.matches(rawPin, credential.getPinHash())) {
+			lockout.recordFailure(); // throws LockedException if this failure crosses a threshold
 			throw new UnauthorizedException("Invalid PIN");
 		}
+		lockout.reset();
 		return sessions.create();
+	}
+
+	/** Clear a failed-attempt lockout — called from an already-authenticated device (FR-38). */
+	public void clearLockout() {
+		lockout.clear();
+	}
+
+	public LockoutService.Lockout lockoutState() {
+		return lockout.current();
 	}
 
 	public void logout(String sessionId) {

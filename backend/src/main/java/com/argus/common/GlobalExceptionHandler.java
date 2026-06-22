@@ -3,6 +3,7 @@ package com.argus.common;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -45,5 +46,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		problem.setTitle("Bad Request");
 		problem.setType(URI.create("https://argus.local/problems/bad-request"));
 		return problem;
+	}
+
+	@ExceptionHandler(com.argus.security.LockedException.class)
+	ResponseEntity<ProblemDetail> handleLocked(com.argus.security.LockedException ex) {
+		HttpStatus status = ex.isFull() ? HttpStatus.LOCKED : HttpStatus.TOO_MANY_REQUESTS;
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
+		problem.setTitle(ex.isFull() ? "Locked" : "Too Many Attempts");
+		problem.setType(URI.create("https://argus.local/problems/locked"));
+		problem.setProperty("fullyLocked", ex.isFull());
+		problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+
+		ResponseEntity.BodyBuilder builder = ResponseEntity.status(status);
+		if (!ex.isFull()) {
+			builder.header("Retry-After", Long.toString(ex.getRetryAfterSeconds()));
+		}
+		return builder.body(problem);
 	}
 }
