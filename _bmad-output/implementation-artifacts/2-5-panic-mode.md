@@ -4,7 +4,7 @@ baseline_commit: 85145fc
 
 # Story 2.5: Panic mode
 
-Status: review
+Status: done
 
 ## Story
 
@@ -61,8 +61,22 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 **New:** `frontend/src/features/panic/PanicProvider.tsx`, `PanicScreen.tsx`, `usePanicGestures.ts`, `PanicSettings.tsx`
 **Modified:** `frontend/src/app/(dashboard)/layout.tsx`, `app/(dashboard)/profile/page.tsx`
 
+## Code Review (2026-06-22)
+
+Adversarial review + acceptance audit (Opus 4.8), diff `85145fc..HEAD`. All 3 ACs pass; 4 findings patched:
+
+- [x] [Review][High] **Dismiss raced `logout()`** — a fast tap reloaded while the logout POST was in flight, aborting it, so the session could survive and `AuthGate` would let the user back in without re-auth (broke AC3). Fix: `dismiss` now awaits the logout promise (capped at 4s) before reloading. (Honest caveat added: a genuinely failed logout falls back to the 2.3 idle timeout.)
+- [x] [Review][High] **Long-press over interactive controls triggered panic** — holding a button/field/checkbox for 600ms logged the user out. Fix: `onPointerDown` ignores presses originating on `button/a/input/textarea/select/label/[role=button]` — restoring FR-37's "blank area" intent.
+- [x] [Review][Med] **Long-press timer not cancelled on focus loss** — added `blur` + `visibilitychange(hidden)` cancels so a press interrupted by an app switch can't fire later.
+- [x] [Review][Med] **Shake toggle did nothing until reload** — `PanicSettings` now reloads on change so the listener (un)binds immediately.
+
+**Accepted (Low, by design):** sensitive values remain in the DOM under the opaque cover (panic hides from eyes; session destruction is the real protection); double-fire is idempotent; first `devicemotion` event only seeds the baseline.
+
+_Re-verified: lint + build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented panic mode (FR-37): long-press/shake → instant neutral cover + session destroy → re-auth to return. Settings toggle for shake. Lint+build clean. Status → review. |
+| 2026-06-22 | Code review: 3 ACs pass. Patched 4 (await logout before reload; ignore interactive targets for long-press; cancel on blur/hidden; reload on shake toggle). Lint+build clean. Status → done. |

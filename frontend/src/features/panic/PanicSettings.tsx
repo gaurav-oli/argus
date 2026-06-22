@@ -40,7 +40,9 @@ export function PanicSettings() {
       localStorage.removeItem(SHAKE_ENABLED_KEY);
     }
     setShake(next);
-    setNote("Saved — takes effect on the next app load.");
+    // The shake listener is bound once at app load, so reload to (un)bind it immediately —
+    // otherwise the toggle silently does nothing until the next load.
+    window.location.reload();
   }
 
   return (

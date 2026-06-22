@@ -25,9 +25,18 @@ export function usePanicGestures(onPanic: () => void) {
         pressTimer = null;
       }
     };
-    const onPointerDown = () => {
+    const onPointerDown = (e: PointerEvent) => {
+      // FR-37 = long-press on a "blank area": ignore presses that start on an interactive control,
+      // so a hold on a button/field/checkbox can't accidentally panic + log the user out.
+      const target = e.target as Element | null;
+      if (target?.closest("button, a, input, textarea, select, label, [role=button]")) {
+        return;
+      }
       clearPress();
       pressTimer = setTimeout(onPanic, LONG_PRESS_MS);
+    };
+    const onHidden = () => {
+      if (document.hidden) clearPress();
     };
 
     window.addEventListener("pointerdown", onPointerDown);
@@ -35,6 +44,8 @@ export function usePanicGestures(onPanic: () => void) {
     window.addEventListener("pointermove", clearPress);
     window.addEventListener("pointercancel", clearPress);
     window.addEventListener("scroll", clearPress, true);
+    window.addEventListener("blur", clearPress);
+    document.addEventListener("visibilitychange", onHidden);
 
     // --- Shake (opt-in) ---
     let lastShake = 0;
@@ -70,6 +81,8 @@ export function usePanicGestures(onPanic: () => void) {
       window.removeEventListener("pointermove", clearPress);
       window.removeEventListener("pointercancel", clearPress);
       window.removeEventListener("scroll", clearPress, true);
+      window.removeEventListener("blur", clearPress);
+      document.removeEventListener("visibilitychange", onHidden);
       window.removeEventListener("devicemotion", onMotion);
     };
   }, [onPanic]);
