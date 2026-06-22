@@ -76,6 +76,20 @@
 		</dependency>
 
 		<dependency>
+			<!-- Password encoders ONLY (Argon2PasswordEncoder for the PIN hash, Story 2.1).
+			     Deliberately NOT spring-boot-starter-security — Decision 5 keeps the full
+			     Spring Security filter chain deferred; we implement custom session auth. -->
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<dependency>
+			<!-- Argon2PasswordEncoder requires BouncyCastle on the classpath. -->
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.81</version>
+		</dependency>
+
+		<dependency>
 			<!-- Boot 4 Flyway autoconfiguration module (pulls flyway-core transitively).
 			     flyway-core alone does NOT enable autoconfig in Boot 4. -->
 			<groupId>org.springframework.boot</groupId>
