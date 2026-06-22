@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { ApiError, login, setupPin } from "@/lib/apiClient";
+import { ApiError, biometricLogin, login, setupPin, webauthnSupported } from "@/lib/apiClient";
 import { useState } from "react";
 
 type Mode = "setup" | "login";
@@ -23,10 +23,12 @@ function describe(err: unknown, fallback: string): string {
  */
 export function PinScreen({
   mode,
+  passkeyEnrolled = false,
   onAuthenticated,
   onPinExists,
 }: {
   mode: Mode;
+  passkeyEnrolled?: boolean;
   onAuthenticated: () => void;
   onPinExists: () => void;
 }) {
@@ -34,6 +36,23 @@ export function PinScreen({
   const [firstPin, setFirstPin] = useState<string | null>(null); // setup: the entry being confirmed
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const canUseBiometric = mode === "login" && passkeyEnrolled && webauthnSupported();
+
+  async function handleBiometric() {
+    setError(null);
+    setBusy(true);
+    try {
+      await biometricLogin();
+      onAuthenticated();
+    } catch (err) {
+      // Cancel/timeout/failure: stay on the PIN screen (never dead-end). AC #3.
+      const msg = err instanceof ApiError ? "Biometric unlock failed — use your PIN" : "Use your PIN";
+      setError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const confirming = mode === "setup" && firstPin !== null;
   const heading = mode === "login" ? "Enter your PIN" : confirming ? "Confirm your PIN" : "Set a PIN";
@@ -150,6 +169,17 @@ export function PinScreen({
             {busy ? "Please wait…" : confirming ? "Confirm" : mode === "setup" ? "Continue" : "Unlock"}
           </button>
         </form>
+
+        {canUseBiometric && (
+          <button
+            type="button"
+            onClick={handleBiometric}
+            disabled={busy}
+            className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-3 font-medium text-text-primary transition-colors hover:border-accent disabled:opacity-40"
+          >
+            Unlock with Face ID / Touch ID
+          </button>
+        )}
       </div>
     </main>
   );

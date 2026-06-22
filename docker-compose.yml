@@ -78,6 +78,10 @@ services:
       # Browser origins allowed to call the API (CORS). On the Mini = the tailnet host, since
       # tailscale serve makes same-origin POSTs look cross-origin to the backend (Story 2.1).
       ARGUS_WEB_ALLOWED_ORIGINS: ${ARGUS_WEB_ALLOWED_ORIGINS:-http://localhost:3000}
+      # WebAuthn/passkey RP (Story 2.2). On the Mini these are the tailnet host (RP ID = the host,
+      # origin = https://<host>). Defaults suit local dev.
+      ARGUS_SECURITY_WEBAUTHN_RP_ID: ${ARGUS_SECURITY_WEBAUTHN_RP_ID:-localhost}
+      ARGUS_SECURITY_WEBAUTHN_ORIGINS: ${ARGUS_SECURITY_WEBAUTHN_ORIGINS:-http://localhost:3000}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets the container reach native Ollama
     ports:

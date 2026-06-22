@@ -30,6 +30,9 @@ public class CorsConfig implements WebMvcConfigurer {
 		registry.addMapping("/api/**")
 				.allowedOrigins(webProperties.allowedOrigins().toArray(String[]::new))
 				.allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-				.allowCredentials(true);
+				.allowCredentials(true)
+				// So the browser can read the WebAuthn ceremony handle from start responses
+				// (Story 2.2). Only matters cross-origin; the Mini deploy is single-origin.
+				.exposedHeaders("X-Argus-Ceremony");
 	}
 }

@@ -88,6 +88,13 @@
 			<artifactId>bcprov-jdk18on</artifactId>
 			<version>1.81</version>
 		</dependency>
+		<dependency>
+			<!-- WebAuthn/passkey ceremonies (Story 2.2). Standalone — no Spring Security
+			     (Decision 5). Brings its own Jackson 2 for the ceremony JSON helpers. -->
+			<groupId>com.yubico</groupId>
+			<artifactId>webauthn-server-core</artifactId>
+			<version>2.9.0</version>
+		</dependency>
 
 		<dependency>
 			<!-- Boot 4 Flyway autoconfiguration module (pulls flyway-core transitively).
