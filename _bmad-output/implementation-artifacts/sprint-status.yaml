@@ -66,8 +66,8 @@ development_status:
   epic-2-retrospective: optional
 
   # Epic 3: Portfolio Monitoring
-  epic-3: backlog
-  3-1-portfolio-pdf-upload: backlog
+  epic-3: in-progress
+  3-1-portfolio-pdf-upload: done
   3-2-acb-with-purchase-time-fx: backlog
   3-3-corporate-actions-handling: backlog
   3-4-real-time-portfolio-value: backlog

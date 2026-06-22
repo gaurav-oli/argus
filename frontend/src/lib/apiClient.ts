@@ -266,3 +266,62 @@ export async function revokeSession(handle: string): Promise<void> {
   });
   if (!res.ok) throw await toApiError(res);
 }
+
+// ---- Portfolio PDF import (Story 3.1, FR-1) ----
+
+/** One holding parsed from a statement. A field the parser couldn't read is `null` and named in
+ *  `issues`, with `needsReview` set — flagged for manual entry, never dropped. */
+export interface ParsedHolding {
+  ticker: string;
+  companyName: string | null;
+  shares: number | null;
+  costBasis: number | null;
+  costBasisCurrency: string;
+  acquisitionDate: string | null;
+  needsReview: boolean;
+  issues: string[];
+}
+
+/** Mirrors the backend `ImportPreview` record — a staged, not-yet-persisted upload. */
+export interface ImportPreview {
+  importId: number;
+  filename: string;
+  status: string;
+  message: string | null;
+  holdings: ParsedHolding[];
+}
+
+/** Mirrors the backend `PositionView` record — a persisted holding. */
+export interface Position {
+  id: number;
+  ticker: string;
+  companyName: string | null;
+  shares: number | null;
+  costBasis: number | null;
+  costBasisCurrency: string;
+  acquisitionDate: string | null;
+  needsReview: boolean;
+  source: string;
+}
+
+/** Upload a brokerage statement PDF; returns the parsed preview (nothing is persisted yet). */
+export async function uploadStatement(file: File): Promise<ImportPreview> {
+  const form = new FormData();
+  form.append("file", file);
+  // No explicit Content-Type — the browser sets multipart/form-data with the boundary.
+  const res = await fetch(`${BASE_URL}/api/portfolio/imports`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+    body: form,
+  });
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as ImportPreview;
+}
+
+/** Commit a staged import's holdings into the portfolio. */
+export const confirmImport = (importId: number): Promise<Position[]> =>
+  apiPost<Position[]>(`/api/portfolio/imports/${importId}/confirm`);
+
+export const listPositions = (): Promise<Position[]> =>
+  apiGet<Position[]>("/api/portfolio/positions");

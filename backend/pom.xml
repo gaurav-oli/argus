@@ -76,6 +76,15 @@
 		</dependency>
 
 		<dependency>
+			<!-- Apache PDFBox 3.0.x — deterministic text extraction from brokerage
+			     statement PDFs (Story 3.1, FR-1). 3.x API: load via Loader.loadPDF(...)
+			     (the 2.x static PDDocument.load was removed); extract with PDFTextStripper. -->
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.7</version>
+		</dependency>
+
+		<dependency>
 			<!-- Password encoders ONLY (Argon2PasswordEncoder for the PIN hash, Story 2.1).
 			     Deliberately NOT spring-boot-starter-security — Decision 5 keeps the full
 			     Spring Security filter chain deferred; we implement custom session auth. -->
