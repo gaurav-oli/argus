@@ -1,6 +1,6 @@
 "use client";
 
-import { type AuthStatus, getAuthStatus } from "@/lib/apiClient";
+import { type AuthStatus, getAuthStatus, setUnauthorizedHandler } from "@/lib/apiClient";
 import { useEffect, useState } from "react";
 import { PinScreen } from "./PinScreen";
 
@@ -34,6 +34,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Any 401 (e.g. the Story 2.3 idle timeout expired) drops back to the lock screen. This also
+  // unmounts the shell + PrivacyProvider, resetting tap-to-reveal on lock (FR-36 / Story 2.4).
+  useEffect(() => {
+    setUnauthorizedHandler(() => setGate((g) => (g === "authed" ? "login" : g)));
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   function retry() {
