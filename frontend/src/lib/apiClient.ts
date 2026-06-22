@@ -291,7 +291,7 @@ export interface ImportPreview {
   holdings: ParsedHolding[];
 }
 
-/** Mirrors the backend `PositionView` record — a persisted holding. */
+/** Mirrors the backend `PositionView` record — a persisted holding (Stories 3.1 + 3.2). */
 export interface Position {
   id: number;
   ticker: string;
@@ -299,6 +299,10 @@ export interface Position {
   shares: number | null;
   costBasis: number | null;
   costBasisCurrency: string;
+  /** Weighted-average CAD ACB at purchase-time FX (Story 3.2); null when not yet computable. */
+  cadAcb: number | null;
+  /** True when the purchase FX is an unconfirmed estimate. */
+  fxEstimated: boolean;
   acquisitionDate: string | null;
   needsReview: boolean;
   source: string;
@@ -325,3 +329,9 @@ export const confirmImport = (importId: number): Promise<Position[]> =>
 
 export const listPositions = (): Promise<Position[]> =>
   apiGet<Position[]>("/api/portfolio/positions");
+
+/** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
+export const confirmPositionFx = (
+  id: number,
+  body: { rate?: number; date?: string },
+): Promise<Position> => apiPut<Position>(`/api/portfolio/positions/${id}/fx`, body);

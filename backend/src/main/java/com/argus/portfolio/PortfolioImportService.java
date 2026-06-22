@@ -1,8 +1,14 @@
 package com.argus.portfolio;
 
+import com.argus.common.BadRequestException;
 import com.argus.common.ConflictException;
 import com.argus.common.NotFoundException;
+import com.argus.marketdata.FxRateService;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
@@ -10,9 +16,11 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Orchestrates PDF statement import (Story 3.1, FR-1): parse → stage a pending batch → (on
- * confirm) commit holdings to {@code positions}. Upload alone never writes positions, so confirmed
- * data is never overwritten without explicit confirmation (FR-1 consequence #3).
+ * Orchestrates PDF statement import (Story 3.1) and per-lot CAD ACB (Story 3.2). Parse → stage a
+ * pending batch → (on confirm) write a {@link Position} + one {@link PositionLot} per holding,
+ * resolve each lot's purchase-time USD/CAD, and compute the weighted-average ACB. Upload alone
+ * never writes positions (confirm-before-overwrite), and a second confirm is rejected via the
+ * row-locked status check.
  */
 @Service
 public class PortfolioImportService {
@@ -23,17 +31,22 @@ public class PortfolioImportService {
 	private final StatementParser parser;
 	private final PortfolioImportRepository imports;
 	private final PositionRepository positions;
+	private final PositionLotRepository lots;
+	private final AcbCalculator acb;
+	private final FxRateService fx;
 
-	// Jackson 3 (tools.jackson) — the Boot 4 MVC default. Handles the holdings' LocalDate +
-	// BigDecimal fields natively (no module), so the service owns a plain mapper for the
-	// staged-preview JSON round-trip (no injectable ObjectMapper bean exists in this context).
+	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
+	// LocalDate/BigDecimal natively for the staged-preview JSON round-trip.
 	private final ObjectMapper json = JsonMapper.builder().build();
 
 	public PortfolioImportService(StatementParser parser, PortfolioImportRepository imports,
-			PositionRepository positions) {
+			PositionRepository positions, PositionLotRepository lots, AcbCalculator acb, FxRateService fx) {
 		this.parser = parser;
 		this.imports = imports;
 		this.positions = positions;
+		this.lots = lots;
+		this.acb = acb;
+		this.fx = fx;
 	}
 
 	/** Parse the uploaded PDF and persist a pending import batch holding the preview. */
@@ -46,7 +59,7 @@ public class PortfolioImportService {
 				saved.getMessage(), result.holdings());
 	}
 
-	/** Commit a pending import's holdings into {@code positions}. Idempotency is enforced by status. */
+	/** Commit a pending import: one position + lot per holding, with purchase-time FX resolved. */
 	@Transactional
 	public List<PositionView> confirmImport(long importId) {
 		// Row write-lock so two concurrent confirms can't both read 'pending' and double-commit.
@@ -56,16 +69,49 @@ public class PortfolioImportService {
 			throw new ConflictException("Import " + importId + " is already " + batch.getStatus());
 		}
 
-		List<ParsedHolding> holdings = read(batch.getRawHoldings());
-		List<Position> created = holdings.stream()
-				.map(h -> new Position(h.ticker(), h.companyName(), h.shares(), h.costBasis(),
-						h.costBasisCurrency(), h.acquisitionDate(), h.needsReview(), "pdf_import"))
-				.toList();
-		positions.saveAll(created);
+		List<Position> created = new ArrayList<>();
+		for (ParsedHolding h : read(batch.getRawHoldings())) {
+			Position position = positions.save(new Position(h.ticker(), h.companyName(), h.shares(),
+					h.costBasis(), h.costBasisCurrency(), h.acquisitionDate(), h.needsReview(), "pdf_import"));
+			lots.save(newLot(position.getId(), h));
+			recomputeAcb(position);
+			created.add(position);
+		}
 
 		batch.markConfirmed();
 		imports.save(batch);
 		return created.stream().map(PositionView::of).toList();
+	}
+
+	/**
+	 * Confirm/override the purchase FX for a position (Story 3.2 AC #5): supply a {@code rate}
+	 * directly, or a {@code date} to look one up. Applies it to the position's estimated lots,
+	 * clears the estimate, and recomputes the ACB.
+	 */
+	@Transactional
+	public PositionView confirmFx(long positionId, BigDecimal rate, LocalDate date) {
+		Position position = positions.findById(positionId)
+				.orElseThrow(() -> new NotFoundException("Position", String.valueOf(positionId)));
+
+		BigDecimal resolved;
+		if (rate != null) {
+			resolved = rate;
+		} else if (date != null) {
+			resolved = fx.usdCadOn(date)
+					.orElseThrow(() -> new BadRequestException("No USD/CAD rate available for " + date));
+		} else {
+			throw new BadRequestException("Provide either a rate or a date");
+		}
+
+		List<PositionLot> positionLots = lots.findByPositionIdOrderByTradeDateAsc(positionId);
+		for (PositionLot lot : positionLots) {
+			if (lot.isFxEstimated()) {
+				lot.applyFx(resolved, false);
+			}
+		}
+		lots.saveAll(positionLots);
+		recomputeAcb(position);
+		return PositionView.of(position);
 	}
 
 	@Transactional(readOnly = true)
@@ -73,9 +119,35 @@ public class PortfolioImportService {
 		return positions.findAllByOrderByTickerAsc().stream().map(PositionView::of).toList();
 	}
 
+	/** Build a lot for an imported holding, resolving its purchase-time USD/CAD. */
+	private PositionLot newLot(Long positionId, ParsedHolding h) {
+		String currency = h.costBasisCurrency();
+		BigDecimal fxToCad;
+		boolean estimated;
+		if ("CAD".equalsIgnoreCase(currency)) {
+			fxToCad = BigDecimal.ONE; // CAD cost is already in CAD
+			estimated = false;
+		} else if (h.acquisitionDate() != null) {
+			Optional<BigDecimal> rate = fx.usdCadOn(h.acquisitionDate());
+			fxToCad = rate.orElse(null);
+			estimated = rate.isEmpty(); // no rate for that date → flag, await confirm
+		} else {
+			fxToCad = null; // unknown purchase date → can't price the FX
+			estimated = true;
+		}
+		return new PositionLot(positionId, h.shares(), h.costBasis(), currency, h.acquisitionDate(),
+				fxToCad, estimated);
+	}
+
+	/** Recompute the position's weighted-average ACB caches from its current lots. */
+	private void recomputeAcb(Position position) {
+		AcbCalculator.Acb computed = acb.compute(lots.findByPositionIdOrderByTradeDateAsc(position.getId()));
+		position.updateAcbCaches(computed.shares(), computed.costBasis(), computed.currency(),
+				computed.cadAcb(), computed.fxEstimated());
+		positions.save(position);
+	}
+
 	private String write(List<ParsedHolding> holdings) {
-		// Jackson 3 throws unchecked JacksonException; these payloads are our own records and
-		// won't realistically fail to (de)serialize, so we let it propagate.
 		return json.writeValueAsString(holdings);
 	}
 

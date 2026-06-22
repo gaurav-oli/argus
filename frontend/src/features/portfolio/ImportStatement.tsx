@@ -3,6 +3,7 @@
 import {
   ApiError,
   confirmImport,
+  confirmPositionFx,
   listPositions,
   uploadStatement,
   type ImportPreview,
@@ -30,6 +31,8 @@ export function ImportStatement() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [busy, setBusy] = useState<"idle" | "uploading" | "confirming">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [editingFxId, setEditingFxId] = useState<number | null>(null);
+  const [fxRateInput, setFxRateInput] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -83,6 +86,23 @@ export function ImportStatement() {
       setError(err instanceof ApiError ? err.message : "Couldn't import those holdings");
     } finally {
       setBusy("idle");
+    }
+  }
+
+  async function handleConfirmFx(id: number) {
+    const rate = Number(fxRateInput);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      setError("Enter a positive USD/CAD rate");
+      return;
+    }
+    setError(null);
+    try {
+      await confirmPositionFx(id, { rate });
+      setEditingFxId(null);
+      setFxRateInput("");
+      setPositions(await listPositions());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't update the FX rate");
     }
   }
 
@@ -191,6 +211,7 @@ export function ImportStatement() {
                   <th className="py-1 pr-4 font-medium">Ticker</th>
                   <th className="py-1 pr-4 font-medium">Shares</th>
                   <th className="py-1 pr-4 font-medium">Cost basis</th>
+                  <th className="py-1 pr-4 font-medium">CAD ACB</th>
                   <th className="py-1 pr-4 font-medium">Acquired</th>
                 </tr>
               </thead>
@@ -203,6 +224,49 @@ export function ImportStatement() {
                     </td>
                     <td className="py-1 pr-4 text-text-primary">{fmtNumber(p.shares)}</td>
                     <td className="py-1 pr-4 text-text-primary">{fmtMoney(p.costBasis, p.costBasisCurrency)}</td>
+                    <td className="py-1 pr-4 text-text-primary">
+                      <span>{fmtMoney(p.cadAcb, "CAD")}</span>
+                      {p.fxEstimated &&
+                        (editingFxId === p.id ? (
+                          <span className="ml-2 inline-flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.0001"
+                              min="0"
+                              value={fxRateInput}
+                              onChange={(e) => setFxRateInput(e.target.value)}
+                              placeholder="USD/CAD"
+                              className="w-24 rounded border border-border bg-background px-2 py-0.5 text-xs text-text-primary"
+                            />
+                            <button
+                              onClick={() => handleConfirmFx(p.id)}
+                              className="text-xs font-medium text-accent hover:underline"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingFxId(null);
+                                setFxRateInput("");
+                              }}
+                              className="text-xs text-text-secondary hover:text-text-primary"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingFxId(p.id);
+                              setFxRateInput("");
+                            }}
+                            className="ml-2 text-[11px] text-warning hover:underline"
+                            title="Purchase FX is estimated — set the USD/CAD rate to confirm"
+                          >
+                            FX estimated
+                          </button>
+                        ))}
+                    </td>
                     <td className="py-1 pr-4 text-text-secondary">{p.acquisitionDate ?? "—"}</td>
                   </tr>
                 ))}
