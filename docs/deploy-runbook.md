@@ -52,10 +52,10 @@ tailscale ip -4                   # note the 100.x address
 ## 3. Ollama model (one-time / when revised)
 
 ```sh
-ollama pull gemma3:27b            # provisional tag — see Story 1.3 RAM/latency spike
+ollama pull gemma4:26b            # validated by Story 1.3 (2026-06-21)
 ollama list                       # confirm it's present
 ```
-The exact model/keep-alive is confirmed by **Story 1.3** (RAM + latency validation on the Mini). Override via `ARGUS_BIG_MODEL` / `ARGUS_MODEL_KEEP_ALIVE` in `.env` once validated.
+**Story 1.3 result (2026-06-21):** `gemma4:26b` ≈ 17GB resident, ~22 tok/s, warm first-token <1s, ~28s cold-load. The 26B + full stack overflows the 28GB Mini into swap, so keep-alive is short (`5m`, unload-when-idle): the model frees ~17GB when idle and reloads on demand. **Do not pin it resident (`-1`) on a 28GB box.** Override via `ARGUS_BIG_MODEL` / `ARGUS_MODEL_KEEP_ALIVE` in `.env`.
 
 ## 4. Configure `.env` (one-time, then as keys change)
 
@@ -142,7 +142,7 @@ docker compose --profile deploy up -d --build
 | Backend DB auth fails | `POSTGRES_PASSWORD` in `.env` must match what Postgres was first initialized with. If you changed it, recreate the volume: `docker compose down -v` (⚠️ deletes data). |
 | Frontend calls hit `localhost:8080` from the phone | The image was built without the single-origin args. Rebuild after setting `NEXT_PUBLIC_API_BASE_URL=` (empty) and `NEXT_PUBLIC_WS_URL=wss://…/ws`: `docker compose --profile deploy up -d --build`. |
 | `https://…ts.net` not loading | Check `tailscale serve status`, that the cert was issued, and the iPhone is connected to the tailnet (MagicDNS on). |
-| Model too large / slow | Confirm via Story 1.3; lower `ARGUS_BIG_MODEL` or adjust `ARGUS_MODEL_KEEP_ALIVE`. |
+| Model too large / slow | Per Story 1.3 the 26B is RAM-tight on 28GB; keep `ARGUS_MODEL_KEEP_ALIVE` short (`5m`) so it unloads when idle. If first Ask-AI is slow, that's the ~28s cold-load (expected). Don't set keep-alive `-1`. For a lighter option, Gemma 4 12B Unified fits with headroom. |
 
 ## Notes
 - **Dev laptop (16GB)** cannot run the 26B model — local verification uses the dev profile / a small model. The prod model path is exercised only on the Mini.

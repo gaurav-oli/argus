@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-17
-last_updated: 2026-06-20
+last_updated: 2026-06-21
 project: ProjectX
 project_key: NOKEY
 tracking_system: file-system
@@ -43,10 +43,10 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: Foundation & Walking Skeleton
-  epic-1: in-progress
+  epic-1: done
   1-1-scaffold-the-monorepo: done
   1-2-stand-up-the-data-layer: done
-  1-3-ram-latency-validation-spike-on-the-mac-mini-gap-1-2: backlog
+  1-3-ram-latency-validation-spike-on-the-mac-mini-gap-1-2: done
   1-4-model-gateway-skeleton: done
   1-5-agent-runtime-redis-streams-plumbing: done
   1-6-rest-websocket-round-trip: done

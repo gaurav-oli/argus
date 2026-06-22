@@ -71,8 +71,8 @@ services:
       REDIS_PORT: "6379"
       # Ollama runs natively on the host, not in a container.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma3:27b}
-      ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-10m}
+      ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma4:26b}   # validated by Story 1.3 (2026-06-21)
+      ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-5m}   # unload-when-idle (frees ~17GB)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
     extra_hosts:
