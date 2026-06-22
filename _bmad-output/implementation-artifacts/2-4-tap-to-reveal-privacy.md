@@ -4,7 +4,7 @@ baseline_commit: 7dfacd1
 
 # Story 2.4: Tap-to-reveal privacy
 
-Status: review
+Status: done
 
 ## Story
 
@@ -59,8 +59,20 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 **New:** `frontend/src/features/privacy/PrivacyProvider.tsx`, `Sensitive.tsx`, `PrivacyToggle.tsx`
 **Modified:** `frontend/src/app/(dashboard)/layout.tsx`, `components/shell/TopBar.tsx`, `components/dashboard/PortfolioHero.tsx`, `components/dashboard/HealthScoreRing.tsx`
 
+## Code Review (2026-06-22)
+
+Adversarial review + acceptance audit (Opus 4.8), diff `7dfacd1..HEAD`. ACs all pass; masking is leak-free (the real value is genuinely absent from the DOM when hidden). 2 findings patched:
+
+- [x] [Review][High] **Reset-on-lock only fired on explicit logout, not on the Story 2.3 idle-timeout 401** — a silently-expired session left revealed values on screen (the exact FR-36 bystander case). Fix: `apiClient` now has a global 401 handler; `AuthGate` registers it and drops `authed → login` on any 401, which unmounts `PrivacyProvider` (resets reveal) **and** improves the 2.3 idle-lock UX (the app now re-locks on the next request instead of staying mounted).
+- [x] [Review][Low] **Day-P&L arrow leaked gain/loss direction when masked** — the `▲/▼` rendered outside the mask. Fix: arrow + figure are now both inside `<Sensitive>`.
+
+**Accepted nits (mock-data branch):** mask width ≠ value width (minor reflow on reveal); generic `aria-label="Tap to reveal"` on each mask. Not blocking.
+
+_Re-verified: lint + build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented tap-to-reveal privacy (FR-36): PrivacyProvider + Sensitive + eye toggle, applied to the prominent KPIs. Lint+build clean. Status → review. |
+| 2026-06-22 | Code review: ACs pass, leak-free. Patched 2 (idle-timeout 401 now re-locks + resets reveal via a global handler; P&L arrow no longer leaks direction when masked). Status → done. |

@@ -51,12 +51,24 @@ export class ApiError extends Error {
   }
 }
 
+// Global 401 handler: the AuthGate registers a callback so that whenever any request finds the
+// session expired (e.g. the Story 2.3 idle timeout elapsed), the app re-gates to the lock screen.
+// Re-gating unmounts the shell + PrivacyProvider, which also resets tap-to-reveal (FR-36 / 2.4).
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function toApiError(res: Response): Promise<ApiError> {
   let problem: ProblemDetail = { status: res.status, title: res.statusText };
   try {
     problem = (await res.json()) as ProblemDetail;
   } catch {
     // non-JSON error body — keep the status/statusText fallback
+  }
+  if (res.status === 401) {
+    onUnauthorized?.();
   }
   return new ApiError(problem, res.status);
 }
