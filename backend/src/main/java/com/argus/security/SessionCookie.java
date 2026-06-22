@@ -17,13 +17,13 @@ public final class SessionCookie {
 	}
 
 	/** Cookie carrying a live session id, expiring with the session TTL. */
-	public static ResponseCookie issue(String sessionId, Duration ttl) {
-		return base(sessionId).maxAge(ttl).build();
+	public static ResponseCookie issue(String sessionId, Duration ttl, boolean secure) {
+		return base(sessionId, secure).maxAge(ttl).build();
 	}
 
 	/** Cookie that immediately clears the session id (logout). */
-	public static ResponseCookie expired() {
-		return base("").maxAge(0).build();
+	public static ResponseCookie expired(boolean secure) {
+		return base("", secure).maxAge(0).build();
 	}
 
 	/** Read the session id from the request's cookies, or {@code null} if absent. */
@@ -39,10 +39,10 @@ public final class SessionCookie {
 		return null;
 	}
 
-	private static ResponseCookie.ResponseCookieBuilder base(String value) {
+	private static ResponseCookie.ResponseCookieBuilder base(String value, boolean secure) {
 		return ResponseCookie.from(NAME, value)
 				.httpOnly(true)
-				.secure(true)
+				.secure(secure)
 				.sameSite("Strict")
 				.path("/");
 	}

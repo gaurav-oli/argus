@@ -23,7 +23,7 @@ public class AppCredential {
 	@Column(name = "pin_hash", nullable = false)
 	private String pinHash;
 
-	@Column(name = "created_at", nullable = false)
+	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt = Instant.now();
 
 	@Column(name = "updated_at", nullable = false)

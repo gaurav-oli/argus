@@ -63,5 +63,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <PinScreen mode={gate} onAuthenticated={() => setGate("authed")} />;
+  return (
+    <PinScreen mode={gate} onAuthenticated={() => setGate("authed")} onPinExists={() => setGate("login")} />
+  );
 }

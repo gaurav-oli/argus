@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -16,9 +17,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * {@code /api/*} URL pattern only (see {@link SecurityConfig}), so non-API paths (actuator,
  * static, WebSocket handshake) are untouched.
  *
- * <p>Allowlist (no session required): the pre-login auth endpoints. Everything else under
- * {@code /api} returns an RFC 9457 401 — written directly here because the filter runs before
- * Spring MVC's {@code GlobalExceptionHandler} (and is decoupled from the Jackson version).
+ * <p>Allowlist (no session required): CORS preflights and the pre-login auth endpoints.
+ * Everything else under {@code /api} returns an RFC 9457 401 — written directly here because the
+ * filter runs before Spring MVC's {@code GlobalExceptionHandler} (and is decoupled from Jackson).
+ * Session validation is <b>fail-closed</b>: if the session store is unreachable, the request is
+ * treated as unauthenticated rather than 500-ing.
  */
 public class SessionAuthFilter extends OncePerRequestFilter {
 
@@ -32,20 +35,43 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
 			FilterChain chain) throws ServletException, IOException {
 
-		if (isAllowlisted(request) || sessions.validate(SessionCookie.read(request))) {
+		// CORS preflights carry no credentials and must reach Spring's CORS handling, not 401.
+		if (CorsUtils.isPreFlightRequest(request)) {
+			chain.doFilter(request, response);
+			return;
+		}
+
+		if (isAllowlisted(request) || isAuthenticated(request)) {
 			chain.doFilter(request, response);
 			return;
 		}
 		writeUnauthorized(request, response);
 	}
 
-	/** Pre-login endpoints reachable without a session. */
+	/** Fail-closed: any error reaching the session store counts as "not authenticated". */
+	private boolean isAuthenticated(HttpServletRequest request) {
+		try {
+			return sessions.validate(SessionCookie.read(request));
+		} catch (RuntimeException ex) {
+			return false;
+		}
+	}
+
+	/** Pre-login endpoints reachable without a session (path matched tolerant of a trailing slash). */
 	private boolean isAllowlisted(HttpServletRequest request) {
-		String path = request.getRequestURI();
+		String path = normalize(request.getRequestURI());
 		HttpMethod method = HttpMethod.valueOf(request.getMethod());
 		return (HttpMethod.GET.equals(method) && "/api/auth/status".equals(path))
 				|| (HttpMethod.POST.equals(method) && "/api/auth/login".equals(path))
 				|| (HttpMethod.POST.equals(method) && "/api/auth/pin".equals(path));
+	}
+
+	/** Strip a single trailing slash (but keep root "/") so proxy normalization can't 401 a match. */
+	private static String normalize(String path) {
+		if (path.length() > 1 && path.endsWith("/")) {
+			return path.substring(0, path.length() - 1);
+		}
+		return path;
 	}
 
 	private void writeUnauthorized(HttpServletRequest request, HttpServletResponse response)

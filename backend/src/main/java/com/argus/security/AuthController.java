@@ -29,10 +29,12 @@ public class AuthController {
 
 	private final AuthService auth;
 	private final SessionStore sessions;
+	private final SecurityProperties securityProperties;
 
-	public AuthController(AuthService auth, SessionStore sessions) {
+	public AuthController(AuthService auth, SessionStore sessions, SecurityProperties securityProperties) {
 		this.auth = auth;
 		this.sessions = sessions;
+		this.securityProperties = securityProperties;
 	}
 
 	@GetMapping("/status")
@@ -50,7 +52,7 @@ public class AuthController {
 	@PostMapping("/login")
 	public ResponseEntity<AuthStatus> login(@Valid @RequestBody PinRequest body) {
 		String sessionId = auth.login(body.pin());
-		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.ttl());
+		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.ttl(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
 				.body(new AuthStatus(true, true));
@@ -60,7 +62,7 @@ public class AuthController {
 	public ResponseEntity<Void> logout(HttpServletRequest request) {
 		auth.logout(SessionCookie.read(request));
 		return ResponseEntity.noContent()
-				.header(HttpHeaders.SET_COOKIE, SessionCookie.expired().toString())
+				.header(HttpHeaders.SET_COOKIE, SessionCookie.expired(securityProperties.cookieSecure()).toString())
 				.build();
 	}
 }

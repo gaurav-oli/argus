@@ -21,7 +21,15 @@ function describe(err: unknown, fallback: string): string {
  * launch; `login` unlocks an existing one. On success the backend has set the session cookie,
  * so we call {@link onAuthenticated} to reveal the app.
  */
-export function PinScreen({ mode, onAuthenticated }: { mode: Mode; onAuthenticated: () => void }) {
+export function PinScreen({
+  mode,
+  onAuthenticated,
+  onPinExists,
+}: {
+  mode: Mode;
+  onAuthenticated: () => void;
+  onPinExists: () => void;
+}) {
   const [pin, setPin] = useState("");
   const [firstPin, setFirstPin] = useState<string | null>(null); // setup: the entry being confirmed
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +73,15 @@ export function PinScreen({ mode, onAuthenticated }: { mode: Mode; onAuthenticat
       try {
         await setupPin(firstPin);
       } catch (err) {
-        // 409 = a PIN already exists (e.g. a prior attempt created it). Don't dead-end in
-        // setup — fall through to logging in with the PIN just entered.
-        if (!(err instanceof ApiError && err.status === 409)) {
-          reset(describe(err, "Couldn't set your PIN"));
-          setBusy(false);
+        setBusy(false);
+        // 409 = a PIN already exists (e.g. a prior attempt created it). Route to the lock screen
+        // rather than logging in with this just-typed PIN, which may differ from the stored one.
+        if (err instanceof ApiError && err.status === 409) {
+          onPinExists();
           return;
         }
+        reset(describe(err, "Couldn't set your PIN"));
+        return;
       }
       try {
         await login(firstPin);

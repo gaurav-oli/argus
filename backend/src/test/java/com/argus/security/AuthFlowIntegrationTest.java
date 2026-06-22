@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
@@ -140,5 +141,14 @@ class AuthFlowIntegrationTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.status").value(401));
+	}
+
+	@Test
+	void corsPreflightIsNotBlockedByAuthFilter() throws Exception {
+		// A CORS preflight carries no cookie; the filter must let it reach CORS handling, not 401.
+		mockMvc.perform(options("/api/system-info")
+						.header("Origin", "http://localhost:3000")
+						.header("Access-Control-Request-Method", "GET"))
+				.andExpect(status().isOk());
 	}
 }

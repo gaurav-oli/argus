@@ -4,7 +4,7 @@ baseline_commit: fef3f60
 
 # Story 2.1: PIN setup and login
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -169,6 +169,29 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 - `docker-compose.yml` (ARGUS_WEB_ALLOWED_ORIGINS passthrough)
 - `.env.example` (ARGUS_WEB_ALLOWED_ORIGINS documented)
 
+## Code Review (2026-06-22)
+
+Adversarial review — Blind Hunter + Edge Case Hunter + Acceptance Auditor (all Opus 4.8), diff `fef3f60..HEAD`. **All 6 ACs verified PASS.** 8 real findings patched, 3 deferred to the stories that own them, ~6 dismissed as verified non-issues.
+
+**Patches applied (2026-06-22):**
+- [x] [Review][High] **CORS preflight (OPTIONS) was 401'd by the auth filter** — `SessionAuthFilter` now short-circuits `CorsUtils.isPreFlightRequest` so preflights reach Spring's CORS handling. Verified via tailnet: `OPTIONS /api/system-info` → 200 (was 401). New test `corsPreflightIsNotBlockedByAuthFilter`. (edge)
+- [x] [Review][High] **Redis-down → 500 instead of fail-closed** — filter wraps session validation; any store error counts as unauthenticated (401), never a 500. (edge)
+- [x] [Review][High] **`Secure` cookie unstorable over plain-HTTP local dev** — cookie `Secure` flag is now config-driven (`argus.security.cookie-secure`, default true; set false for http dev). (edge)
+- [x] [Review][Med] **Concurrent first-launch setup → 500** — `setupPin` catches `DataIntegrityViolationException` and rethrows `ConflictException` (409), matching the sequential case. (edge)
+- [x] [Review][Med] **`login()` was `@Transactional(readOnly=true)`** — removed (it does a single read + a Redis write, and readOnly would trap the Story 2.6 lockout write). (blind+edge+auditor)
+- [x] [Review][Med] **Allowlist exact-match brittleness** — `SessionAuthFilter` normalizes a trailing slash before matching, so a proxy-normalized path can't be falsely 401'd. (blind+edge+auditor)
+- [x] [Review][Med] **409 self-heal logged in with the just-typed PIN** — `PinScreen` now routes to the lock screen on 409 (`onPinExists`) instead of guessing the stored PIN. (edge)
+- [x] [Review][Low] **`created_at` mutable** — `@Column(updatable = false)`. (edge)
+
+**Deferred (owned by later stories, tracked):**
+- [ ] **No login rate-limit / lockout** (High) → **Story 2.6** (the `TODO(2.6)` seam is in `AuthService.login`). The single most important remaining hardening.
+- [ ] **Cookie fixed Max-Age vs sliding server TTL** (Med) → **Story 2.3** (configurable session timeout will reconcile cookie + server lifetimes).
+- [ ] **CORS `*`/empty-origin startup guard** (Med) → minor ops hardening backlog (single-user operator controls the env var).
+
+**Dismissed (verified non-issues):** 256-bit session-id entropy; `pinSet` disclosure (by-design, Tailscale-only threat model); `apiPost` empty-body (safely handled by the `text ?` fallback); AuthGate gating only dashboard routes (server-side enforcement is the real gate); logout not allowlisted (correct — must be authed to log out); Unicode-digit/constant-time/PIN-not-logged (verified safe).
+
+_Re-verified after patches: 35 backend tests pass; frontend lint+build clean; full flow + preflight confirmed through the Tailscale origin._
+
 ## Change Log
 
 | Date | Change |
@@ -176,6 +199,7 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 | 2026-06-21 | Story drafted (ready-for-dev) — context-engineered from epics/PRD/architecture + current backend patterns. |
 | 2026-06-21 | Implemented PIN setup + login: Flyway V2 credential table, Argon2id hashing, Redis session store + HttpOnly/Secure/SameSite cookie, `/api/auth/*` endpoints, `/api/**` session gate, and the frontend AuthGate/PinScreen/logout. 34 backend tests pass; frontend lint+build clean; deploy stack verified (V2 applied, gate enforces 401). Status → review. |
 | 2026-06-21 | On-device testing (iPhone/Tailscale) surfaced a 403 on same-origin POSTs behind the reverse proxy. Fixed via env-configurable CORS origins (`argus.web.allowed-origins`/`WebProperties`, `ARGUS_WEB_ALLOWED_ORIGINS`) set to the tailnet host; hardened PinScreen error handling. Re-verified: 34 tests pass; full PIN flow works on a real iPhone. |
+| 2026-06-22 | Adversarial code review (3 layers, Opus 4.8): all 6 ACs PASS. Patched 8 findings (CORS-preflight 401, Redis fail-closed, configurable cookie Secure, concurrent-setup 409, login tx, allowlist trailing-slash, 409 self-heal routing, created_at immutable). 3 deferred to Stories 2.3/2.6 + backlog; ~6 dismissed. 35 tests pass; preflight + flow re-verified via tailnet. Status → done. |
 
 ## Questions for the user (confirm before/at dev time — non-blocking; sensible defaults chosen)
 

@@ -2,6 +2,7 @@ package com.argus.security;
 
 import com.argus.common.ConflictException;
 import com.argus.common.UnauthorizedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +41,13 @@ public class AuthService {
 		if (credentials.existsSingleton()) {
 			throw new ConflictException("A PIN is already set");
 		}
-		credentials.save(new AppCredential(pinHasher.hash(rawPin)));
+		try {
+			credentials.save(new AppCredential(pinHasher.hash(rawPin)));
+		} catch (DataIntegrityViolationException ex) {
+			// Two concurrent first-launch setups both passed existsSingleton(); the PK / CHECK(id=1)
+			// rejects the loser. Surface the same 409 as the sequential case, not a 500.
+			throw new ConflictException("A PIN is already set");
+		}
 	}
 
 	/**
@@ -49,7 +56,8 @@ public class AuthService {
 	 * @return the new opaque session id
 	 * @throws UnauthorizedException if no PIN is set or the PIN does not match
 	 */
-	@Transactional(readOnly = true)
+	// Not @Transactional: a single read + a Redis write (not enrolled in the JPA tx). readOnly here
+	// would also become a trap for the Story 2.6 failed-attempt write added at the seam below.
 	public String login(String rawPin) {
 		AppCredential credential = credentials.findSingleton()
 				.orElseThrow(() -> new UnauthorizedException("Invalid PIN"));
