@@ -3,6 +3,7 @@
 import { useReducedMotion } from "motion/react";
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { healthScore } from "@/lib/mockData";
 import { useMounted } from "@/lib/useMounted";
 
@@ -56,7 +57,9 @@ export function HealthScoreRing() {
         )}
 
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <AnimatedNumber value={score} className="font-mono text-4xl font-bold text-text-primary tabular-nums" />
+          <Sensitive className="pointer-events-auto text-4xl font-bold">
+            <AnimatedNumber value={score} className="font-mono text-4xl font-bold text-text-primary tabular-nums" />
+          </Sensitive>
           <span className="mt-0.5 text-xs font-medium" style={{ color }}>
             {label}
           </span>

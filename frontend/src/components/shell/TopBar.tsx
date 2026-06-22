@@ -1,9 +1,14 @@
+"use client";
+
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { healthScore, portfolio, usd } from "@/lib/mockData";
 
 /**
- * Top bar — brand (mobile) + always-visible Health Score and total value KPIs
- * (mock data on this design branch) + the light/dark theme switch.
+ * Top bar — brand (mobile) + Health Score and total value KPIs (mock data on this
+ * design branch), tap-to-reveal privacy (FR-36), and the light/dark theme switch.
+ * Sensitive values are masked until revealed.
  */
 export function TopBar() {
   const scoreColor =
@@ -21,18 +26,23 @@ export function TopBar() {
           <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
             Health Score
           </span>
-          <span className={`font-mono text-lg font-bold tabular-nums ${scoreColor}`}>
-            {healthScore.score}
-          </span>
+          <Sensitive className={`text-lg font-bold ${scoreColor}`}>
+            <span className={`font-mono text-lg font-bold tabular-nums ${scoreColor}`}>
+              {healthScore.score}
+            </span>
+          </Sensitive>
         </div>
         <div className="flex flex-col items-end leading-tight">
           <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
             Total Value
           </span>
-          <span className="font-mono text-lg font-bold tabular-nums text-text-primary">
-            {usd(portfolio.totalValue)}
-          </span>
+          <Sensitive className="text-lg font-bold text-text-primary">
+            <span className="font-mono text-lg font-bold tabular-nums text-text-primary">
+              {usd(portfolio.totalValue)}
+            </span>
+          </Sensitive>
         </div>
+        <PrivacyToggle />
         <ThemeToggle />
       </div>
     </header>

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { useConfetti } from "@/lib/useConfetti";
 import { useMounted } from "@/lib/useMounted";
 import { pct, portfolio, trend, usdPrecise } from "@/lib/mockData";
@@ -57,11 +58,13 @@ export function PortfolioHero() {
 
       <div className="relative">
         <p className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Total Portfolio Value</p>
-        <AnimatedNumber
-          value={portfolio.totalValue}
-          format={usdPrecise}
-          className="mt-1 block font-mono text-5xl font-bold tracking-tight text-text-primary tabular-nums"
-        />
+        <Sensitive className="mt-1 block text-5xl font-bold tracking-tight">
+          <AnimatedNumber
+            value={portfolio.totalValue}
+            format={usdPrecise}
+            className="mt-1 block font-mono text-5xl font-bold tracking-tight text-text-primary tabular-nums"
+          />
+        </Sensitive>
       </div>
 
       <motion.div
@@ -80,7 +83,9 @@ export function PortfolioHero() {
           >
             {up ? "▲" : "▼"}
           </motion.span>
-          {usdPrecise(Math.abs(portfolio.dayChange))} ({pct(portfolio.dayChangePct)})
+          <Sensitive>
+            {usdPrecise(Math.abs(portfolio.dayChange))} ({pct(portfolio.dayChangePct)})
+          </Sensitive>
         </span>
         <span className="text-xs text-text-secondary">today</span>
       </motion.div>
