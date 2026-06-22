@@ -1,3 +1,4 @@
+
 # generated: 2026-06-17
 # last_updated: 2026-06-18
 # project: ProjectX
@@ -68,7 +69,7 @@ development_status:
   # Epic 3: Portfolio Monitoring
   epic-3: in-progress
   3-1-portfolio-pdf-upload: done
-  3-2-acb-with-purchase-time-fx: backlog
+  3-2-acb-with-purchase-time-fx: done
   3-3-corporate-actions-handling: backlog
   3-4-real-time-portfolio-value: backlog
   3-5-holdings-table: backlog

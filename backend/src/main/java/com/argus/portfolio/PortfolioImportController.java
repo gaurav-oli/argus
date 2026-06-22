@@ -4,6 +4,8 @@ import com.argus.common.BadRequestException;
 import com.argus.common.PayloadTooLargeException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -11,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -65,6 +69,41 @@ public class PortfolioImportController {
 	@GetMapping("/positions")
 	public List<PositionView> positions() {
 		return service.listPositions();
+	}
+
+	/**
+	 * Confirm/override a position's purchase-time USD/CAD (Story 3.2, FR-1b). Body carries exactly
+	 * one of {@code rate} (used directly) or {@code date} (looked up); clears the FX-estimated flag
+	 * and recomputes the CAD ACB.
+	 */
+	/** Sane USD/CAD band — well above any real rate; guards the {@code numeric(18,8)} columns. */
+	private static final java.math.BigDecimal MAX_FX_RATE = new java.math.BigDecimal("1000");
+
+	@PutMapping("/positions/{id}/fx")
+	public PositionView confirmFx(@PathVariable long id, @RequestBody(required = false) FxConfirmation body) {
+		boolean hasRate = body != null && body.rate() != null;
+		boolean hasDate = body != null && body.date() != null;
+		if (!hasRate && !hasDate) {
+			throw new BadRequestException("Provide either a rate or a date");
+		}
+		if (hasRate && hasDate) {
+			throw new BadRequestException("Provide either a rate or a date, not both");
+		}
+		if (hasRate) {
+			BigDecimal rate = body.rate();
+			// Bound scale + magnitude so a stray value can't overflow/silently round numeric(18,8).
+			if (rate.signum() <= 0 || rate.compareTo(MAX_FX_RATE) > 0) {
+				throw new BadRequestException("Rate must be positive and within a realistic range");
+			}
+			if (rate.scale() > 8) {
+				throw new BadRequestException("Rate supports at most 8 decimal places");
+			}
+		}
+		return service.confirmFx(id, body.rate(), body.date());
+	}
+
+	/** Purchase-FX confirmation: an explicit {@code rate}, or a {@code date} to look one up. */
+	public record FxConfirmation(BigDecimal rate, LocalDate date) {
 	}
 
 	private static boolean isPdf(MultipartFile file) {

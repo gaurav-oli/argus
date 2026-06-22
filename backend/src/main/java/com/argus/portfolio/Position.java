@@ -38,6 +38,14 @@ public class Position {
 	@Column(name = "cost_basis_currency", nullable = false)
 	private String costBasisCurrency = "USD";
 
+	/** Weighted-average CAD ACB across lots at purchase-time FX (Story 3.2); null when not computable. */
+	@Column(name = "cad_acb")
+	private BigDecimal cadAcb;
+
+	/** True when any contributing lot's purchase FX is an unconfirmed estimate (Story 3.2). */
+	@Column(name = "fx_estimated", nullable = false)
+	private boolean fxEstimated = false;
+
 	@Column(name = "acquisition_date")
 	private LocalDate acquisitionDate;
 
@@ -70,8 +78,30 @@ public class Position {
 		this.source = source;
 	}
 
+	/**
+	 * Apply recomputed weighted-average ACB caches (Story 3.2 {@code AcbCalculator}). Lots are the
+	 * source of truth; these fields are the cached aggregates read by the holdings views.
+	 */
+	public void updateAcbCaches(BigDecimal shares, BigDecimal costBasis, String costBasisCurrency,
+			BigDecimal cadAcb, boolean fxEstimated) {
+		this.shares = shares;
+		this.costBasis = costBasis;
+		this.costBasisCurrency = costBasisCurrency != null ? costBasisCurrency : this.costBasisCurrency;
+		this.cadAcb = cadAcb;
+		this.fxEstimated = fxEstimated;
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
+	}
+
+	public BigDecimal getCadAcb() {
+		return cadAcb;
+	}
+
+	public boolean isFxEstimated() {
+		return fxEstimated;
 	}
 
 	public String getTicker() {
