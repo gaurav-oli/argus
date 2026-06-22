@@ -37,7 +37,7 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
       (FR-17, Epic 8) can register on the iPhone. (HTTPS is set up in step 2.)
 
 ## 4. General hardware/ops to confirm on the Mini
-- [ ] FileVault ON (secrets at rest — NFR-3).  ← **confirm in System Settings → Privacy & Security**
+- [x] FileVault ON (secrets at rest — NFR-3) — confirmed on the Mini 2026-06-21.
 - [x] Ollama runs as a background/login service (`brew services start ollama`) — survives reboots.
 - [x] 24/7 operation: all 4 compose services set `restart: unless-stopped` (verified) — behave across reboots.
 
