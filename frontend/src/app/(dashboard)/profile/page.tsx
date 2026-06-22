@@ -3,6 +3,7 @@ import { LogoutButton } from "@/features/auth/LogoutButton";
 import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 import { PanicSettings } from "@/features/panic/PanicSettings";
+import { SessionManager } from "@/features/auth/SessionManager";
 
 export default function ProfilePage() {
   return (
@@ -31,6 +32,7 @@ export default function ProfilePage() {
             <PasskeyManager />
           </div>
           <PanicSettings />
+          <SessionManager />
           <LogoutButton />
         </div>
       </section>

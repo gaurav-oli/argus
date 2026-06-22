@@ -60,7 +60,7 @@ public class AuthService {
 	 * @throws UnauthorizedException if no PIN is set or the PIN does not match
 	 */
 	// Not @Transactional: a single read + Redis writes (not enrolled in the JPA tx).
-	public String login(String rawPin) {
+	public String login(String rawPin, String device) {
 		// Escalating failed-attempt lockout (FR-38 / Story 2.6): refuse before any PIN check while
 		// locked; record failures (which may itself throw a LockedException at a threshold); reset
 		// on success.
@@ -71,7 +71,7 @@ public class AuthService {
 			throw new UnauthorizedException("Invalid PIN");
 		}
 		lockout.reset();
-		return sessions.create();
+		return sessions.create(device);
 	}
 
 	/** Clear a failed-attempt lockout — called from an already-authenticated device (FR-38). */

@@ -78,8 +78,9 @@ public class WebAuthnController {
 
 	@PostMapping("/login/finish")
 	public ResponseEntity<Void> loginFinish(@RequestHeader(CEREMONY_HEADER) String ceremonyId,
-			@RequestBody String credentialJson) {
-		String sessionId = webAuthn.finishAssertion(ceremonyId, credentialJson);
+			@RequestBody String credentialJson, jakarta.servlet.http.HttpServletRequest request) {
+		String sessionId = webAuthn.finishAssertion(ceremonyId, credentialJson,
+				com.argus.security.DeviceLabel.from(request.getHeader("User-Agent")));
 		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.noContent()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())

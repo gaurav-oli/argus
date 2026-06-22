@@ -244,3 +244,25 @@ export async function revokePasskey(id: string): Promise<void> {
   });
   if (!res.ok) throw await toApiError(res);
 }
+
+// ---- Active sessions / remote kill (Story 2.7) ----
+
+/** Mirrors the backend `SessionStore.SessionInfo` record. */
+export interface SessionInfo {
+  handle: string;
+  device: string;
+  createdAt: string | null;
+  lastActiveAt: string | null;
+  current: boolean;
+}
+
+export const listSessions = (): Promise<SessionInfo[]> =>
+  apiGet<SessionInfo[]>("/api/auth/sessions");
+
+export async function revokeSession(handle: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/auth/sessions/${encodeURIComponent(handle)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw await toApiError(res);
+}
