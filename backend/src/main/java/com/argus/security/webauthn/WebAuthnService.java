@@ -1,8 +1,10 @@
 package com.argus.security.webauthn;
 
 import com.argus.common.BadRequestException;
+import com.argus.common.ConflictException;
 import com.argus.common.UnauthorizedException;
 import com.argus.security.SessionStore;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.yubico.webauthn.AssertionRequest;
 import com.yubico.webauthn.AssertionResult;
 import com.yubico.webauthn.FinishAssertionOptions;
@@ -70,8 +72,13 @@ public class WebAuthnService {
 
 	// ---- Registration (session-gated: the caller already proved the PIN) ----
 
-	/** Build creation options, stash them under the session, return the browser create() JSON. */
-	public String startRegistration(String sessionId) {
+	/**
+	 * Build creation options, stash them under a fresh ceremony id, return both. Keyed by a
+	 * per-ceremony id (not the session) so concurrent enrollments don't clobber each other.
+	 * Yubico auto-populates {@code excludeCredentials} from the adapter, so an already-registered
+	 * authenticator won't be enrolled twice.
+	 */
+	public Started startRegistration() {
 		UserIdentity user = UserIdentity.builder()
 				.name(ArgusCredentialRepository.USERNAME)
 				.displayName("Argus")
@@ -84,9 +91,10 @@ public class WebAuthnService {
 						.userVerification(UserVerificationRequirement.REQUIRED)
 						.build())
 				.build());
+		String ceremonyId = newCeremonyId();
 		try {
-			redis.opsForValue().set(REG_KEY + sessionId, options.toJson(), CEREMONY_TTL);
-			return options.toCredentialsCreateJson();
+			redis.opsForValue().set(REG_KEY + ceremonyId, options.toJson(), CEREMONY_TTL);
+			return new Started(ceremonyId, options.toCredentialsCreateJson());
 		} catch (IOException ex) {
 			throw new BadRequestException("Could not encode registration options");
 		}
@@ -94,8 +102,11 @@ public class WebAuthnService {
 
 	/** Verify the attestation against the stashed options and persist the new passkey. */
 	@Transactional
-	public void finishRegistration(String sessionId, String credentialJson, String label) {
-		String stashed = redis.opsForValue().get(REG_KEY + sessionId);
+	public void finishRegistration(String ceremonyId, String credentialJson, String label) {
+		if (ceremonyId == null || ceremonyId.isBlank()) {
+			throw new BadRequestException("No registration in progress");
+		}
+		String stashed = redis.opsForValue().get(REG_KEY + ceremonyId);
 		if (stashed == null) {
 			throw new BadRequestException("No registration in progress");
 		}
@@ -105,7 +116,7 @@ public class WebAuthnService {
 					.request(options)
 					.response(com.yubico.webauthn.data.PublicKeyCredential.parseRegistrationResponseJson(credentialJson))
 					.build());
-			credentials.save(new WebAuthnCredential(
+			credentials.saveAndFlush(new WebAuthnCredential(
 					result.getKeyId().getId().getBytes(),
 					ArgusCredentialRepository.USER_HANDLE.getBytes(),
 					result.getPublicKeyCose().getBytes(),
@@ -113,8 +124,10 @@ public class WebAuthnService {
 					(label == null || label.isBlank()) ? "Passkey" : label.strip()));
 		} catch (IOException | RegistrationFailedException ex) {
 			throw new BadRequestException("Passkey registration failed");
+		} catch (DataIntegrityViolationException ex) {
+			throw new ConflictException("That passkey is already registered");
 		} finally {
-			redis.delete(REG_KEY + sessionId);
+			redis.delete(REG_KEY + ceremonyId);
 		}
 	}
 
@@ -157,11 +170,13 @@ public class WebAuthnService {
 			if (!result.isSuccess()) {
 				throw new UnauthorizedException("Biometric unlock failed");
 			}
-			credentials.findById(result.getCredential().getCredentialId().getBytes()).ifPresent(c -> {
-				c.setSignatureCount(result.getSignatureCount());
-				c.setLastUsedAt(Instant.now());
-				credentials.save(c);
-			});
+			// Fail closed: the credential must still exist (could be revoked mid-ceremony). Advancing
+			// the signature counter is mandatory for clone detection, not best-effort.
+			WebAuthnCredential stored = credentials.findById(result.getCredential().getCredentialId().getBytes())
+					.orElseThrow(() -> new UnauthorizedException("Biometric unlock failed"));
+			stored.setSignatureCount(result.getSignatureCount());
+			stored.setLastUsedAt(Instant.now());
+			credentials.save(stored);
 			return sessions.create();
 		} catch (IOException | AssertionFailedException ex) {
 			throw new UnauthorizedException("Biometric unlock failed");

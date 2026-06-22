@@ -111,17 +111,31 @@ export const logout = (): Promise<void> => apiPost("/api/auth/logout");
 
 // ---- Biometric / WebAuthn (Story 2.2) ----
 
-/** True if the browser exposes the WebAuthn platform API (e.g. iOS Safari over HTTPS). */
-export function webauthnSupported(): boolean {
-  return typeof window !== "undefined" && typeof window.PublicKeyCredential !== "undefined";
-}
-
 // The JSON-based WebAuthn helpers (iOS 17.4+/modern browsers) aren't in every TS DOM lib yet.
 type PkcJsonStatic = {
   parseCreationOptionsFromJSON(json: unknown): PublicKeyCredentialCreationOptions;
   parseRequestOptionsFromJSON(json: unknown): PublicKeyCredentialRequestOptions;
 };
 type CredentialWithToJSON = { toJSON(): unknown };
+
+/**
+ * True only if the browser supports the JSON WebAuthn API this client actually uses
+ * (`parse*OptionsFromJSON` + `PublicKeyCredential.prototype.toJSON`) — not just the presence of
+ * `PublicKeyCredential`. Older Safari/iOS 16 have the latter but not the former, which would make
+ * the ceremony throw; gating on the real methods keeps the biometric button honest.
+ */
+export function webauthnSupported(): boolean {
+  if (typeof window === "undefined" || typeof window.PublicKeyCredential === "undefined") {
+    return false;
+  }
+  const pkc = PublicKeyCredential as unknown as Partial<PkcJsonStatic>;
+  const proto = PublicKeyCredential.prototype as unknown as { toJSON?: unknown };
+  return (
+    typeof pkc.parseRequestOptionsFromJSON === "function" &&
+    typeof pkc.parseCreationOptionsFromJSON === "function" &&
+    typeof proto.toJSON === "function"
+  );
+}
 
 const CEREMONY_HEADER = "X-Argus-Ceremony";
 
@@ -157,6 +171,7 @@ export async function enrollPasskey(label: string): Promise<void> {
     headers: { Accept: "application/json" },
   });
   if (!startRes.ok) throw await toApiError(startRes);
+  const ceremony = startRes.headers.get(CEREMONY_HEADER) ?? "";
   const { publicKey } = (await startRes.json()) as { publicKey: unknown };
 
   const options = (PublicKeyCredential as unknown as PkcJsonStatic).parseCreationOptionsFromJSON(publicKey);
@@ -168,7 +183,7 @@ export async function enrollPasskey(label: string): Promise<void> {
     {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", [CEREMONY_HEADER]: ceremony },
       body: JSON.stringify((credential as unknown as CredentialWithToJSON).toJSON()),
     },
   );

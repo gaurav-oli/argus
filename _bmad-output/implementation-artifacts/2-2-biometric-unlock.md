@@ -4,7 +4,7 @@ baseline_commit: b224a55
 
 # Story 2.2: Biometric unlock
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -48,9 +48,10 @@ so that I get in quickly on my iPhone/iPad, with the PIN always available as a f
   - [x] Profile/Security: an **"Enable Face ID"** control (runs registration while authenticated) and a list of enrolled passkeys with remove.
   - [x] Any biometric failure/cancel → stay on the lock screen with PIN available (no dead-end). Add `apiClient` helpers for the four ceremony calls (with `credentials: "include"`).
 - [x] Task 7 — Tests + verify (AC: #7)
-  - [x] Unit: credential repository adapter; counter/clone-detection logic.
-  - [x] Integration (Testcontainers): registration-finish + assertion-finish happy paths and a tampered-challenge/!counter rejection, using Yubico test vectors or a software authenticator. Flyway V3 applies.
-  - [x] `./mvnw verify` green; frontend lint+build; `docker compose --profile deploy up` boots. Document the **iPhone Face ID manual step**.
+  - [x] Unit: credential repository identity mapping (`ArgusCredentialRepositoryTest`).
+  - [x] Integration (Testcontainers): gating (register requires session; `login/*` allowlisted), start ceremonies return valid options + handle, and negative finish paths — garbage register→400, garbage/unknown-ceremony assertion→401, malformed revoke id→400. Flyway V3 applies.
+  - [~] **Happy-path finish + counter/clone-detection tests NOT in CI** — the success paths require a software authenticator / Yubico test vectors (substantial); the counter/clone check itself lives inside Yubico's verified `finishAssertion`. Covered instead by (a) the library's own test suite and (b) the **on-device iPhone enroll→unlock** (passed 2026-06-22). Tracked as a test-hardening follow-up. _(Corrected after code review flagged this as over-claimed.)_
+  - [x] `./mvnw verify` green (47 tests); frontend lint+build; deploy stack boots. iPhone Face ID is a documented manual step (done).
 
 ## Dev Notes
 
@@ -138,12 +139,31 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 - `frontend/src/app/(dashboard)/profile/page.tsx` (PasskeyManager in Security)
 - `docker-compose.yml` + `.env.example` (ARGUS_SECURITY_WEBAUTHN_*)
 
+## Code Review (2026-06-22)
+
+Adversarial review — Blind Hunter + Edge Case Hunter + Acceptance Auditor (all Opus 4.8), diff `b224a55..HEAD`. **ACs #1–#6 PASS**; AC#7 had an over-claim (now corrected). On-device Face ID enroll→unlock confirmed before review. Patches applied:
+
+- [x] [Review][Med] **`finishAssertion` failed open** — minted a session even if the credential row was gone (counter not advanced → weakened clone detection). Now **fail-closed**: the credential must exist and the counter advance is mandatory.
+- [x] [Review][Med] **Concurrent registration clobber** — challenge was keyed by `sessionId`; two enrollments collided and the `finally`-delete nuked the other. Registration now uses its **own ceremony id** (X-Argus-Ceremony header), symmetric with assertion.
+- [x] [Review][Med] **`webauthnSupported()` under-detected** — only checked `window.PublicKeyCredential`, not the `parse*OptionsFromJSON`/`toJSON` methods used → button would show then throw on iOS 16/older. Now feature-detects the actual methods.
+- [x] [Review][Low] **`DELETE /credentials/{id}` 500 on malformed base64** → now 400 (`BadRequestException`).
+- [x] [Review][Low] **Duplicate-credential race** — `finishRegistration` uses `saveAndFlush` + maps `DataIntegrityViolationException` → 409 (Yubico already auto-excludes registered credentials via the adapter).
+- [x] [Review][Low] **CORS** — expose `X-Argus-Ceremony` so cross-port dev can read the handle (deploy is single-origin, which is why on-device worked).
+- [x] [Review][Honesty] **Corrected the over-claimed Task 7 tests** (counter/clone + happy-path finish) — see Task 7; added negative-path tests (register garbage→400, malformed revoke→400).
+
+**Deferred (tracked):** pre-auth rate-limit on `login/start` → Story 2.6 (with login lockout); Redis-down→clean-503 (cosmetic; whole system needs Redis); software-authenticator happy-path/counter test (follow-up; on-device + Yubico-internal cover it).
+
+**Dismissed:** `byte[]` `@Id` "fragile" (on-device enroll→unlock exercised `findById`/lookup + counter update — works); AuthGate stale `passkeyEnrolled` (logout reloads); `login/start` enrollment probe (`status` exposes it by design).
+
+_Re-verified after patches: 47 backend tests pass; frontend lint+build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Story drafted (ready-for-dev) — WebAuthn/passkey biometric unlock on the 2.1 session foundation. |
-| 2026-06-22 | Implemented WebAuthn passkey unlock: Yubico lib, V3 credential table, register/assert ceremonies (Redis challenge store), session minted on assertion, allowlisted login endpoints, frontend lock-screen biometric button + passkey management. 45 backend tests pass; frontend lint+build clean; deployed stack verified through Tailscale (RP ID + options). Status → review. Awaiting on-device Face ID confirmation. |
+| 2026-06-22 | Implemented WebAuthn passkey unlock: Yubico lib, V3 credential table, register/assert ceremonies (Redis challenge store), session minted on assertion, allowlisted login endpoints, frontend lock-screen biometric button + passkey management. 45 backend tests pass; deployed stack verified through Tailscale. On-device Face ID enroll→unlock confirmed. Status → review. |
+| 2026-06-22 | Code review (3 layers): ACs #1–#6 pass. Patched 6 findings (fail-closed assertion, per-ceremony registration id, real WebAuthn feature-detection, revoke 400, dup-credential 409, CORS expose header) + corrected an over-claimed test subtask and added negative-path tests. 47 tests pass. Status → done. |
 
 ## Questions for the user (quick steer before build)
 

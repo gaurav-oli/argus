@@ -37,12 +37,16 @@ class WebAuthnFlowIntegrationTest {
 	WebAuthnCredentialRepository credentials;
 
 	@Autowired
+	com.argus.security.AppCredentialRepository pinCredentials;
+
+	@Autowired
 	StringRedisTemplate redis;
 
 	@BeforeEach
 	void reset() {
 		credentials.deleteAll();
-		Set<String> keys = redis.keys("argus:webauthn:*");
+		pinCredentials.deleteAll();
+		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
 			redis.delete(keys);
 		}
@@ -107,7 +111,43 @@ class WebAuthnFlowIntegrationTest {
 
 		mockMvc.perform(post("/api/auth/webauthn/register/start").cookie(session))
 				.andExpect(status().isOk())
+				.andExpect(header().exists(WebAuthnController.CEREMONY_HEADER))
 				.andExpect(jsonPath("$.publicKey.challenge").exists())
 				.andExpect(jsonPath("$.publicKey.rp.id").value("localhost"));
+	}
+
+	@Test
+	void registerFinishWithGarbageIsRejected() throws Exception {
+		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
+				.andExpect(status().isCreated());
+		Cookie session = mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+
+		String ceremony = mockMvc.perform(post("/api/auth/webauthn/register/start").cookie(session))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getHeader(WebAuthnController.CEREMONY_HEADER);
+
+		mockMvc.perform(post("/api/auth/webauthn/register/finish")
+						.cookie(session)
+						.header(WebAuthnController.CEREMONY_HEADER, ceremony)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"not\":\"a credential\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void revokeWithMalformedIdIsBadRequest() throws Exception {
+		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
+				.andExpect(status().isCreated());
+		Cookie session = mockMvc.perform(post("/api/auth/login")
+						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+						.delete("/api/auth/webauthn/credentials/{id}", "!!!not-base64!!!").cookie(session))
+				.andExpect(status().isBadRequest());
 	}
 }

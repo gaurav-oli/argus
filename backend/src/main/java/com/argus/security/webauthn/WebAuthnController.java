@@ -1,10 +1,9 @@
 package com.argus.security.webauthn;
 
-import com.argus.common.UnauthorizedException;
+import com.argus.common.BadRequestException;
 import com.argus.security.SecurityProperties;
 import com.argus.security.SessionCookie;
 import com.argus.security.SessionStore;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -53,14 +52,18 @@ public class WebAuthnController {
 	}
 
 	@PostMapping("/register/start")
-	public ResponseEntity<String> registerStart(HttpServletRequest request) {
-		return json(webAuthn.startRegistration(requireSession(request)));
+	public ResponseEntity<String> registerStart() {
+		WebAuthnService.Started started = webAuthn.startRegistration();
+		return ResponseEntity.ok()
+				.contentType(MediaType.APPLICATION_JSON)
+				.header(CEREMONY_HEADER, started.ceremonyId())
+				.body(started.optionsJson());
 	}
 
 	@PostMapping("/register/finish")
-	public ResponseEntity<Void> registerFinish(HttpServletRequest request,
+	public ResponseEntity<Void> registerFinish(@RequestHeader(CEREMONY_HEADER) String ceremonyId,
 			@RequestParam(required = false) String label, @RequestBody String credentialJson) {
-		webAuthn.finishRegistration(requireSession(request), credentialJson, label);
+		webAuthn.finishRegistration(ceremonyId, credentialJson, label);
 		return ResponseEntity.noContent().build();
 	}
 
@@ -90,21 +93,14 @@ public class WebAuthnController {
 
 	@DeleteMapping("/credentials/{id}")
 	public ResponseEntity<Void> revoke(@PathVariable String id) {
-		webAuthn.revoke(Base64.getUrlDecoder().decode(id));
-		return ResponseEntity.noContent().build();
-	}
-
-	private String requireSession(HttpServletRequest request) {
-		String sessionId = SessionCookie.read(request);
-		if (sessionId == null) {
-			// The filter gates these endpoints, so this is defensive only.
-			throw new UnauthorizedException("Authentication required");
+		byte[] credentialId;
+		try {
+			credentialId = Base64.getUrlDecoder().decode(id);
+		} catch (IllegalArgumentException ex) {
+			throw new BadRequestException("Invalid credential id");
 		}
-		return sessionId;
-	}
-
-	private static ResponseEntity<String> json(String body) {
-		return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body);
+		webAuthn.revoke(credentialId);
+		return ResponseEntity.noContent().build();
 	}
 
 	/** Public view of an enrolled passkey (no key material). */
