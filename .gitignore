@@ -42,6 +42,8 @@ BMAD-METHOD/
 !.env.example
 *.pem
 *.key
+*.crt
+*.ts.net.crt
 secrets/
 credentials/
 
