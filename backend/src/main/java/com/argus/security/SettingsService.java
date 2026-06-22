@@ -3,6 +3,8 @@ package com.argus.security;
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,11 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class SettingsService {
 
 	private final AppSettingsRepository repo;
+	private final StringRedisTemplate redis;
 	private final Duration defaultTimeout;
 	private volatile Optional<Duration> sessionTimeout = Optional.empty();
 
-	public SettingsService(AppSettingsRepository repo, SecurityProperties properties) {
+	public SettingsService(AppSettingsRepository repo, StringRedisTemplate redis, SecurityProperties properties) {
 		this.repo = repo;
+		this.redis = redis;
 		this.defaultTimeout = properties.sessionTtl();
 	}
 
@@ -42,6 +46,26 @@ public class SettingsService {
 		settings.setSessionTimeoutSeconds(timeout.map(Duration::toSeconds).orElse(null));
 		repo.save(settings);
 		this.sessionTimeout = timeout;
+		reconcileActiveSessions(timeout);
+	}
+
+	/**
+	 * Apply a timeout change to already-live sessions immediately: strip the TTL when switching to
+	 * Never (otherwise the old countdown would still expire the "Never" session), or (re)apply the
+	 * new TTL for a finite value. Without this, a finite→Never switch would still lock the session.
+	 */
+	private void reconcileActiveSessions(Optional<Duration> timeout) {
+		Set<String> keys = redis.keys(SessionStore.KEY_PREFIX + "*");
+		if (keys == null || keys.isEmpty()) {
+			return;
+		}
+		for (String key : keys) {
+			if (timeout.isPresent()) {
+				redis.expire(key, timeout.get());
+			} else {
+				redis.persist(key);
+			}
+		}
 	}
 
 	private Optional<Duration> readFromDb() {

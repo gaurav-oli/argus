@@ -34,7 +34,10 @@ public class SettingsController {
 	}
 
 	@PutMapping("/session-timeout")
-	public ResponseEntity<Void> setSessionTimeout(@RequestBody SessionTimeout body) {
+	public ResponseEntity<Void> setSessionTimeout(@RequestBody(required = false) SessionTimeout body) {
+		if (body == null) {
+			throw new BadRequestException("Missing request body");
+		}
 		Long seconds = body.seconds();
 		if (seconds != null && (seconds < MIN_SECONDS || seconds > MAX_SECONDS)) {
 			throw new BadRequestException("Timeout must be null (Never) or between 60 and 86400 seconds");

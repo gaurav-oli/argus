@@ -4,7 +4,7 @@ baseline_commit: 6bacfd1
 
 # Story 2.3: Configurable session timeout
 
-Status: review
+Status: done
 
 ## Story
 
@@ -81,8 +81,21 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 **New (frontend):** `features/auth/SessionTimeoutSetting.tsx`
 **Modified:** `security/SessionStore.java`, `SessionCookie.java`, `AuthController.java`, `security/webauthn/WebAuthnController.java`, `lib/apiClient.ts`, `app/(dashboard)/profile/page.tsx`
 
+## Code Review (2026-06-22)
+
+Adversarial review — Blind + Edge + Auditor (Opus 4.8), diff `6bacfd1..HEAD`. **All 6 ACs PASS** (Auditor). 2 findings patched:
+
+- [x] [Review][High] **finite→Never left a stale Redis TTL** — switching to "Never" didn't touch live sessions, so a session created under a finite timeout kept its countdown and expired anyway (violated AC#3 for in-flight sessions). Fix: `SettingsService.setSessionTimeout` now **reconciles active sessions** — `persist` (strip TTL) for Never, re-`expire` for finite — so the change applies immediately. Tests: `switchingToNeverPersistsExistingSession`, `switchingToFiniteAppliesTtlToExistingSession`.
+- [x] [Review][Med] **Empty PUT body → NPE/500** — `@RequestBody(required=false)` + null guard → clean 400. Test: `emptyBodyIsBadRequest`.
+
+**Deferred/dismissed:** Never→finite long-lived cookie (cosmetic — server TTL governs auth and reconcile applies the TTL immediately); session-cookie ⇒ re-auth after a full PWA/browser restart (the intended "server-authoritative" trade-off — noted to the user); missing `seconds` field ≡ Never (acceptable per AC; the frontend always sends it); DB-down-at-startup fail-fast (intended); no seed row (by design).
+
+_Re-verified: 57 backend tests pass; frontend lint+build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Story drafted — configurable session timeout; reconciles the cookie/TTL review finding. |
+| 2026-06-22 | Implemented: V4 app_settings, cached SettingsService, runtime timeout in SessionStore (finite TTL / Never no-expiry), server-authoritative cookie, GET/PUT endpoints, Profile selector. 54 tests. Status → review. |
+| 2026-06-22 | Code review (3 layers): all 6 ACs pass. Patched 2 (live-session reconciliation on timeout change; empty-body 400). 57 tests pass. Status → done. |

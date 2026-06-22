@@ -129,4 +129,32 @@ class SettingsIntegrationTest {
 		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id));
 		assertTrue(sessionStore.validate(id), "Never session should validate");
 	}
+
+	@Test
+	void switchingToNeverPersistsExistingSession() {
+		settingsService.setSessionTimeout(Optional.of(Duration.ofSeconds(120)));
+		String id = sessionStore.create();
+		assertTrue(redis.getExpire(SessionStore.KEY_PREFIX + id) > 0, "finite session should have a TTL");
+		settingsService.setSessionTimeout(Optional.empty()); // → Never
+		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id),
+				"switching to Never must strip the existing TTL");
+	}
+
+	@Test
+	void switchingToFiniteAppliesTtlToExistingSession() {
+		settingsService.setSessionTimeout(Optional.empty());
+		String id = sessionStore.create();
+		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id));
+		settingsService.setSessionTimeout(Optional.of(Duration.ofSeconds(120))); // → finite
+		Long ttl = redis.getExpire(SessionStore.KEY_PREFIX + id);
+		assertTrue(ttl > 0 && ttl <= 120, "switching to finite must apply a TTL, was " + ttl);
+	}
+
+	@Test
+	void emptyBodyIsBadRequest() throws Exception {
+		Cookie session = login();
+		mockMvc.perform(put("/api/settings/session-timeout").cookie(session)
+						.contentType(MediaType.APPLICATION_JSON))
+				.andExpect(status().isBadRequest());
+	}
 }
