@@ -4,7 +4,7 @@ baseline_commit: d6c29ad
 
 # Story 2.7: Remote session kill
 
-Status: review
+Status: done
 
 ## Story
 
@@ -66,8 +66,20 @@ claude-opus-4-8 (Claude Opus 4.8) — bmad-dev-story workflow
 **New (frontend):** `features/auth/SessionManager.tsx`
 **Modified (frontend):** `lib/apiClient.ts`, `app/(dashboard)/profile/page.tsx`
 
+## Code Review (2026-06-22)
+
+Adversarial review — Blind + Edge + Auditor (Opus 4.8), diff `d6c29ad..HEAD`. **All 3 ACs pass** (Auditor); raw session token never exposed (handle only). 1 real bug patched + 1 UX tweak:
+
+- [x] [Review][High] **`validate()` TOCTOU zombie resurrection** — `hasKey` then `HSET seen` could re-create a session that idle-expired or was remote-killed in the window (HSET creates a missing key), reviving it TTL-less under "Never" and returning `true` — undermining the FR-39 kill + idle-lock. Fix: `validate` is now an **atomic Lua check-and-touch** (refresh last-seen + slide TTL only `if EXISTS`); a missing key is never resurrected and returns false. Test: `validateNeverResurrectsAKilledOrExpiredSession`.
+- [x] [Review][Low] **SessionManager blanked the list on a refresh error** — now keeps the list and shows an error instead.
+
+**Deferred/dismissed (documented):** `keys(argus:session:*)` is blocking KEYS but the prefix is exact (no cross-namespace match) and fine at single-user scale — SCAN/index only if sessions ever grow; DELETE returns 204 for an unknown handle (idempotent, acceptable); device label is coarse + React-escaped (no XSS); handle = SHA-256(id)[:16] ≈ 96 bits (collision-safe, non-reversible).
+
+_Re-verified: 66 backend tests pass; frontend lint+build clean._
+
 ## Change Log
 
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented remote session kill (FR-39): hash-backed sessions with device metadata, list + revoke-by-handle endpoints, SessionManager UI. Kill is instant in Redis; target rejected on next request. 65 tests. Status → review. |
+| 2026-06-22 | Code review (3 layers): all ACs pass. Patched the validate() TOCTOU zombie-resurrection (atomic Lua check-and-touch) + a list-refresh UX tweak. 66 tests pass. Status → done. |

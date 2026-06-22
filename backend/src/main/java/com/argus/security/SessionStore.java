@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +34,16 @@ public class SessionStore {
 	private static final String F_CREATED = "created";
 	private static final String F_SEEN = "seen";
 	private static final String F_DEVICE = "device";
+
+	// Atomic check-and-touch: only refresh last-seen / slide TTL if the session still EXISTS, so a
+	// session that idle-expired or was remote-killed between checks is never resurrected by HSET
+	// (which would otherwise create a partial, possibly TTL-less, zombie). Returns 1 if alive.
+	private static final RedisScript<Long> TOUCH = RedisScript.of(
+			"if redis.call('EXISTS', KEYS[1]) == 1 then "
+					+ "redis.call('HSET', KEYS[1], 'seen', ARGV[1]); "
+					+ "if tonumber(ARGV[2]) > 0 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end; "
+					+ "return 1 else return 0 end",
+			Long.class);
 
 	private final StringRedisTemplate redis;
 	private final SettingsService settings;
@@ -59,14 +70,17 @@ public class SessionStore {
 		return create("Unknown device");
 	}
 
-	/** True if the session exists; refreshes last-seen and (for finite timeouts) slides the TTL. */
+	/**
+	 * True if the session exists; atomically refreshes last-seen and (for finite timeouts) slides
+	 * the TTL. Never resurrects a missing key (see {@link #TOUCH}).
+	 */
 	public boolean validate(String id) {
-		if (id == null || id.isBlank() || !Boolean.TRUE.equals(redis.hasKey(key(id)))) {
+		if (id == null || id.isBlank()) {
 			return false;
 		}
-		redis.opsForHash().put(key(id), F_SEEN, Instant.now().toString());
-		settings.sessionTimeout().ifPresent(ttl -> redis.expire(key(id), ttl));
-		return true;
+		long ttlMillis = settings.sessionTimeout().map(Duration::toMillis).orElse(0L);
+		Long alive = redis.execute(TOUCH, List.of(key(id)), Instant.now().toString(), Long.toString(ttlMillis));
+		return alive != null && alive == 1L;
 	}
 
 	/** Destroy a session (logout / remote kill). Idempotent. */

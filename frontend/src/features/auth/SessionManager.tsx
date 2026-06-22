@@ -40,7 +40,7 @@ export function SessionManager() {
   function refresh() {
     listSessions()
       .then(setSessions)
-      .catch(() => setSessions([]));
+      .catch(() => setError("Couldn't refresh sessions")); // keep the current list rather than blanking it
   }
 
   async function handleRevoke(s: SessionInfo) {

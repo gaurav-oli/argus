@@ -36,6 +36,9 @@ class SessionManagementIntegrationTest {
 	@Autowired
 	StringRedisTemplate redis;
 
+	@Autowired
+	SessionStore sessionStore;
+
 	private final ObjectMapper json = new ObjectMapper();
 
 	@BeforeEach
@@ -98,5 +101,17 @@ class SessionManagementIntegrationTest {
 	void sessionsRequireSession() throws Exception {
 		mockMvc.perform(get("/api/auth/sessions")).andExpect(status().isUnauthorized());
 		mockMvc.perform(delete("/api/auth/sessions/whatever")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void validateNeverResurrectsAKilledOrExpiredSession() {
+		String id = sessionStore.create("Test");
+		// Simulate the session being remote-killed / idle-expired out from under an in-flight request.
+		redis.delete(SessionStore.KEY_PREFIX + id);
+		org.junit.jupiter.api.Assertions.assertFalse(sessionStore.validate(id),
+				"a deleted session must not validate");
+		org.junit.jupiter.api.Assertions.assertFalse(
+				Boolean.TRUE.equals(redis.hasKey(SessionStore.KEY_PREFIX + id)),
+				"validate must not recreate the key (no zombie session)");
 	}
 }
