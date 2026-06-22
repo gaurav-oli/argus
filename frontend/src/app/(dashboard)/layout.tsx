@@ -4,6 +4,7 @@ import { RightPanel } from "@/components/shell/RightPanel";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { PanicProvider } from "@/features/panic/PanicProvider";
 import { PrivacyProvider } from "@/features/privacy/PrivacyProvider";
 
 /**
@@ -20,6 +21,7 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGate>
+      <PanicProvider>
       <PrivacyProvider>
         <div className="flex h-dvh overflow-hidden">
           <Sidebar />
@@ -37,6 +39,7 @@ export default function DashboardLayout({
           </div>
         </div>
       </PrivacyProvider>
+      </PanicProvider>
     </AuthGate>
   );
 }
