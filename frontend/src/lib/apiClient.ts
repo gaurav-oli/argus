@@ -15,11 +15,13 @@ export interface SystemInfo {
   time: string;
 }
 
-/** Mirrors the backend `AuthStatus` record (Story 2.1 + 2.2). */
+/** Mirrors the backend `AuthStatus` record (Story 2.1 + 2.2 + 2.6). */
 export interface AuthStatus {
   pinSet: boolean;
   authenticated: boolean;
   passkeyEnrolled: boolean;
+  fullyLocked: boolean;
+  lockoutSecondsRemaining: number;
 }
 
 /** Mirrors the backend `WebAuthnController.PasskeyInfo` record (Story 2.2). */
@@ -30,13 +32,17 @@ export interface PasskeyInfo {
   lastUsedAt: string | null;
 }
 
-/** RFC 9457 Problem Details body. */
+/** RFC 9457 Problem Details body (+ lockout extensions from Story 2.6). */
 export interface ProblemDetail {
   type?: string;
   title?: string;
   status?: number;
   detail?: string;
   instance?: string;
+  /** Lockout (FR-38): seconds until a timed lockout lifts. */
+  retryAfterSeconds?: number;
+  /** Lockout (FR-38): true when fully locked (needs another device). */
+  fullyLocked?: boolean;
 }
 
 export class ApiError extends Error {

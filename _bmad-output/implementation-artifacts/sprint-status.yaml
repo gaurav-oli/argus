@@ -61,7 +61,7 @@ development_status:
   2-3-configurable-session-timeout: done
   2-4-tap-to-reveal-privacy: done
   2-5-panic-mode: done
-  2-6-failed-attempt-lockout: backlog
+  2-6-failed-attempt-lockout: done
   2-7-remote-session-kill: backlog
   epic-2-retrospective: optional
 

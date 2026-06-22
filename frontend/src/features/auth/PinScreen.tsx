@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { ApiError, biometricLogin, login, setupPin, webauthnSupported } from "@/lib/apiClient";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Mode = "setup" | "login";
 
@@ -16,6 +16,22 @@ function describe(err: unknown, fallback: string): string {
   return `${fallback} — can't reach Argus`;
 }
 
+/** Map a login failure to a message, handling the FR-38 lockout responses (429 timed / 423 full). */
+function loginErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "Incorrect PIN";
+    if (err.status === 423 || err.problem.fullyLocked) {
+      return "Locked — unlock from another signed-in device";
+    }
+    if (err.status === 429) {
+      const secs = err.problem.retryAfterSeconds ?? 30;
+      return `Too many attempts — try again in ${secs}s`;
+    }
+    return describe(err, "Sign-in failed");
+  }
+  return describe(err, "Sign-in failed");
+}
+
 /**
  * Full-screen PIN gate (Story 2.1). `setup` collects + confirms a new 4–6 digit PIN on first
  * launch; `login` unlocks an existing one. On success the backend has set the session cookie,
@@ -24,11 +40,15 @@ function describe(err: unknown, fallback: string): string {
 export function PinScreen({
   mode,
   passkeyEnrolled = false,
+  initialFullyLocked = false,
+  initialLockoutSeconds = 0,
   onAuthenticated,
   onPinExists,
 }: {
   mode: Mode;
   passkeyEnrolled?: boolean;
+  initialFullyLocked?: boolean;
+  initialLockoutSeconds?: number;
   onAuthenticated: () => void;
   onPinExists: () => void;
 }) {
@@ -36,6 +56,21 @@ export function PinScreen({
   const [firstPin, setFirstPin] = useState<string | null>(null); // setup: the entry being confirmed
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Lockout reflected on the lock screen at load (FR-38 / Story 2.6); ticks down live.
+  const [lockSeconds, setLockSeconds] = useState(initialFullyLocked ? 0 : initialLockoutSeconds);
+  const fullyLocked = initialFullyLocked;
+
+  useEffect(() => {
+    if (lockSeconds <= 0) return;
+    const t = setInterval(() => setLockSeconds((s) => Math.max(s - 1, 0)), 1000);
+    return () => clearInterval(t);
+  }, [lockSeconds]);
+
+  const lockNotice = fullyLocked
+    ? "Locked — unlock from another signed-in device"
+    : lockSeconds > 0
+      ? `Too many attempts — try again in ${lockSeconds}s`
+      : null;
 
   const canUseBiometric = mode === "login" && passkeyEnrolled && webauthnSupported();
 
@@ -119,8 +154,7 @@ export function PinScreen({
       await login(pin);
       onAuthenticated();
     } catch (err) {
-      const msg = err instanceof ApiError && err.status === 401 ? "Incorrect PIN" : describe(err, "Sign-in failed");
-      setError(msg);
+      setError(loginErrorMessage(err));
       setPin("");
     } finally {
       setBusy(false);
@@ -155,7 +189,7 @@ export function PinScreen({
           />
 
           <p className="min-h-5 text-sm text-losses" role="alert">
-            {error ?? ""}
+            {error ?? lockNotice ?? ""}
           </p>
 
           <button
