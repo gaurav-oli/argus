@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/Skeleton";
 import { LogoutButton } from "@/features/auth/LogoutButton";
+import { PasskeyManager } from "@/features/auth/PasskeyManager";
 
 export default function ProfilePage() {
   return (
@@ -21,7 +22,13 @@ export default function ProfilePage() {
         <h2 className="mb-4 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
           Security
         </h2>
-        <LogoutButton />
+        <div className="flex flex-col gap-6">
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-text-primary">Biometric unlock</h3>
+            <PasskeyManager />
+          </div>
+          <LogoutButton />
+        </div>
       </section>
     </div>
   );

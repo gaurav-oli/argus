@@ -57,7 +57,7 @@ development_status:
   # Epic 2: Security & Access
   epic-2: in-progress
   2-1-pin-setup-and-login: done
-  2-2-biometric-unlock: backlog
+  2-2-biometric-unlock: in-progress
   2-3-configurable-session-timeout: backlog
   2-4-tap-to-reveal-privacy: backlog
   2-5-panic-mode: backlog

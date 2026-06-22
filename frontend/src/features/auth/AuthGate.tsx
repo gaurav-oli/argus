@@ -18,12 +18,15 @@ function toGate(status: AuthStatus): Gate {
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [gate, setGate] = useState<Gate>("loading");
+  const [passkeyEnrolled, setPasskeyEnrolled] = useState(false);
 
   useEffect(() => {
     let active = true;
     getAuthStatus()
       .then((status) => {
-        if (active) setGate(toGate(status));
+        if (!active) return;
+        setPasskeyEnrolled(status.passkeyEnrolled);
+        setGate(toGate(status));
       })
       .catch(() => {
         if (active) setGate("error");
@@ -36,7 +39,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   function retry() {
     setGate("loading");
     getAuthStatus()
-      .then((status) => setGate(toGate(status)))
+      .then((status) => {
+        setPasskeyEnrolled(status.passkeyEnrolled);
+        setGate(toGate(status));
+      })
       .catch(() => setGate("error"));
   }
 
@@ -64,6 +70,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <PinScreen mode={gate} onAuthenticated={() => setGate("authed")} onPinExists={() => setGate("login")} />
+    <PinScreen
+      mode={gate}
+      passkeyEnrolled={passkeyEnrolled}
+      onAuthenticated={() => setGate("authed")}
+      onPinExists={() => setGate("login")}
+    />
   );
 }

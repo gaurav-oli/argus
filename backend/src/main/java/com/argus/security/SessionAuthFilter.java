@@ -61,9 +61,15 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 	private boolean isAllowlisted(HttpServletRequest request) {
 		String path = normalize(request.getRequestURI());
 		HttpMethod method = HttpMethod.valueOf(request.getMethod());
+		if (!HttpMethod.GET.equals(method) && !HttpMethod.POST.equals(method)) {
+			return false;
+		}
 		return (HttpMethod.GET.equals(method) && "/api/auth/status".equals(path))
 				|| (HttpMethod.POST.equals(method) && "/api/auth/login".equals(path))
-				|| (HttpMethod.POST.equals(method) && "/api/auth/pin".equals(path));
+				|| (HttpMethod.POST.equals(method) && "/api/auth/pin".equals(path))
+				// WebAuthn unlock is pre-session (like /login); registration stays gated.
+				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/start".equals(path))
+				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/finish".equals(path));
 	}
 
 	/** Strip a single trailing slash (but keep root "/") so proxy normalization can't 401 a match. */

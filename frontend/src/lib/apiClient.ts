@@ -15,10 +15,19 @@ export interface SystemInfo {
   time: string;
 }
 
-/** Mirrors the backend `AuthStatus` record (Story 2.1). */
+/** Mirrors the backend `AuthStatus` record (Story 2.1 + 2.2). */
 export interface AuthStatus {
   pinSet: boolean;
   authenticated: boolean;
+  passkeyEnrolled: boolean;
+}
+
+/** Mirrors the backend `WebAuthnController.PasskeyInfo` record (Story 2.2). */
+export interface PasskeyInfo {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 /** RFC 9457 Problem Details body. */
@@ -99,3 +108,80 @@ export const login = (pin: string): Promise<AuthStatus> =>
   apiPost<AuthStatus>("/api/auth/login", { pin });
 
 export const logout = (): Promise<void> => apiPost("/api/auth/logout");
+
+// ---- Biometric / WebAuthn (Story 2.2) ----
+
+/** True if the browser exposes the WebAuthn platform API (e.g. iOS Safari over HTTPS). */
+export function webauthnSupported(): boolean {
+  return typeof window !== "undefined" && typeof window.PublicKeyCredential !== "undefined";
+}
+
+// The JSON-based WebAuthn helpers (iOS 17.4+/modern browsers) aren't in every TS DOM lib yet.
+type PkcJsonStatic = {
+  parseCreationOptionsFromJSON(json: unknown): PublicKeyCredentialCreationOptions;
+  parseRequestOptionsFromJSON(json: unknown): PublicKeyCredentialRequestOptions;
+};
+type CredentialWithToJSON = { toJSON(): unknown };
+
+const CEREMONY_HEADER = "X-Argus-Ceremony";
+
+/** Run the assertion ceremony (Face/Touch ID) and start a session. Throws on failure/cancel. */
+export async function biometricLogin(): Promise<void> {
+  const startRes = await fetch(`${BASE_URL}/api/auth/webauthn/login/start`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!startRes.ok) throw await toApiError(startRes);
+  const ceremony = startRes.headers.get(CEREMONY_HEADER) ?? "";
+  const { publicKey } = (await startRes.json()) as { publicKey: unknown };
+
+  const options = (PublicKeyCredential as unknown as PkcJsonStatic).parseRequestOptionsFromJSON(publicKey);
+  const credential = await navigator.credentials.get({ publicKey: options });
+  if (!credential) throw new Error("Biometric cancelled");
+
+  const finishRes = await fetch(`${BASE_URL}/api/auth/webauthn/login/finish`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", [CEREMONY_HEADER]: ceremony },
+    body: JSON.stringify((credential as unknown as CredentialWithToJSON).toJSON()),
+  });
+  if (!finishRes.ok) throw await toApiError(finishRes);
+}
+
+/** Run the registration ceremony to enroll a new passkey (requires an authenticated session). */
+export async function enrollPasskey(label: string): Promise<void> {
+  const startRes = await fetch(`${BASE_URL}/api/auth/webauthn/register/start`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!startRes.ok) throw await toApiError(startRes);
+  const { publicKey } = (await startRes.json()) as { publicKey: unknown };
+
+  const options = (PublicKeyCredential as unknown as PkcJsonStatic).parseCreationOptionsFromJSON(publicKey);
+  const credential = await navigator.credentials.create({ publicKey: options });
+  if (!credential) throw new Error("Enrollment cancelled");
+
+  const finishRes = await fetch(
+    `${BASE_URL}/api/auth/webauthn/register/finish?label=${encodeURIComponent(label)}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify((credential as unknown as CredentialWithToJSON).toJSON()),
+    },
+  );
+  if (!finishRes.ok) throw await toApiError(finishRes);
+}
+
+export const listPasskeys = (): Promise<PasskeyInfo[]> =>
+  apiGet<PasskeyInfo[]>("/api/auth/webauthn/credentials");
+
+export async function revokePasskey(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/auth/webauthn/credentials/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw await toApiError(res);
+}

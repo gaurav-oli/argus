@@ -38,4 +38,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		problem.setType(URI.create("https://argus.local/problems/conflict"));
 		return problem;
 	}
+
+	@ExceptionHandler(BadRequestException.class)
+	ProblemDetail handleBadRequest(BadRequestException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+		problem.setTitle("Bad Request");
+		problem.setType(URI.create("https://argus.local/problems/bad-request"));
+		return problem;
+	}
 }

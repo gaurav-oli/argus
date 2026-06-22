@@ -30,17 +30,20 @@ public class AuthController {
 	private final AuthService auth;
 	private final SessionStore sessions;
 	private final SecurityProperties securityProperties;
+	private final com.argus.security.webauthn.WebAuthnService webAuthn;
 
-	public AuthController(AuthService auth, SessionStore sessions, SecurityProperties securityProperties) {
+	public AuthController(AuthService auth, SessionStore sessions, SecurityProperties securityProperties,
+			com.argus.security.webauthn.WebAuthnService webAuthn) {
 		this.auth = auth;
 		this.sessions = sessions;
 		this.securityProperties = securityProperties;
+		this.webAuthn = webAuthn;
 	}
 
 	@GetMapping("/status")
 	public AuthStatus status(HttpServletRequest request) {
 		boolean authenticated = auth.isAuthenticated(SessionCookie.read(request));
-		return new AuthStatus(auth.isPinSet(), authenticated);
+		return new AuthStatus(auth.isPinSet(), authenticated, webAuthn.anyPasskeyEnrolled());
 	}
 
 	@PostMapping("/pin")
@@ -55,7 +58,7 @@ public class AuthController {
 		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.ttl(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
-				.body(new AuthStatus(true, true));
+				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled()));
 	}
 
 	@PostMapping("/logout")
