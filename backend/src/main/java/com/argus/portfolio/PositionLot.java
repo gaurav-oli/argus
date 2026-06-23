@@ -87,6 +87,18 @@ public class PositionLot {
 		this.updatedAt = Instant.now();
 	}
 
+	/** Replace this lot's holding details (Story 3.7 — manual edit of a single-lot position). */
+	public void edit(BigDecimal shares, BigDecimal totalCost, String tradeCurrency, LocalDate tradeDate,
+			BigDecimal fxToCad, boolean fxEstimated) {
+		this.shares = shares;
+		this.totalCost = totalCost;
+		this.tradeCurrency = tradeCurrency != null ? tradeCurrency : this.tradeCurrency;
+		this.tradeDate = tradeDate;
+		this.fxToCad = fxToCad;
+		this.fxEstimated = fxEstimated;
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
 	}

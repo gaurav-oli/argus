@@ -330,6 +330,127 @@ export const confirmImport = (importId: number): Promise<Position[]> =>
 export const listPositions = (): Promise<Position[]> =>
   apiGet<Position[]>("/api/portfolio/positions");
 
+// ---- Live portfolio value (Story 3.4, FR-2) ----
+
+/** Mirrors the backend `PositionValue` record; `price`/`marketValue` null until a tick arrives,
+ *  `dayPnl`/`previousClose` null until a previous close is known. */
+export interface PositionValue {
+  ticker: string;
+  companyName: string | null;
+  shares: number | null;
+  price: number | null;
+  marketValue: number | null;
+  costBasis: number | null;
+  totalPnl: number | null;
+  totalPnlPercent: number | null;
+  previousClose: number | null;
+  dayPnl: number | null;
+  dayPnlPercent: number | null;
+  currency: string;
+  cadMarketValue: number | null;
+  cadPnl: number | null;
+  weightPercent: number | null;
+  afterHours: boolean;
+  asOf: string | null;
+}
+
+/** Mirrors the backend `PortfolioSnapshot` record — totals in CAD. Pushed live on `/topic/portfolio`. */
+export interface PortfolioSnapshot {
+  totalValueCad: number | null;
+  totalCostCad: number | null;
+  totalPnlCad: number | null;
+  anyAfterHours: boolean;
+  asOf: string;
+  positions: PositionValue[];
+}
+
+export const getPortfolioValue = (): Promise<PortfolioSnapshot> =>
+  apiGet<PortfolioSnapshot>("/api/portfolio/value");
+
+/** One point in the portfolio value chart series (Story 3.6). `date` is an ISO date string. */
+export interface ValuePoint {
+  date: string;
+  totalValueCad: number;
+}
+
+export const getValueHistory = (range: string): Promise<ValuePoint[]> =>
+  apiGet<ValuePoint[]>(`/api/portfolio/value-history?range=${encodeURIComponent(range)}`);
+
+// ---- Manual position edit (Story 3.7, FR-5) ----
+
+/** Mirrors the backend `AuditEntry` record. */
+export interface AuditEntry {
+  id: number;
+  ticker: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AddPositionBody {
+  ticker: string;
+  companyName?: string;
+  shares: number;
+  costBasis: number;
+  currency: string;
+  acquisitionDate?: string;
+}
+
+export interface EditPositionBody {
+  companyName?: string;
+  ticker?: string;
+  shares?: number;
+  costBasis?: number;
+  currency?: string;
+  acquisitionDate?: string;
+}
+
+export const addPosition = (body: AddPositionBody): Promise<Position> =>
+  apiPost<Position>("/api/portfolio/positions", body);
+
+export const editPosition = (id: number, body: EditPositionBody): Promise<Position> =>
+  apiPut<Position>(`/api/portfolio/positions/${id}`, body);
+
+export async function removePosition(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/portfolio/positions/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw await toApiError(res);
+}
+
+export const listAudit = (): Promise<AuditEntry[]> => apiGet<AuditEntry[]>("/api/portfolio/audit");
+
+// ---- Health score (Story 3.8/3.9, FR-6/FR-7) ----
+
+/** Mirrors the backend `HealthDeduction` record. */
+export interface HealthDeduction {
+  code: string;
+  label: string;
+  points: number;
+  reason: string;
+  suggestion: string;
+}
+
+/** Mirrors the backend `HealthScoreResult` record. */
+export interface HealthScoreResult {
+  score: number;
+  deductions: HealthDeduction[];
+  computedAt: string;
+}
+
+export const getHealthScore = (): Promise<HealthScoreResult> =>
+  apiGet<HealthScoreResult>("/api/portfolio/health-score");
+
+/** One point in the Health Score trend (Story 3.9). `date` is an ISO date string. */
+export interface HealthPoint {
+  date: string;
+  score: number;
+}
+
+export const getHealthScoreHistory = (days = 30): Promise<HealthPoint[]> =>
+  apiGet<HealthPoint[]>(`/api/portfolio/health-score/history?days=${days}`);
+
 /** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
 export const confirmPositionFx = (
   id: number,

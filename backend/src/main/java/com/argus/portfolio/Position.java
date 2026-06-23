@@ -98,6 +98,12 @@ public class Position {
 		this.updatedAt = Instant.now();
 	}
 
+	/** Update the display company name (Story 3.7 — manual edit). */
+	public void setCompanyName(String companyName) {
+		this.companyName = companyName;
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
 	}
