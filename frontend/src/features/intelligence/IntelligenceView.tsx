@@ -9,6 +9,7 @@ import {
   type SourceCredibilityItem,
   type StrangerAlertItem,
 } from "@/lib/apiClient";
+import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 
@@ -46,6 +47,7 @@ export function IntelligenceView() {
         </p>
       </header>
 
+      <RecommendationCards />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
       <NewsSection items={news} />
       <SourceSection items={sources} />

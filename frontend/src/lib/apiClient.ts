@@ -557,3 +557,41 @@ export interface UpcomingEvent {
 
 export const getUpcomingEvents = (): Promise<UpcomingEvent[]> =>
   apiGet<UpcomingEvent[]>("/api/calendar/upcoming");
+
+// ---- Recommendations / Agent 5 (Epic 6) ----
+
+/** One agent's diagnostic row on a recommendation card (Story 6.2). */
+export interface SignalView {
+  agent: string;
+  direction: "BULLISH" | "BEARISH" | "NEUTRAL";
+  weight: number;
+  rationale: string | null;
+}
+
+/** A weather-style Probability Forecast Card (Stories 6.1–6.7). */
+export interface RecommendationCard {
+  id: number;
+  ticker: string;
+  direction: "BULLISH" | "BEARISH";
+  bullProbability: number;
+  bearProbability: number;
+  confidence: number;
+  confidenceCapped: boolean;
+  priceTarget: number | null;
+  horizon: string | null;
+  status: string;
+  badge: string | null;
+  blackSwanActive: boolean;
+  createdAt: string;
+  signals: SignalView[];
+}
+
+export const getRecommendations = (): Promise<RecommendationCard[]> =>
+  apiGet<RecommendationCard[]>("/api/recommendations");
+
+export const decideRecommendation = (
+  id: number,
+  decision: "TAKEN" | "DECLINED",
+  reasoning: string,
+): Promise<void> =>
+  apiPost(`/api/recommendations/${id}/decision`, { decision, reasoning });
