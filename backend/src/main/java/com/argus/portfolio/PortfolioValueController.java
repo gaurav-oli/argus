@@ -41,4 +41,9 @@ public class PortfolioValueController {
 	public HealthScoreResult healthScore() {
 		return healthScore.compute();
 	}
+
+	@GetMapping("/health-score/history")
+	public List<HealthPoint> healthScoreHistory(@RequestParam(required = false, defaultValue = "30") int days) {
+		return healthScore.history(days);
+	}
 }

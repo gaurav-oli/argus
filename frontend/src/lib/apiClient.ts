@@ -442,6 +442,15 @@ export interface HealthScoreResult {
 export const getHealthScore = (): Promise<HealthScoreResult> =>
   apiGet<HealthScoreResult>("/api/portfolio/health-score");
 
+/** One point in the Health Score trend (Story 3.9). `date` is an ISO date string. */
+export interface HealthPoint {
+  date: string;
+  score: number;
+}
+
+export const getHealthScoreHistory = (days = 30): Promise<HealthPoint[]> =>
+  apiGet<HealthPoint[]>(`/api/portfolio/health-score/history?days=${days}`);
+
 /** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
 export const confirmPositionFx = (
   id: number,

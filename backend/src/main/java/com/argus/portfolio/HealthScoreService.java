@@ -121,6 +121,16 @@ public class HealthScoreService {
 				}, () -> scores.save(new HealthScore(today, result.score(), breakdown)));
 	}
 
+	/** The daily score series for the last {@code days} (clamped 1–365), ascending (Story 3.9). */
+	@Transactional(readOnly = true)
+	public List<HealthPoint> history(int days) {
+		int window = Math.max(1, Math.min(365, days));
+		LocalDate from = LocalDate.now(TORONTO).minusDays(window);
+		return scores.findByScoredOnGreaterThanEqualOrderByScoredOnAsc(from).stream()
+				.map(s -> new HealthPoint(s.getScoredOn(), s.getScore()))
+				.toList();
+	}
+
 	/** Daily recompute (06:00 ET — after overnight agent runs land in later epics). */
 	@Scheduled(cron = "0 0 6 * * *", zone = "America/New_York")
 	public void scheduledCapture() {
