@@ -75,6 +75,16 @@ public class PositionLot {
 		this.updatedAt = Instant.now();
 	}
 
+	/**
+	 * Apply a split/exchange ratio (Story 3.3): scale the share count, leaving {@code totalCost}
+	 * unchanged — so total cost basis is preserved and per-share cost adjusts. Ratio &gt; 1 = forward
+	 * split, &lt; 1 = reverse split.
+	 */
+	public void applySplit(BigDecimal ratio) {
+		this.shares = this.shares.multiply(ratio);
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
 	}

@@ -32,7 +32,7 @@ public class PortfolioImportService {
 	private final PortfolioImportRepository imports;
 	private final PositionRepository positions;
 	private final PositionLotRepository lots;
-	private final AcbCalculator acb;
+	private final PositionAcbService acbService;
 	private final FxRateService fx;
 
 	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
@@ -40,12 +40,13 @@ public class PortfolioImportService {
 	private final ObjectMapper json = JsonMapper.builder().build();
 
 	public PortfolioImportService(StatementParser parser, PortfolioImportRepository imports,
-			PositionRepository positions, PositionLotRepository lots, AcbCalculator acb, FxRateService fx) {
+			PositionRepository positions, PositionLotRepository lots, PositionAcbService acbService,
+			FxRateService fx) {
 		this.parser = parser;
 		this.imports = imports;
 		this.positions = positions;
 		this.lots = lots;
-		this.acb = acb;
+		this.acbService = acbService;
 		this.fx = fx;
 	}
 
@@ -74,7 +75,7 @@ public class PortfolioImportService {
 			Position position = positions.save(new Position(h.ticker(), h.companyName(), h.shares(),
 					h.costBasis(), h.costBasisCurrency(), h.acquisitionDate(), h.needsReview(), "pdf_import"));
 			lots.save(newLot(position.getId(), h));
-			recomputeAcb(position);
+			acbService.recompute(position);
 			created.add(position);
 		}
 
@@ -110,7 +111,7 @@ public class PortfolioImportService {
 			}
 		}
 		lots.saveAll(positionLots);
-		recomputeAcb(position);
+		acbService.recompute(position);
 		return PositionView.of(position);
 	}
 
@@ -137,14 +138,6 @@ public class PortfolioImportService {
 		}
 		return new PositionLot(positionId, h.shares(), h.costBasis(), currency, h.acquisitionDate(),
 				fxToCad, estimated);
-	}
-
-	/** Recompute the position's weighted-average ACB caches from its current lots. */
-	private void recomputeAcb(Position position) {
-		AcbCalculator.Acb computed = acb.compute(lots.findByPositionIdOrderByTradeDateAsc(position.getId()));
-		position.updateAcbCaches(computed.shares(), computed.costBasis(), computed.currency(),
-				computed.cadAcb(), computed.fxEstimated());
-		positions.save(position);
 	}
 
 	private String write(List<ParsedHolding> holdings) {

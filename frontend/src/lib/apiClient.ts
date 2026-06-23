@@ -335,3 +335,40 @@ export const confirmPositionFx = (
   id: number,
   body: { rate?: number; date?: string },
 ): Promise<Position> => apiPut<Position>(`/api/portfolio/positions/${id}/fx`, body);
+
+// ---- Corporate actions (Story 3.3, FR-1c) ----
+
+/** Mirrors the backend `CorporateActionView` record. */
+export interface CorporateAction {
+  id: number;
+  ticker: string;
+  positionId: number | null;
+  type: string;
+  ratio: number | null;
+  newTicker: string | null;
+  exDate: string | null;
+  /** pending | applied | dismissed */
+  status: string;
+  note: string | null;
+  source: string;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export const listCorporateActions = (): Promise<CorporateAction[]> =>
+  apiGet<CorporateAction[]>("/api/portfolio/corporate-actions");
+
+export const recordCorporateAction = (body: {
+  ticker: string;
+  type: string;
+  ratio?: number;
+  newTicker?: string;
+  exDate?: string;
+}): Promise<CorporateAction> =>
+  apiPost<CorporateAction>("/api/portfolio/corporate-actions", body);
+
+export const confirmCorporateAction = (id: number): Promise<CorporateAction> =>
+  apiPost<CorporateAction>(`/api/portfolio/corporate-actions/${id}/confirm`);
+
+export const dismissCorporateAction = (id: number): Promise<CorporateAction> =>
+  apiPost<CorporateAction>(`/api/portfolio/corporate-actions/${id}/dismiss`);
