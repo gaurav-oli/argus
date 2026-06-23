@@ -376,6 +376,51 @@ export interface ValuePoint {
 export const getValueHistory = (range: string): Promise<ValuePoint[]> =>
   apiGet<ValuePoint[]>(`/api/portfolio/value-history?range=${encodeURIComponent(range)}`);
 
+// ---- Manual position edit (Story 3.7, FR-5) ----
+
+/** Mirrors the backend `AuditEntry` record. */
+export interface AuditEntry {
+  id: number;
+  ticker: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AddPositionBody {
+  ticker: string;
+  companyName?: string;
+  shares: number;
+  costBasis: number;
+  currency: string;
+  acquisitionDate?: string;
+}
+
+export interface EditPositionBody {
+  companyName?: string;
+  ticker?: string;
+  shares?: number;
+  costBasis?: number;
+  currency?: string;
+  acquisitionDate?: string;
+}
+
+export const addPosition = (body: AddPositionBody): Promise<Position> =>
+  apiPost<Position>("/api/portfolio/positions", body);
+
+export const editPosition = (id: number, body: EditPositionBody): Promise<Position> =>
+  apiPut<Position>(`/api/portfolio/positions/${id}`, body);
+
+export async function removePosition(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/portfolio/positions/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw await toApiError(res);
+}
+
+export const listAudit = (): Promise<AuditEntry[]> => apiGet<AuditEntry[]>("/api/portfolio/audit");
+
 /** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
 export const confirmPositionFx = (
   id: number,

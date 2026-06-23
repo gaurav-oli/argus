@@ -4,6 +4,7 @@ import { MotionCard } from "@/components/ui/MotionCard";
 import { CorporateActions } from "@/features/portfolio/CorporateActions";
 import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatement } from "@/features/portfolio/ImportStatement";
+import { ManagePositions } from "@/features/portfolio/ManagePositions";
 import { PortfolioChart } from "@/features/portfolio/PortfolioChart";
 import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
 
@@ -32,6 +33,9 @@ export default function PortfolioPage() {
         </MotionCard>
         <MotionCard index={3} className="md:col-span-6" interactive={false}>
           <HoldingsTable />
+        </MotionCard>
+        <MotionCard index={7} className="md:col-span-6" interactive={false}>
+          <ManagePositions />
         </MotionCard>
         <MotionCard index={4} className="md:col-span-4">
           <PortfolioChart />

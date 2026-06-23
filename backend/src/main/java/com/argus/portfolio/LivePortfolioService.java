@@ -57,6 +57,11 @@ public class LivePortfolioService {
 		livePush.publish(TOPIC, currentSnapshot());
 	}
 
+	/** Re-broadcast the current snapshot (Story 3.7 — after a manual change, for immediate UI update). */
+	public void pushCurrent() {
+		livePush.publish(TOPIC, currentSnapshot());
+	}
+
 	/** Record a ticker's previous close (for day P&L). Does not itself push a snapshot. */
 	public void recordPreviousClose(String ticker, BigDecimal previousClose) {
 		if (ticker != null && previousClose != null) {
