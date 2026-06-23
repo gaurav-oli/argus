@@ -3,6 +3,7 @@ import { PerformanceGauges } from "@/components/dashboard/PerformanceGauges";
 import { PriceChart } from "@/components/dashboard/PriceChart";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { CorporateActions } from "@/features/portfolio/CorporateActions";
+import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatement } from "@/features/portfolio/ImportStatement";
 import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
 
@@ -29,13 +30,16 @@ export default function PortfolioPage() {
         <MotionCard index={2} className="md:col-span-6" interactive={false}>
           <CorporateActions />
         </MotionCard>
-        <MotionCard index={3} className="md:col-span-4">
+        <MotionCard index={3} className="md:col-span-6" interactive={false}>
+          <HoldingsTable />
+        </MotionCard>
+        <MotionCard index={4} className="md:col-span-4">
           <PriceChart />
         </MotionCard>
-        <MotionCard index={4} className="md:col-span-2" interactive={false}>
+        <MotionCard index={5} className="md:col-span-2" interactive={false}>
           <PerformanceGauges />
         </MotionCard>
-        <MotionCard index={5} className="md:col-span-6" interactive={false}>
+        <MotionCard index={6} className="md:col-span-6" interactive={false}>
           <HoldingsTreemap />
         </MotionCard>
       </div>

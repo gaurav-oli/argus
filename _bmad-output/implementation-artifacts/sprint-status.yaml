@@ -72,7 +72,7 @@ development_status:
   3-2-acb-with-purchase-time-fx: done
   3-3-corporate-actions-handling: done
   3-4-real-time-portfolio-value: review
-  3-5-holdings-table: backlog
+  3-5-holdings-table: review
   3-6-portfolio-chart: backlog
   3-7-manual-position-edit: backlog
   3-8-health-score-calculation: backlog

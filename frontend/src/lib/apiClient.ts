@@ -332,17 +332,24 @@ export const listPositions = (): Promise<Position[]> =>
 
 // ---- Live portfolio value (Story 3.4, FR-2) ----
 
-/** Mirrors the backend `PositionValue` record; `price`/`marketValue` null until a tick arrives. */
+/** Mirrors the backend `PositionValue` record; `price`/`marketValue` null until a tick arrives,
+ *  `dayPnl`/`previousClose` null until a previous close is known. */
 export interface PositionValue {
   ticker: string;
+  companyName: string | null;
   shares: number | null;
   price: number | null;
   marketValue: number | null;
   costBasis: number | null;
   totalPnl: number | null;
+  totalPnlPercent: number | null;
+  previousClose: number | null;
+  dayPnl: number | null;
+  dayPnlPercent: number | null;
   currency: string;
   cadMarketValue: number | null;
   cadPnl: number | null;
+  weightPercent: number | null;
   afterHours: boolean;
   asOf: string | null;
 }

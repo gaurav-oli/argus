@@ -32,7 +32,7 @@ public class PriceFeedStarter {
 	public void startFeed() {
 		PriceFeed feed = priceFeed.getIfAvailable();
 		if (feed != null) {
-			feed.start(this::heldTickers, live::onPriceTick);
+			feed.start(this::heldTickers, live::onPriceTick, live::recordPreviousClose);
 		}
 	}
 

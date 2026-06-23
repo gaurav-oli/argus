@@ -64,9 +64,28 @@ class LivePortfolioServiceTest {
 		assertEquals(0, pv.cadMarketValue().compareTo(new BigDecimal("1620.00"))); // 1200 × 1.35
 		assertEquals(0, pv.cadPnl().compareTo(new BigDecimal("270.00")));         // 1620 − 1350
 		assertFalse(pv.afterHours());
+		assertNull(pv.dayPnl());          // no previous close recorded → day P&L unknown
+		assertNull(pv.previousClose());
 		assertEquals(0, snap.totalValueCad().compareTo(new BigDecimal("1620.00")));
 		assertEquals(0, snap.totalPnlCad().compareTo(new BigDecimal("270.00")));
 		assertFalse(snap.anyAfterHours());
+	}
+
+	@Test
+	void computesDayPnlTotalPercentAndWeight() {
+		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(aapl()));
+		when(fx.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
+		service.recordPreviousClose("AAPL", new BigDecimal("100"));
+		service.onPriceTick("AAPL", new BigDecimal("120"), REGULAR);
+
+		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
+		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		PositionValue pv = captor.getValue().positions().get(0);
+
+		assertEquals(0, pv.dayPnl().compareTo(new BigDecimal("200.00")));        // (120−100) × 10
+		assertEquals(0, pv.dayPnlPercent().compareTo(new BigDecimal("20.00")));  // (120−100)/100
+		assertEquals(0, pv.totalPnlPercent().compareTo(new BigDecimal("20.00"))); // 200/1000
+		assertEquals(0, pv.weightPercent().compareTo(new BigDecimal("100.00"))); // single priced holding
 	}
 
 	@Test

@@ -3,10 +3,13 @@ package com.argus.marketdata;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.concurrent.CompletionStage;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,17 +42,41 @@ public class FinnhubPriceFeed implements PriceFeed {
 	}
 
 	@Override
-	public void start(Supplier<Collection<String>> symbols, PriceTick handler) {
+	public void start(Supplier<Collection<String>> symbols, PriceTick handler,
+			BiConsumer<String, BigDecimal> previousClose) {
+		Collection<String> tickers = symbols.get();
+		seedPreviousCloses(tickers, previousClose);
 		try {
 			this.socket = HttpClient.newHttpClient().newWebSocketBuilder()
 					.buildAsync(URI.create("wss://ws.finnhub.io?token=" + apiKey), new Listener(handler))
 					.join();
-			for (String symbol : symbols.get()) {
+			for (String symbol : tickers) {
 				socket.sendText("{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}", true);
 			}
-			log.info("Finnhub price feed connected; subscribed to {} symbols", symbols.get().size());
+			log.info("Finnhub price feed connected; subscribed to {} symbols", tickers.size());
 		} catch (RuntimeException ex) {
 			log.warn("Finnhub price feed failed to start: {}", ex.getMessage());
+		}
+	}
+
+	/** Seed each symbol's previous close from the Finnhub /quote REST endpoint (best-effort). */
+	private void seedPreviousCloses(Collection<String> tickers, BiConsumer<String, BigDecimal> previousClose) {
+		HttpClient http = HttpClient.newHttpClient();
+		for (String symbol : tickers) {
+			try {
+				HttpResponse<String> res = http.send(HttpRequest.newBuilder()
+						.uri(URI.create("https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + apiKey))
+						.GET().build(), HttpResponse.BodyHandlers.ofString());
+				JsonNode pc = JSON.readTree(res.body()).path("pc");
+				if (!pc.isMissingNode() && pc.asDouble() > 0) {
+					previousClose.accept(symbol, new BigDecimal(pc.asString()));
+				}
+			} catch (RuntimeException | java.io.IOException | InterruptedException ex) {
+				log.debug("No previous close for {}: {}", symbol, ex.getMessage());
+				if (ex instanceof InterruptedException) {
+					Thread.currentThread().interrupt();
+				}
+			}
 		}
 	}
 
