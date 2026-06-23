@@ -75,6 +75,18 @@ public class PositionLot {
 		this.updatedAt = Instant.now();
 	}
 
+	/**
+	 * Apply a split/exchange ratio (Story 3.3): scale the share count, leaving {@code totalCost}
+	 * unchanged — so total cost basis is preserved and per-share cost adjusts. Ratio &gt; 1 = forward
+	 * split, &lt; 1 = reverse split.
+	 */
+	public void applySplit(BigDecimal ratio) {
+		// Bound the scale to the shares column (numeric(20,6)) so repeated splits don't grow the
+		// BigDecimal scale unbounded and the in-memory value matches what Postgres stores.
+		this.shares = this.shares.multiply(ratio).setScale(6, java.math.RoundingMode.HALF_UP);
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
 	}

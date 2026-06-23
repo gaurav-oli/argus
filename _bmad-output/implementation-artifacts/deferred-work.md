@@ -37,3 +37,11 @@
 - **Residual silent USD currency default** — `StatementParser` still defaults a row with no USD/CAD token to USD without flagging; 3.2 only surfaces FX uncertainty when the *date* is also missing. Full currency-confidence tracking (flag "currency assumed") is a future parser refinement.
 - **V6 backfill integration test** — the backfill (3.1 positions → one lot each) has no test, because Flyway runs migrations once at context start and the integration test `reset()` wipes rows. Add a dedicated migration-test harness later. (Backfill SQL is simple and the null-shares risk is not reachable — parser guarantees non-null shares.)
 - **Future-dated FX confirm** — `confirmFx` by date doesn't reject a future purchase date (BoC may return today's rate). Add a `date <= today` guard in a later pass; implausible user action.
+
+## Deferred from: code review of story-3.3 (2026-06-22)
+
+- **Multi-match disambiguation on confirm** — when >1 holding shares a ticker, the action is `pending` but `confirm` can't pick which position (no `positionId` in the confirm body). With the new duplicate-ticker guard this is now rare; full disambiguation (and merging two holdings of the same security) belongs to **Story 3.7** (manual position edit / lot merge).
+- **Duplicate-record idempotency** — recording the same auto-applicable action twice applies it twice (e.g. a split scaling by ratio²). The `ex_date` + `source` columns exist for dedup but aren't used yet; add an idempotency guard when the **Finnhub detector** is built (it would re-detect the same split on later polls).
+- **Position-deletion handling** — `corporate_actions.position_id` is `ON DELETE SET NULL`; once a position-delete path exists (3.7), revisit `resolvePosition`'s by-ticker fallback so a confirm can't apply to a coincidental same-ticker position, and reconcile `applied` actions whose position was removed.
+- **Dedicated ticker-alias artifact + cross-symbol history linking** — the old→new symbol mapping currently lives only on the action row; a queryable alias + linking news/prices/recommendations across symbols lands with **Epics 4/6** when that data exists.
+- **`window.location.reload()` → targeted refetch** — `CorporateActions.tsx` reloads the page after an action applies; replace with a positions+actions refetch (lift shared state) in a later UI polish pass.

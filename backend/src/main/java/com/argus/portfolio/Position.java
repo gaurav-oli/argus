@@ -92,6 +92,12 @@ public class Position {
 		this.updatedAt = Instant.now();
 	}
 
+	/** Re-map this position to a new ticker (Story 3.3 — ticker change / merger). */
+	public void applyTickerChange(String newTicker) {
+		this.ticker = newTicker;
+		this.updatedAt = Instant.now();
+	}
+
 	public Long getId() {
 		return id;
 	}
