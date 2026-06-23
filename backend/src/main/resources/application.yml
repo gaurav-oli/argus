@@ -45,6 +45,17 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# Agent 1 news ingestion (Story 4.1, FR-8). Cadence-gated: ≤5 min in regular hours, ≤15 min off-hours.
+# Finnhub is key-gated (argus.finnhub.api-key); GDELT + RSS are free/keyless and on by default.
+argus:
+  news:
+    gdelt:
+      enabled: ${ARGUS_NEWS_GDELT_ENABLED:true}
+    rss:
+      feeds:
+        - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
+        - https://www.cnbc.com/id/100003114/device/rss/rss.html
+
 management:
   endpoints:
     web:
