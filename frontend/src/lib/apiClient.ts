@@ -493,3 +493,51 @@ export const confirmCorporateAction = (id: number): Promise<CorporateAction> =>
 
 export const dismissCorporateAction = (id: number): Promise<CorporateAction> =>
   apiPost<CorporateAction>(`/api/portfolio/corporate-actions/${id}/dismiss`);
+
+// ---- Intelligence / Agent 1 (Epic 4) ----
+
+export type SentimentLabel = "BULLISH" | "BEARISH" | "NEUTRAL";
+
+/** A news article with Agent-1 sentiment/relevance (null scores = not yet analyzed). */
+export interface NewsItem {
+  id: number;
+  source: string;
+  headline: string;
+  url: string | null;
+  publishedAt: string;
+  tickers: string[];
+  sentimentLabel: SentimentLabel | null;
+  sentimentScore: number | null;
+  relevanceScore: number | null;
+  analyzed: boolean;
+}
+
+/** A source's credibility score, tier band (PLATINUM…BLOCKED), and block state (Story 4.3). */
+export interface SourceCredibilityItem {
+  source: string;
+  score: number;
+  tier: string;
+  blocked: boolean;
+  correctCount: number;
+  incorrectCount: number;
+}
+
+/** A flagged "stranger" ticker under heavy coverage with its pump-and-dump risk (Story 4.4). */
+export interface StrangerAlertItem {
+  ticker: string;
+  riskScore: number;
+  coverageCount: number;
+  distinctSources: number;
+  avgSourceScore: number | null;
+  requiredConsensus: number;
+  windowStart: string;
+}
+
+export const getNewsFeed = (): Promise<NewsItem[]> =>
+  apiGet<NewsItem[]>("/api/intelligence/news");
+
+export const getSourceCredibility = (): Promise<SourceCredibilityItem[]> =>
+  apiGet<SourceCredibilityItem[]>("/api/intelligence/sources");
+
+export const getStrangerAlerts = (): Promise<StrangerAlertItem[]> =>
+  apiGet<StrangerAlertItem[]>("/api/intelligence/strangers");

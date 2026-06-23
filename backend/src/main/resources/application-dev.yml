@@ -11,3 +11,7 @@ argus:
   model:
     concurrency: 1
     dev-response: "[dev-mock] Argus Model Gateway is alive."
+  # Seed sample Agent-1 intelligence data on first dev run so the Intelligence UI has content
+  # without a live Finnhub key. Disabled in tests (see src/test/resources/application.properties).
+  dev:
+    seed: ${ARGUS_DEV_SEED:true}
