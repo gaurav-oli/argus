@@ -26,8 +26,12 @@ class RecommendationServiceIntegrationTest {
 	@Autowired
 	RecommendationRepository repo;
 
+	@Autowired
+	TradeDecisionRepository decisions;
+
 	@BeforeEach
 	void clean() {
+		decisions.deleteAll(); // FK → recommendations; clear children first
 		repo.deleteAll();
 	}
 

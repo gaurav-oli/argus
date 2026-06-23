@@ -44,11 +44,15 @@ class IntelligenceControllerIntegrationTest {
 	@Autowired
 	StrangerAlertRepository strangers;
 
+	@Autowired
+	com.argus.security.AppCredentialRepository credentials;
+
 	@BeforeEach
 	void clean() {
 		strangers.deleteAll();
 		articles.deleteAll();
 		sources.deleteAll();
+		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 	}
 
 	private Cookie login() throws Exception {

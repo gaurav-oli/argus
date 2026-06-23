@@ -33,7 +33,9 @@ public class RecommendationService {
 
 	@Transactional(readOnly = true)
 	public List<Recommendation> recent() {
-		return repository.findTop50ByOrderByCreatedAtDesc();
+		List<Recommendation> recs = repository.findTop50ByOrderByCreatedAtDesc();
+		recs.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx for the card
+		return recs;
 	}
 
 	/** A recommendation with its diagnostic signals loaded (Story 6.2). */
