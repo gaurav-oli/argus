@@ -4,6 +4,7 @@ import { HealthScoreRing } from "@/components/dashboard/HealthScoreRing";
 import { MoversBubbles } from "@/components/dashboard/MoversBubbles";
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
 import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
+import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { MotionCard } from "@/components/ui/MotionCard";
 
 /**
@@ -42,6 +43,11 @@ export default function Home() {
         </MotionCard>
         <MotionCard index={5} className="md:col-span-3" interactive={false}>
           <AlertCards />
+        </MotionCard>
+
+        {/* Upcoming economic calendar (Epic 5 — real data) */}
+        <MotionCard index={6} className="md:col-span-6" interactive={false}>
+          <UpcomingEvents />
         </MotionCard>
       </div>
     </div>

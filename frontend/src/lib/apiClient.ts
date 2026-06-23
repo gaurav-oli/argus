@@ -541,3 +541,19 @@ export const getSourceCredibility = (): Promise<SourceCredibilityItem[]> =>
 
 export const getStrangerAlerts = (): Promise<StrangerAlertItem[]> =>
   apiGet<StrangerAlertItem[]>("/api/intelligence/strangers");
+
+// ---- Economic calendar / Agent 7 (Epic 5) ----
+
+/** An upcoming calendar event; `quietPeriod` (CLEAR|NOTE|QUIET) is set only for earnings (Story 5.3). */
+export interface UpcomingEvent {
+  id: number;
+  type: string;
+  ticker: string | null;
+  title: string;
+  eventDate: string;
+  daysUntil: number;
+  quietPeriod: string | null;
+}
+
+export const getUpcomingEvents = (): Promise<UpcomingEvent[]> =>
+  apiGet<UpcomingEvent[]>("/api/calendar/upcoming");
