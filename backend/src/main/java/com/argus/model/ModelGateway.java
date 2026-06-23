@@ -8,9 +8,15 @@ package com.argus.model;
 public interface ModelGateway {
 
 	/**
-	 * Generate a completion for the given prompt using the active-profile model
-	 * (mock under {@code dev}, Gemma via Ollama under {@code prod}). Big-model
-	 * access is serialized; on primary-model failure a Haiku fallback is invoked.
+	 * Generate a completion on the requested {@link ModelTier} using the active-profile model
+	 * (mock under {@code dev}, Ollama under {@code prod}). {@link ModelTier#BIG} access is
+	 * serialized and routes to a Haiku fallback on failure; {@link ModelTier#SMALL} runs
+	 * unserialized with no fallback and propagates failure to the caller.
 	 */
-	String generate(String prompt);
+	String generate(String prompt, ModelTier tier);
+
+	/** Convenience for {@link ModelTier#BIG} (Ask AI, Personas, deep-analysis agents). */
+	default String generate(String prompt) {
+		return generate(prompt, ModelTier.BIG);
+	}
 }

@@ -2,10 +2,14 @@ package com.argus.intelligence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -47,6 +51,20 @@ public class NewsArticle {
 
 	@Column(name = "ingested_at", nullable = false)
 	private Instant ingestedAt = Instant.now();
+
+	// Sentiment stage (Story 4.2) — null until the sentiment agent processes the article.
+	@Enumerated(EnumType.STRING)
+	@Column(name = "sentiment_label")
+	private SentimentLabel sentimentLabel;
+
+	@Column(name = "sentiment_score")
+	private BigDecimal sentimentScore;
+
+	@Column(name = "relevance_score")
+	private BigDecimal relevanceScore;
+
+	@Column(name = "analyzed_at")
+	private Instant analyzedAt;
 
 	protected NewsArticle() {
 		// JPA
@@ -97,5 +115,38 @@ public class NewsArticle {
 
 	public Instant getIngestedAt() {
 		return ingestedAt;
+	}
+
+	public SentimentLabel getSentimentLabel() {
+		return sentimentLabel;
+	}
+
+	public BigDecimal getSentimentScore() {
+		return sentimentScore;
+	}
+
+	public BigDecimal getRelevanceScore() {
+		return relevanceScore;
+	}
+
+	public Instant getAnalyzedAt() {
+		return analyzedAt;
+	}
+
+	/** True once the sentiment stage has scored this article (Story 4.2) — used to skip redeliveries. */
+	public boolean isAnalyzed() {
+		return analyzedAt != null;
+	}
+
+	/** Persist the small-model assessment; scores are stored at the column's 3-decimal scale. */
+	public void applySentiment(SentimentAnalysis analysis, Instant at) {
+		this.sentimentLabel = analysis.label();
+		this.sentimentScore = scaled(analysis.score());
+		this.relevanceScore = scaled(analysis.relevance());
+		this.analyzedAt = at;
+	}
+
+	private static BigDecimal scaled(double v) {
+		return BigDecimal.valueOf(v).setScale(3, RoundingMode.HALF_UP);
 	}
 }
