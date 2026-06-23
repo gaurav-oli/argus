@@ -4,7 +4,7 @@ baseline_commit: 396c950
 
 # Story 3.7: Manual position edit
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -80,3 +80,8 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context) — bmad-dev-story workflow
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented manual position edit (FR-5): add/edit/remove + audit trail + immediate re-push. Status → review (batch). |
+
+
+## Code Review (2026-06-23, Epic-3 batch)
+
+Reviewed in the combined 3.4–3.9 adversarial batch review (Blind + Edge + Acceptance Auditor, Opus 4.8). **0 High AC violations**; verdict pass. Fixes applied in-batch and deferrals logged in `deferred-work.md`. Status → done.

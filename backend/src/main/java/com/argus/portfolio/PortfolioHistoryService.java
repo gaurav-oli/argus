@@ -34,16 +34,17 @@ public class PortfolioHistoryService {
 	@Transactional
 	public void capture() {
 		BigDecimal value = live.currentSnapshot().totalValueCad();
-		if (value == null) {
-			value = BigDecimal.ZERO;
+		// Skip days with no priced value (no feed / empty portfolio) rather than recording a
+		// misleading 0 that would crater the chart.
+		if (value == null || value.signum() <= 0) {
+			return;
 		}
 		LocalDate today = LocalDate.now(TORONTO);
-		BigDecimal finalValue = value;
 		points.findByCapturedOn(today)
 				.ifPresentOrElse(p -> {
-					p.setTotalValueCad(finalValue);
+					p.setTotalValueCad(value);
 					points.save(p);
-				}, () -> points.save(new PortfolioValuePoint(today, finalValue)));
+				}, () -> points.save(new PortfolioValuePoint(today, value)));
 	}
 
 	@Transactional(readOnly = true)

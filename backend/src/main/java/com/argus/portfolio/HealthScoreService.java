@@ -111,6 +111,11 @@ public class HealthScoreService {
 	/** Upsert today's score point for the trend (idempotent). */
 	@Transactional
 	public void capture() {
+		// Don't record a daily point for an empty portfolio — a flat 100 baseline before any
+		// holdings exist isn't a meaningful trend.
+		if (positions.count() == 0) {
+			return;
+		}
 		HealthScoreResult result = compute();
 		String breakdown = json.writeValueAsString(result.deductions());
 		LocalDate today = LocalDate.now(TORONTO);

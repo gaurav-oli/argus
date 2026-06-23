@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,6 +87,29 @@ class LivePortfolioServiceTest {
 		assertEquals(0, pv.dayPnlPercent().compareTo(new BigDecimal("20.00")));  // (120−100)/100
 		assertEquals(0, pv.totalPnlPercent().compareTo(new BigDecimal("20.00"))); // 200/1000
 		assertEquals(0, pv.weightPercent().compareTo(new BigDecimal("100.00"))); // single priced holding
+	}
+
+	@Test
+	void weightsSumTo100AcrossPricedPositionsIncludingFxEstimated() {
+		Position aapl = aapl(); // cadAcb 1350, USD, 10 sh
+		Position tsla = new Position("TSLA", null, new BigDecimal("5"), new BigDecimal("400"), "USD", null, false, "manual");
+		tsla.updateAcbCaches(new BigDecimal("5"), new BigDecimal("400"), "USD", null, true); // FX-estimated → cadAcb null
+		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(aapl, tsla));
+		when(fx.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
+
+		service.onPriceTick("AAPL", new BigDecimal("120"), REGULAR); // cadMv 1620
+		service.onPriceTick("TSLA", new BigDecimal("100"), REGULAR); // cadMv 675 (still priced though FX-estimated)
+
+		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
+		verify(livePush, atLeastOnce()).publish(eq("/topic/portfolio"), captor.capture());
+		PortfolioSnapshot snap = captor.getValue();
+
+		assertEquals(0, snap.totalValueCad().compareTo(new BigDecimal("2295.00"))); // 1620 + 675 — includes FX-estimated
+		double weightSum = snap.positions().stream()
+				.filter(p -> p.weightPercent() != null)
+				.mapToDouble(p -> p.weightPercent().doubleValue())
+				.sum();
+		assertEquals(100.0, weightSum, 0.05); // weights sum to ~100%, not >100%
 	}
 
 	@Test

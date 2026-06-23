@@ -4,7 +4,7 @@ baseline_commit: 52762b9
 
 # Story 3.8: Health Score calculation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -86,3 +86,8 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context) — bmad-dev-story workflow
 | Date | Change |
 | --- | --- |
 | 2026-06-22 | Implemented health score calculation (FR-6): rule engine + V10 daily persistence + endpoint + top-bar badge. Status → review (batch). |
+
+
+## Code Review (2026-06-23, Epic-3 batch)
+
+Reviewed in the combined 3.4–3.9 adversarial batch review (Blind + Edge + Acceptance Auditor, Opus 4.8). **0 High AC violations**; verdict pass. Fixes applied in-batch and deferrals logged in `deferred-work.md`. Status → done.

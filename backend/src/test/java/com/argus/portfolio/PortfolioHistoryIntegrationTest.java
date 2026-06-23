@@ -46,6 +46,18 @@ class PortfolioHistoryIntegrationTest {
 	PortfolioHistoryService history;
 
 	@Autowired
+	PositionRepository positions;
+
+	@Autowired
+	PositionLotRepository lots;
+
+	@Autowired
+	PositionAcbService acbService;
+
+	@Autowired
+	LivePortfolioService live;
+
+	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
 	@MockitoBean
@@ -56,6 +68,8 @@ class PortfolioHistoryIntegrationTest {
 	@BeforeEach
 	void reset() {
 		pointsRepo.deleteAll();
+		lots.deleteAll();
+		positions.deleteAll();
 		pinCredentials.deleteAll();
 		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
@@ -90,11 +104,25 @@ class PortfolioHistoryIntegrationTest {
 
 	@Test
 	void captureIsIdempotentPerDay() {
+		// Seed one priced holding so the snapshot has a non-zero CAD value worth capturing.
+		Position p = positions.save(new Position("T", null, new BigDecimal("10"), new BigDecimal("100"), "USD",
+				LocalDate.of(2023, 1, 15), false, "manual"));
+		lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("100"), "USD",
+				LocalDate.of(2023, 1, 15), new BigDecimal("1.35"), false));
+		acbService.recompute(p);
+		live.onPriceTick("T", new BigDecimal("50"), java.time.Instant.now());
+
 		history.capture();
 		history.capture(); // same day → updates, not a second row
 
 		assertEquals(1, pointsRepo.count());
 		assertEquals(TODAY, pointsRepo.findAll().get(0).getCapturedOn());
+	}
+
+	@Test
+	void captureSkipsWhenNothingIsPriced() {
+		history.capture(); // empty/unpriced portfolio → no misleading 0 point stored
+		assertEquals(0, pointsRepo.count());
 	}
 
 	@Test

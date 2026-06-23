@@ -5,6 +5,7 @@ import com.argus.common.NotFoundException;
 import com.argus.marketdata.FxRateService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,7 @@ public class ManualPositionService {
 		String ccy = requireCurrency(currency);
 		requirePositiveShares(shares);
 		requireNonNegativeCost(costBasis);
+		requireNotFuture(acquisitionDate);
 
 		Position position = positions.save(new Position(tk, blankToNull(companyName), shares, costBasis,
 				ccy, acquisitionDate, false, "manual"));
@@ -59,6 +61,7 @@ public class ManualPositionService {
 			BigDecimal costBasis, String currency, LocalDate acquisitionDate) {
 		Position position = positions.findById(id)
 				.orElseThrow(() -> new NotFoundException("Position", String.valueOf(id)));
+		requireNotFuture(acquisitionDate);
 
 		if (companyName != null) {
 			position.setCompanyName(blankToNull(companyName));
@@ -81,8 +84,12 @@ public class ManualPositionService {
 			LocalDate newDate = acquisitionDate != null ? acquisitionDate : lot.getTradeDate();
 			requirePositiveShares(newShares);
 			requireNonNegativeCost(newCost);
-			Fx resolved = resolveFx(newCcy, newDate);
-			lot.edit(newShares, newCost, newCcy, newDate, resolved.rate(), resolved.estimated());
+			// Only re-resolve FX when currency or date actually changed — otherwise keep the lot's
+			// existing (possibly user-confirmed) rate rather than re-looking-up and risk nulling it.
+			boolean fxInputsChanged = currency != null || acquisitionDate != null;
+			Fx fxResolved = fxInputsChanged ? resolveFx(newCcy, newDate)
+					: new Fx(lot.getFxToCad(), lot.isFxEstimated());
+			lot.edit(newShares, newCost, newCcy, newDate, fxResolved.rate(), fxResolved.estimated());
 			lots.save(lot);
 		}
 
@@ -153,6 +160,12 @@ public class ManualPositionService {
 	private static void requireNonNegativeCost(BigDecimal cost) {
 		if (cost == null || cost.signum() < 0) {
 			throw new BadRequestException("cost basis must be zero or positive");
+		}
+	}
+
+	private static void requireNotFuture(LocalDate date) {
+		if (date != null && date.isAfter(LocalDate.now(ZoneId.of("America/Toronto")))) {
+			throw new BadRequestException("acquisition date can't be in the future");
 		}
 	}
 

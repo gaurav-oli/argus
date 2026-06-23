@@ -125,7 +125,7 @@ export function HoldingsTable() {
                 <td className="hidden py-1.5 pr-4 text-right text-text-primary md:table-cell">{num(p.price)}</td>
                 <td className="py-1.5 pr-4 text-right text-text-primary">{num(p.marketValue)}</td>
                 <td className={`hidden py-1.5 pr-4 text-right md:table-cell ${pnlClass(p.dayPnl)}`}>{num(p.dayPnl)}</td>
-                <td className={`hidden py-1.5 pr-4 text-right md:table-cell ${pnlClass(p.dayPnl)}`}>{pct(p.dayPnlPercent)}</td>
+                <td className={`hidden py-1.5 pr-4 text-right md:table-cell ${pnlClass(p.dayPnlPercent)}`}>{pct(p.dayPnlPercent)}</td>
                 <td className={`py-1.5 pr-4 text-right ${pnlClass(p.totalPnl)}`}>{num(p.totalPnl)}</td>
                 <td className={`hidden py-1.5 pr-4 text-right md:table-cell ${pnlClass(p.totalPnl)}`}>{pct(p.totalPnlPercent)}</td>
                 <td className="hidden py-1.5 pr-4 text-right text-text-secondary md:table-cell">{pct(p.weightPercent)}</td>

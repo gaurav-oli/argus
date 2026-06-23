@@ -35,7 +35,17 @@ public class FinnhubPriceFeed implements PriceFeed {
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 
 	private final String apiKey;
+	private final java.util.concurrent.ScheduledExecutorService reconnects =
+			java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+				Thread t = new Thread(r, "finnhub-reconnect");
+				t.setDaemon(true);
+				return t;
+			});
+
 	private volatile WebSocket socket;
+	private volatile boolean running;
+	private volatile Supplier<Collection<String>> symbolsSupplier;
+	private volatile PriceTick tickHandler;
 
 	public FinnhubPriceFeed(@Value("${argus.finnhub.api-key}") String apiKey) {
 		this.apiKey = apiKey;
@@ -44,18 +54,36 @@ public class FinnhubPriceFeed implements PriceFeed {
 	@Override
 	public void start(Supplier<Collection<String>> symbols, PriceTick handler,
 			BiConsumer<String, BigDecimal> previousClose) {
-		Collection<String> tickers = symbols.get();
-		seedPreviousCloses(tickers, previousClose);
+		this.symbolsSupplier = symbols;
+		this.tickHandler = handler;
+		this.running = true;
+		seedPreviousCloses(symbols.get(), previousClose);
+		connect();
+	}
+
+	/** (Re)connect and subscribe; on failure schedule a retry so the feed survives drops. */
+	private void connect() {
+		if (!running) {
+			return;
+		}
 		try {
 			this.socket = HttpClient.newHttpClient().newWebSocketBuilder()
-					.buildAsync(URI.create("wss://ws.finnhub.io?token=" + apiKey), new Listener(handler))
+					.buildAsync(URI.create("wss://ws.finnhub.io?token=" + apiKey), new Listener(tickHandler))
 					.join();
+			Collection<String> tickers = symbolsSupplier.get();
 			for (String symbol : tickers) {
 				socket.sendText("{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}", true);
 			}
 			log.info("Finnhub price feed connected; subscribed to {} symbols", tickers.size());
 		} catch (RuntimeException ex) {
-			log.warn("Finnhub price feed failed to start: {}", ex.getMessage());
+			log.warn("Finnhub price feed connect failed: {}", ex.getMessage());
+			scheduleReconnect();
+		}
+	}
+
+	private void scheduleReconnect() {
+		if (running) {
+			reconnects.schedule(this::connect, 5, java.util.concurrent.TimeUnit.SECONDS);
 		}
 	}
 
@@ -82,10 +110,12 @@ public class FinnhubPriceFeed implements PriceFeed {
 
 	@Override
 	public void stop() {
+		this.running = false;
 		WebSocket s = this.socket;
 		if (s != null) {
 			s.sendClose(WebSocket.NORMAL_CLOSURE, "shutdown");
 		}
+		reconnects.shutdownNow();
 	}
 
 	/** Accumulates (possibly fragmented) text frames and parses Finnhub trade messages. */
@@ -110,8 +140,16 @@ public class FinnhubPriceFeed implements PriceFeed {
 		}
 
 		@Override
+		public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+			log.info("Finnhub price feed closed ({}): {} — reconnecting", statusCode, reason);
+			scheduleReconnect();
+			return null;
+		}
+
+		@Override
 		public void onError(WebSocket webSocket, Throwable error) {
 			log.warn("Finnhub price feed error: {}", error.getMessage());
+			scheduleReconnect();
 		}
 
 		private void dispatch(String message) {

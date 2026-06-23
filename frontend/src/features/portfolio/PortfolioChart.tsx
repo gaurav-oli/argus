@@ -79,7 +79,8 @@ export function PortfolioChart() {
     getValueHistory(range)
       .then((points) => {
         if (!active || !seriesRef.current || !chartRef.current) return;
-        setEmpty(points.length === 0);
+        // A single point renders a degenerate line (e.g. the 1D range early on) — treat <2 as empty.
+        setEmpty(points.length < 2);
         seriesRef.current.setData(points.map((p) => ({ time: p.date, value: p.totalValueCad })));
         chartRef.current.timeScale().fitContent();
       })

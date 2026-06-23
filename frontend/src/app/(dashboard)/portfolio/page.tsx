@@ -34,16 +34,16 @@ export default function PortfolioPage() {
         <MotionCard index={3} className="md:col-span-6" interactive={false}>
           <HoldingsTable />
         </MotionCard>
-        <MotionCard index={7} className="md:col-span-6" interactive={false}>
+        <MotionCard index={4} className="md:col-span-6" interactive={false}>
           <ManagePositions />
         </MotionCard>
-        <MotionCard index={4} className="md:col-span-4">
+        <MotionCard index={5} className="md:col-span-4">
           <PortfolioChart />
         </MotionCard>
-        <MotionCard index={5} className="md:col-span-2" interactive={false}>
+        <MotionCard index={6} className="md:col-span-2" interactive={false}>
           <PerformanceGauges />
         </MotionCard>
-        <MotionCard index={6} className="md:col-span-6" interactive={false}>
+        <MotionCard index={7} className="md:col-span-6" interactive={false}>
           <HoldingsTreemap />
         </MotionCard>
       </div>

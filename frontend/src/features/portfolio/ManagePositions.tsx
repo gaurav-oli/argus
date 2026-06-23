@@ -28,6 +28,7 @@ export function ManagePositions() {
 
   // add form
   const [ticker, setTicker] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [shares, setShares] = useState("");
   const [costBasis, setCostBasis] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -73,6 +74,7 @@ export function ManagePositions() {
       () =>
         addPosition({
           ticker: ticker.trim().toUpperCase(),
+          companyName: companyName.trim() || undefined,
           shares: sh,
           costBasis: cb,
           currency,
@@ -82,6 +84,7 @@ export function ManagePositions() {
     );
     if (ok) {
       setTicker("");
+      setCompanyName("");
       setShares("");
       setCostBasis("");
       setAcquisitionDate("");
@@ -113,6 +116,7 @@ export function ManagePositions() {
 
       <div className="flex flex-wrap items-end gap-2">
         <input value={ticker} onChange={(e) => setTicker(e.target.value)} placeholder="Ticker" className={`${input} w-24 uppercase`} />
+        <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Name (optional)" className={`${input} w-36`} />
         <input value={shares} onChange={(e) => setShares(e.target.value)} placeholder="Shares" type="number" className={`${input} w-24`} />
         <input value={costBasis} onChange={(e) => setCostBasis(e.target.value)} placeholder="Cost basis" type="number" className={`${input} w-28`} />
         <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={input}>

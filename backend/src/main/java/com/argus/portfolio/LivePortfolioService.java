@@ -107,10 +107,15 @@ public class LivePortfolioService {
 					p.getCostBasisCurrency(), cadMarketValue, cadPnl, null, afterHours,
 					pp == null ? null : pp.asOf()));
 
-			if (cadMarketValue != null && cadAcb != null) {
+			// Total value (and the weight base) is the sum of EVERY priced position — including
+			// FX-estimated ones (cadAcb null) — so weights sum to 100%. Cost only sums where the CAD
+			// ACB is known; P&L is value minus known cost.
+			if (cadMarketValue != null) {
 				totalValueCad = totalValueCad.add(cadMarketValue);
-				totalCostCad = totalCostCad.add(cadAcb);
 				anyAfterHours = anyAfterHours || afterHours;
+			}
+			if (cadAcb != null && cadMarketValue != null) {
+				totalCostCad = totalCostCad.add(cadAcb);
 			}
 		}
 

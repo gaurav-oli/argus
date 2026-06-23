@@ -4,7 +4,7 @@ baseline_commit: 6d262c5
 
 # Story 3.4: Real-time portfolio value
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -133,3 +133,8 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context) — bmad-dev-story workflow
 | 2026-06-22 | Story created (create-story workflow). Builds on 3.1–3.3: live value/P&L engine + STOMP push behind a key-gated Finnhub price-feed seam; full table/chart/day-P&L deferred to 3.5/3.6. Status → ready-for-dev. |
 | 2026-06-22 | Decisions confirmed: engine+seam (feed key-gated), CAD via BoC FxRateService, day P&L → 3.5. |
 | 2026-06-22 | Implemented real-time value (FR-2): `LivePortfolioService` + `PortfolioSnapshot`/`PositionValue`, `MarketClock` after-hours, key-gated `FinnhubPriceFeed` behind a `PriceFeed` seam wired by `PriceFeedStarter`, `GET /api/portfolio/value`, live `PortfolioValue` UI (AnimatedNumber + STOMP). 125 backend tests (+9) green; frontend lint+build clean. Status → review. |
+
+
+## Code Review (2026-06-23, Epic-3 batch)
+
+Reviewed in the combined 3.4–3.9 adversarial batch review (Blind + Edge + Acceptance Auditor, Opus 4.8). **0 High AC violations**; verdict pass. Fixes applied in-batch and deferrals logged in `deferred-work.md`. Status → done.
