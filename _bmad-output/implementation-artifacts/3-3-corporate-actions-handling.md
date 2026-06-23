@@ -4,7 +4,7 @@ baseline_commit: 1158426
 
 # Story 3.3: Corporate-actions handling
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -143,3 +143,26 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context) — bmad-dev-story workflow
 | 2026-06-22 | Story created (create-story workflow). Builds on 3.1/3.2: corporate-action application engine (splits/ticker-change/merger) + manual-confirm path; auto-detection deferred to a seam. Status → ready-for-dev. |
 | 2026-06-22 | Auto-detection scope confirmed (Open Question #1): engine + manual/confirm + seam; no Finnhub polling. |
 | 2026-06-22 | Implemented corporate-actions handling (FR-1c): `corporate_actions` + V7, `CorporateActionService` (auto-apply unambiguous / pending 🟡 otherwise), split preserves total cost via `applySplit` + extracted `PositionAcbService`, ticker-change re-map, merger confirm, `CorporateActions` UI. 111 backend tests (+9) green; frontend lint+build clean. Status → review. |
+| 2026-06-22 | Code review (3 adversarial layers): 0 High AC violations, all 8 ACs pass after fixes. Applied 8 patches — duplicate-ticker collision guard (High), server-side `newTicker` upper-case (High), confirm/dismiss row lock (TOCTOU), merger no-op guard, bounded `applySplit` scale, ratio range/scale validation, multi-lot + multi-match + collision tests, frontend (require ratio/newTicker, hide Confirm for stock dividends, 1:N reverse display). 5 deferred to 3.7/detector, several dismissed (not-reachable/cosmetic). 116 backend tests (+5) green; frontend lint+build clean. Status → done. |
+
+## Code Review (2026-06-22)
+
+Adversarial 3-layer review (Blind + Edge + Acceptance Auditor, Opus 4.8), branch `story/3-3` vs `main` (baseline `1158426`). **Auditor: 0 High AC violations**; the `PositionAcbService` extraction verified not to change 3.1/3.2 behavior. Hunters found real correctness gaps (mostly around the rare same-ticker-twice scenario). Triage: 8 patches applied, 5 deferred (3.7/detector), ~6 dismissed.
+
+### Review Findings
+
+- [x] [Review][Patch] Ticker change/merger could rename onto an already-held symbol → duplicate-ticker collision [CorporateActionService] — HIGH — FIXED: `targetHeldElsewhere` guard; such a rename is forced `pending` and `apply` rejects it (merge is 3.7).
+- [x] [Review][Patch] `newTicker` not upper-cased server-side → casing-mismatch / unmatched lookups via API/detector [CorporateActionController] — HIGH — FIXED: controller normalizes `newTicker` to uppercase (like `ticker`).
+- [x] [Review][Patch] `confirm`/`dismiss` used plain `findById` (no row lock) → double-confirm TOCTOU [CorporateActionService/Repository] — MED — FIXED: `findByIdForUpdate` (`@Lock PESSIMISTIC_WRITE`), matching 3.1/3.2.
+- [x] [Review][Patch] Merger with neither ratio nor newTicker confirmed as a no-op marked `applied` [CorporateActionService] — MED — FIXED: rejected with 400.
+- [x] [Review][Patch] `applySplit` grew BigDecimal scale unbounded / mismatched the column [PositionLot] — MED — FIXED: `setScale(6, HALF_UP)`.
+- [x] [Review][Patch] User-supplied ratio had no range/scale bound → could overflow `numeric(20,8)` (500) [CorporateActionController] — MED — FIXED: reject ≤0 / >1000 / >8dp → 400.
+- [x] [Review][Patch] AC8 gap: no multi-lot split test, no multi-match test [tests] — MED — FIXED: added multi-lot split (cost preserved across 2 lots), multi-match-pending, collision-guard, ratio-range, merger-no-op-confirm tests.
+- [x] [Review][Patch] Frontend: silent missing-ratio → pending; Confirm shown for un-confirmable stock dividends; reverse split shown as "0.1:1" [CorporateActions.tsx] — MED — FIXED: require ratio/newTicker before record, hide Confirm for stock dividends, show reverse as 1:N.
+- [x] [Review][Defer] Multi-match disambiguation on confirm [CorporateActionService] — deferred to 3.7 (position merge)
+- [x] [Review][Defer] Duplicate-record idempotency [CorporateActionService] — deferred to the Finnhub detector
+- [x] [Review][Defer] Position-deletion handling / orphaned applied actions [resolvePosition] — deferred to 3.7 (no delete path yet)
+- [x] [Review][Defer] Dedicated ticker-alias artifact + cross-symbol history linking — deferred to Epics 4/6
+- [x] [Review][Defer] `window.location.reload()` → targeted refetch [CorporateActions.tsx] — deferred, UI polish
+
+_Dismissed (verified): null-shares split NPE (not reachable — NOT NULL + parser guarantees non-null shares); single-underscore `replace` (now `replaceAll`, no live bug); first-load error swallowed / reload race (single-user, minor); merger redundant save (harmless); unused `ex_date` (stored by design)._

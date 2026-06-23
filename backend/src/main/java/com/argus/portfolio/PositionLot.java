@@ -81,7 +81,9 @@ public class PositionLot {
 	 * split, &lt; 1 = reverse split.
 	 */
 	public void applySplit(BigDecimal ratio) {
-		this.shares = this.shares.multiply(ratio);
+		// Bound the scale to the shares column (numeric(20,6)) so repeated splits don't grow the
+		// BigDecimal scale unbounded and the in-memory value matches what Postgres stores.
+		this.shares = this.shares.multiply(ratio).setScale(6, java.math.RoundingMode.HALF_UP);
 		this.updatedAt = Instant.now();
 	}
 

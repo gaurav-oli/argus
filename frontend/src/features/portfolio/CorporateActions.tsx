@@ -27,8 +27,17 @@ function statusClass(status: string): string {
 function summarize(a: CorporateAction): string {
   if (a.type === "ticker_change") return `→ ${a.newTicker ?? "?"}`;
   if (a.type === "merger") return `${a.ratio ? `${a.ratio}× ` : ""}${a.newTicker ? `→ ${a.newTicker}` : ""}`.trim() || "merger";
-  if (a.ratio != null) return `${a.ratio}:1`;
+  if (a.ratio != null) {
+    // Show a reverse split (ratio < 1) as 1:N rather than the misleading "0.1:1".
+    if (a.type === "reverse_split" && a.ratio > 0 && a.ratio < 1) return `1:${Math.round(1 / a.ratio)}`;
+    return `${a.ratio}:1`;
+  }
   return "";
+}
+
+/** Confirming only does something for these types; stock dividends can only be dismissed. */
+function canConfirm(type: string): boolean {
+  return type !== "stock_dividend";
 }
 
 /**
@@ -68,6 +77,18 @@ export function CorporateActions() {
       setError("Enter a ticker");
       return;
     }
+    const r = Number(ratio);
+    const hasValidRatio = Number.isFinite(r) && r > 0;
+    // For a split/reverse split the ratio is mandatory to apply — tell the user up front rather
+    // than silently posting a ratio-less action that the backend parks as pending.
+    if (needs === "ratio" && !hasValidRatio) {
+      setError("Enter a positive split ratio (e.g. 2 for a 2:1 split)");
+      return;
+    }
+    if (needs === "newTicker" && !newTicker.trim()) {
+      setError("Enter the new ticker");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -75,9 +96,8 @@ export function CorporateActions() {
         ticker: ticker.trim().toUpperCase(),
         type,
       };
-      if (needs === "ratio" || needs === "both") {
-        const r = Number(ratio);
-        if (Number.isFinite(r) && r > 0) body.ratio = r;
+      if ((needs === "ratio" || needs === "both") && hasValidRatio) {
+        body.ratio = r;
       }
       if (needs === "newTicker" || needs === "both") {
         if (newTicker.trim()) body.newTicker = newTicker.trim().toUpperCase();
@@ -188,7 +208,7 @@ export function CorporateActions() {
             >
               <span className="text-sm text-text-primary">
                 <span className="font-medium">{a.ticker}</span>{" "}
-                <span className="text-text-secondary">{a.type.replace("_", " ")}</span>{" "}
+                <span className="text-text-secondary">{a.type.replaceAll("_", " ")}</span>{" "}
                 <span className="text-text-secondary">{summarize(a)}</span>
                 <span className={`ml-2 text-xs ${statusClass(a.status)}`}>
                   {a.status === "pending" ? "🟡 pending" : a.status}
@@ -199,12 +219,14 @@ export function CorporateActions() {
               </span>
               {a.status === "pending" && (
                 <span className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleConfirm(a.id)}
-                    className="text-xs font-medium text-accent hover:underline"
-                  >
-                    Confirm
-                  </button>
+                  {canConfirm(a.type) && (
+                    <button
+                      onClick={() => handleConfirm(a.id)}
+                      className="text-xs font-medium text-accent hover:underline"
+                    >
+                      Confirm
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDismiss(a.id)}
                     className="text-xs text-text-secondary transition-colors hover:text-losses"

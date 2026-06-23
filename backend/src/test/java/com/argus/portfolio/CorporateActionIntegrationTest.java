@@ -55,6 +55,9 @@ class CorporateActionIntegrationTest {
 	CorporateActionRepository corporateActions;
 
 	@Autowired
+	PositionAcbService acbService;
+
+	@Autowired
 	FxRateRepository fxRates;
 
 	@Autowired
@@ -214,5 +217,91 @@ class CorporateActionIntegrationTest {
 		mockMvc.perform(post("/api/portfolio/corporate-actions")
 						.contentType(MediaType.APPLICATION_JSON).content("{\"ticker\":\"AAPL\",\"type\":\"split\"}"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	// ---- Code-review follow-ups ----
+
+	/** Build a multi-lot position directly (the import path makes single-lot positions). */
+	private Position twoLotPosition(String ticker) {
+		Position p = positions.save(new Position(ticker, null, null, null, "USD",
+				java.time.LocalDate.of(2023, 1, 15), false, "manual"));
+		lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("1000.00"), "USD",
+				java.time.LocalDate.of(2023, 1, 15), new BigDecimal("1.30"), false));
+		lots.save(new PositionLot(p.getId(), new BigDecimal("20"), new BigDecimal("3000.00"), "USD",
+				java.time.LocalDate.of(2023, 6, 15), new BigDecimal("1.40"), false));
+		acbService.recompute(p); // shares 30, costBasis 4000.00, cadAcb 1000*1.30 + 3000*1.40 = 5500
+		return p;
+	}
+
+	@Test
+	void splitScalesAllLotsAndPreservesTotalCostAcrossLots() throws Exception {
+		Cookie session = login();
+		twoLotPosition("MULTI");
+
+		recordAction(session, "{\"ticker\":\"MULTI\",\"type\":\"split\",\"ratio\":2}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("applied"));
+
+		mockMvc.perform(get("/api/portfolio/positions").cookie(session))
+				.andExpect(jsonPath("$[0].ticker").value("MULTI"))
+				.andExpect(jsonPath("$[0].shares").value(60))        // (10+20) × 2
+				.andExpect(jsonPath("$[0].costBasis").value(4000.0)) // preserved
+				.andExpect(jsonPath("$[0].cadAcb").value(5500.0));   // preserved
+	}
+
+	@Test
+	void multipleHoldingsWithSameTickerStayPending() throws Exception {
+		Cookie session = login();
+		twoLotPosition("DUP");  // two positions, same ticker, created directly
+		twoLotPosition("DUP");
+
+		recordAction(session, "{\"ticker\":\"DUP\",\"type\":\"split\",\"ratio\":2}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("pending"));
+
+		// Neither position was scaled (still 30 shares each).
+		mockMvc.perform(get("/api/portfolio/positions").cookie(session))
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].shares").value(30))
+				.andExpect(jsonPath("$[1].shares").value(30));
+	}
+
+	@Test
+	void tickerChangeOntoAnExistingHoldingIsPendingNotApplied() throws Exception {
+		Cookie session = login();
+		importHolding(session, "AAPL 100 150.25 USD 2023-01-15");
+		importHolding(session, "TSLA 5 700.00 USD 2023-02-01");
+
+		// Renaming AAPL → TSLA would collide with the held TSLA → must NOT auto-apply.
+		recordAction(session, "{\"ticker\":\"AAPL\",\"type\":\"ticker_change\",\"newTicker\":\"TSLA\"}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("pending"))
+				.andExpect(jsonPath("$.note").isNotEmpty());
+
+		// AAPL is untouched (still present, not renamed).
+		mockMvc.perform(get("/api/portfolio/positions").cookie(session))
+				.andExpect(jsonPath("$[0].ticker").value("AAPL"));
+	}
+
+	@Test
+	void ratioOutOfRangeIsBadRequest() throws Exception {
+		Cookie session = login();
+		recordAction(session, "{\"ticker\":\"AAPL\",\"type\":\"split\",\"ratio\":99999}")
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+	}
+
+	@Test
+	void mergerWithNoRatioOrNewTickerCannotConfirm() throws Exception {
+		Cookie session = login();
+		importHolding(session, "AAPL 100 150.25 USD 2023-01-15");
+		String pending = recordAction(session, "{\"ticker\":\"AAPL\",\"type\":\"merger\"}")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("pending"))
+				.andReturn().getResponse().getContentAsString();
+		long id = json.readTree(pending).get("id").asLong();
+
+		mockMvc.perform(post("/api/portfolio/corporate-actions/{id}/confirm", id).cookie(session))
+				.andExpect(status().isBadRequest()); // no-op merger is rejected, not silently "applied"
 	}
 }

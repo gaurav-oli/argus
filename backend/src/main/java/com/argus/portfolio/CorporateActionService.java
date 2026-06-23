@@ -12,9 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Applies corporate actions to holdings (Story 3.3, FR-1c). Unambiguous splits/reverse-splits/
  * ticker-changes on a single matched position auto-apply; everything ambiguous (no/multiple match,
- * merger, stock dividend, missing ratio) is stored {@code pending} for manual confirmation and the
- * position is left untouched. The split math preserves total cost basis (lot shares scale, lot
- * total cost is unchanged) and CAD ACB recomputes via {@link PositionAcbService}.
+ * merger, stock dividend, missing ratio, or a rename whose target is already held) is stored
+ * {@code pending} for manual confirmation and the position is left untouched. The split math
+ * preserves total cost basis (lot shares scale, lot total cost is unchanged) and CAD ACB recomputes
+ * via {@link PositionAcbService}.
  */
 @Service
 public class CorporateActionService {
@@ -37,12 +38,18 @@ public class CorporateActionService {
 	public CorporateActionView record(String ticker, CorporateActionType type, BigDecimal ratio,
 			String newTicker, LocalDate exDate) {
 		List<Position> matches = positions.findByTicker(ticker);
+		boolean singleMatch = matches.size() == 1;
+		Long positionId = singleMatch ? matches.get(0).getId() : null;
 		boolean applicable = isApplicable(type, ratio, newTicker);
-		boolean unambiguous = matches.size() == 1 && applicable;
+		// A rename onto a symbol already held would create a duplicate-ticker collision — never
+		// auto-apply that; flag it for manual handling (position merge is a later story).
+		boolean targetConflict = involvesRename(type) && newTicker != null && !newTicker.isBlank()
+				&& targetHeldElsewhere(newTicker, positionId);
+		boolean unambiguous = singleMatch && applicable && !targetConflict;
 
-		Long positionId = matches.size() == 1 ? matches.get(0).getId() : null;
 		CorporateAction action = new CorporateAction(ticker, positionId, type, ratio, newTicker, exDate,
-				unambiguous ? null : pendingReason(type, matches.size(), applicable), "manual");
+				unambiguous ? null : pendingReason(type, matches.size(), applicable, targetConflict, newTicker),
+				"manual");
 		actions.save(action);
 
 		if (unambiguous) {
@@ -61,7 +68,8 @@ public class CorporateActionService {
 	/** Apply a pending action after manual confirmation. */
 	@Transactional
 	public CorporateActionView confirm(long id) {
-		CorporateAction action = actions.findById(id)
+		// Row write-lock so two concurrent confirms can't both read 'pending' and double-apply.
+		CorporateAction action = actions.findByIdForUpdate(id)
 				.orElseThrow(() -> new NotFoundException("CorporateAction", String.valueOf(id)));
 		if (!CorporateAction.PENDING.equals(action.getStatus())) {
 			throw new ConflictException("Corporate action " + id + " is already " + action.getStatus());
@@ -75,7 +83,7 @@ public class CorporateActionService {
 
 	@Transactional
 	public CorporateActionView dismiss(long id) {
-		CorporateAction action = actions.findById(id)
+		CorporateAction action = actions.findByIdForUpdate(id)
 				.orElseThrow(() -> new NotFoundException("CorporateAction", String.valueOf(id)));
 		if (!CorporateAction.PENDING.equals(action.getStatus())) {
 			throw new ConflictException("Corporate action " + id + " is already " + action.getStatus());
@@ -94,15 +102,22 @@ public class CorporateActionService {
 				acbService.recompute(position);
 			}
 			case TICKER_CHANGE -> {
-				position.applyTickerChange(requireNewTicker(action.getNewTicker()));
+				String newTicker = requireNewTicker(action.getNewTicker());
+				requireTargetFree(newTicker, position.getId());
+				position.applyTickerChange(newTicker);
 				positions.save(position);
 			}
 			case MERGER -> {
-				// A confirmed merger: optional share-exchange ratio, then optional re-symbol.
-				if (action.getRatio() != null && action.getRatio().signum() > 0) {
+				boolean hasRatio = action.getRatio() != null && action.getRatio().signum() > 0;
+				boolean hasNewTicker = action.getNewTicker() != null && !action.getNewTicker().isBlank();
+				if (!hasRatio && !hasNewTicker) {
+					throw new BadRequestException("A merger needs a share-exchange ratio and/or a new ticker");
+				}
+				if (hasRatio) {
 					scaleLots(position, action.getRatio());
 				}
-				if (action.getNewTicker() != null && !action.getNewTicker().isBlank()) {
+				if (hasNewTicker) {
+					requireTargetFree(action.getNewTicker(), position.getId());
 					position.applyTickerChange(action.getNewTicker());
 				}
 				positions.save(position);
@@ -134,6 +149,23 @@ public class CorporateActionService {
 		return matches.get(0);
 	}
 
+	/** True if any OTHER position already holds {@code newTicker}. */
+	private boolean targetHeldElsewhere(String newTicker, Long currentPositionId) {
+		return positions.findByTicker(newTicker).stream()
+				.anyMatch(p -> !p.getId().equals(currentPositionId));
+	}
+
+	private void requireTargetFree(String newTicker, Long currentPositionId) {
+		if (targetHeldElsewhere(newTicker, currentPositionId)) {
+			throw new BadRequestException("Target ticker " + newTicker
+					+ " is already held; merging two holdings of the same security isn't supported yet");
+		}
+	}
+
+	private static boolean involvesRename(CorporateActionType type) {
+		return type == CorporateActionType.TICKER_CHANGE || type == CorporateActionType.MERGER;
+	}
+
 	/** Whether an action could be auto-applied if it matched exactly one position. */
 	private static boolean isApplicable(CorporateActionType type, BigDecimal ratio, String newTicker) {
 		return switch (type) {
@@ -143,12 +175,16 @@ public class CorporateActionService {
 		};
 	}
 
-	private static String pendingReason(CorporateActionType type, int matchCount, boolean applicable) {
+	private static String pendingReason(CorporateActionType type, int matchCount, boolean applicable,
+			boolean targetConflict, String newTicker) {
 		if (matchCount == 0) {
 			return "No holding matches this ticker";
 		}
 		if (matchCount > 1) {
 			return "Multiple holdings match this ticker — confirm which to adjust";
+		}
+		if (targetConflict) {
+			return "Target ticker " + newTicker + " is already held — merge manually";
 		}
 		if (type == CorporateActionType.MERGER) {
 			return "Mergers require manual confirmation";

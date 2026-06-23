@@ -23,6 +23,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/portfolio/corporate-actions")
 public class CorporateActionController {
 
+	/** Generous upper bound on a split/exchange ratio; guards the {@code numeric(20,8)} column. */
+	private static final BigDecimal MAX_RATIO = new BigDecimal("1000");
+
 	private final CorporateActionService service;
 
 	public CorporateActionController(CorporateActionService service) {
@@ -39,7 +42,15 @@ public class CorporateActionController {
 			throw new BadRequestException("type is required");
 		}
 		CorporateActionType type = CorporateActionType.fromCode(body.type());
-		return service.record(body.ticker().trim().toUpperCase(), type, body.ratio(), body.newTicker(),
+		if (body.ratio() != null && (body.ratio().signum() <= 0
+				|| body.ratio().compareTo(MAX_RATIO) > 0 || body.ratio().scale() > 8)) {
+			throw new BadRequestException("ratio must be positive, within range, and at most 8 decimal places");
+		}
+		// Normalize both tickers to uppercase here (the contract) so the future detector seam and any
+		// non-UI caller match the uppercase symbols the import path stores.
+		String newTicker = (body.newTicker() == null || body.newTicker().isBlank())
+				? null : body.newTicker().trim().toUpperCase();
+		return service.record(body.ticker().trim().toUpperCase(), type, body.ratio(), newTicker,
 				body.exDate());
 	}
 
