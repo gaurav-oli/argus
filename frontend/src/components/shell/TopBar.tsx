@@ -1,19 +1,17 @@
 "use client";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
 import { Sensitive } from "@/features/privacy/Sensitive";
-import { healthScore, portfolio, usd } from "@/lib/mockData";
+import { portfolio, usd } from "@/lib/mockData";
 
 /**
- * Top bar — brand (mobile) + Health Score and total value KPIs (mock data on this
- * design branch), tap-to-reveal privacy (FR-36), and the light/dark theme switch.
+ * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and total value KPI
+ * (value still mock on this branch), tap-to-reveal privacy (FR-36), and the theme switch.
  * Sensitive values are masked until revealed.
  */
 export function TopBar() {
-  const scoreColor =
-    healthScore.score >= 75 ? "text-gains" : healthScore.score >= 50 ? "text-accent" : "text-warning";
-
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface px-4 lg:px-6">
       <div className="flex items-center gap-2 lg:hidden">
@@ -22,16 +20,7 @@ export function TopBar() {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-5 lg:gap-6">
-        <div className="flex flex-col items-end leading-tight">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-            Health Score
-          </span>
-          <Sensitive className={`text-lg font-bold ${scoreColor}`}>
-            <span className={`font-mono text-lg font-bold tabular-nums ${scoreColor}`}>
-              {healthScore.score}
-            </span>
-          </Sensitive>
-        </div>
+        <HealthScoreBadge />
         <div className="flex flex-col items-end leading-tight">
           <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
             Total Value

@@ -18,10 +18,13 @@ public class PortfolioValueController {
 
 	private final LivePortfolioService live;
 	private final PortfolioHistoryService history;
+	private final HealthScoreService healthScore;
 
-	public PortfolioValueController(LivePortfolioService live, PortfolioHistoryService history) {
+	public PortfolioValueController(LivePortfolioService live, PortfolioHistoryService history,
+			HealthScoreService healthScore) {
 		this.live = live;
 		this.history = history;
+		this.healthScore = healthScore;
 	}
 
 	@GetMapping("/value")
@@ -32,5 +35,10 @@ public class PortfolioValueController {
 	@GetMapping("/value-history")
 	public List<ValuePoint> valueHistory(@RequestParam(required = false) String range) {
 		return history.history(HistoryRange.fromParam(range));
+	}
+
+	@GetMapping("/health-score")
+	public HealthScoreResult healthScore() {
+		return healthScore.compute();
 	}
 }

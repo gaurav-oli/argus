@@ -421,6 +421,27 @@ export async function removePosition(id: number): Promise<void> {
 
 export const listAudit = (): Promise<AuditEntry[]> => apiGet<AuditEntry[]>("/api/portfolio/audit");
 
+// ---- Health score (Story 3.8/3.9, FR-6/FR-7) ----
+
+/** Mirrors the backend `HealthDeduction` record. */
+export interface HealthDeduction {
+  code: string;
+  label: string;
+  points: number;
+  reason: string;
+  suggestion: string;
+}
+
+/** Mirrors the backend `HealthScoreResult` record. */
+export interface HealthScoreResult {
+  score: number;
+  deductions: HealthDeduction[];
+  computedAt: string;
+}
+
+export const getHealthScore = (): Promise<HealthScoreResult> =>
+  apiGet<HealthScoreResult>("/api/portfolio/health-score");
+
 /** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
 export const confirmPositionFx = (
   id: number,
