@@ -29,6 +29,7 @@
 	<properties>
 		<java.version>25</java.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
+		<resilience4j.version>2.3.0</resilience4j.version>
 	</properties>
 	<dependencyManagement>
 		<dependencies>
@@ -43,6 +44,18 @@
 		</dependencies>
 	</dependencyManagement>
 	<dependencies>
+		<!-- Resilience4j core (rate limiter + retry), applied programmatically. The Spring Boot
+		     starter targets Boot 3, so we use the framework-agnostic core modules on Boot 4. -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-ratelimiter</artifactId>
+			<version>${resilience4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-retry</artifactId>
+			<version>${resilience4j.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>

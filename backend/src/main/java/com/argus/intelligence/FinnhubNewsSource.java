@@ -1,9 +1,6 @@
 package com.argus.intelligence;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import com.argus.marketdata.FinnhubRest;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -11,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +22,8 @@ import tools.jackson.databind.json.JsonMapper;
  * Finnhub company-news source for Agent 1 (Story 4.1, FR-8). One REST call per held ticker against
  * {@code /company-news}, scoped to a short lookback window. Only active when {@code argus.finnhub.api-key}
  * is set (free dev key on the laptop, or the Mini); with no key the bean is absent and ingestion
- * falls back to the free sources. Rate-limit hardening (backoff/fallback) lands in Story 4.5.
+ * falls back to the free sources. All calls go through {@link FinnhubRest}, which rate-limits and
+ * retries them (Story 4.5, GAP-4), so an approached rate limit degrades gracefully to GDELT/RSS.
  */
 @Component
 @ConditionalOnProperty(name = "argus.finnhub.api-key")
@@ -37,12 +36,13 @@ public class FinnhubNewsSource implements NewsSource {
 
 	private final String apiKey;
 	private final long lookbackMinutes;
-	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	private final FinnhubRest finnhub;
 
 	public FinnhubNewsSource(@Value("${argus.finnhub.api-key}") String apiKey,
-			NewsIngestionProperties props) {
+			NewsIngestionProperties props, FinnhubRest finnhub) {
 		this.apiKey = apiKey;
 		this.lookbackMinutes = props.lookbackMinutes();
+		this.finnhub = finnhub;
 	}
 
 	@Override
@@ -67,16 +67,14 @@ public class FinnhubNewsSource implements NewsSource {
 	}
 
 	private List<RawArticle> fetchTicker(String ticker, LocalDate from, LocalDate to, Instant cutoff) {
+		String url = "https://finnhub.io/api/v1/company-news?symbol=" + ticker
+				+ "&from=" + from + "&to=" + to + "&token=" + apiKey;
+		Optional<String> body = finnhub.get(url); // rate-limited + retried; empty when dropped (Story 4.5)
+		if (body.isEmpty()) {
+			return List.of();
+		}
 		try {
-			URI uri = URI.create("https://finnhub.io/api/v1/company-news?symbol=" + ticker
-					+ "&from=" + from + "&to=" + to + "&token=" + apiKey);
-			HttpRequest req = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build();
-			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
-			if (res.statusCode() != 200) {
-				log.warn("Finnhub company-news {} returned HTTP {}", ticker, res.statusCode());
-				return List.of();
-			}
-			JsonNode arr = JSON.readTree(res.body());
+			JsonNode arr = JSON.readTree(body.get());
 			List<RawArticle> items = new ArrayList<>();
 			for (JsonNode n : arr) {
 				Instant published = Instant.ofEpochSecond(n.path("datetime").asLong());
@@ -92,14 +90,8 @@ public class FinnhubNewsSource implements NewsSource {
 						emptyToNull(n.path("summary").asString("")), published, List.of(ticker)));
 			}
 			return items;
-		} catch (InterruptedException ex) {
-			Thread.currentThread().interrupt();
-			return List.of();
 		} catch (RuntimeException ex) {
-			log.warn("Finnhub company-news {} failed: {}", ticker, ex.getMessage());
-			return List.of();
-		} catch (Exception ex) {
-			log.warn("Finnhub company-news {} failed: {}", ticker, ex.getMessage());
+			log.warn("Finnhub company-news {} parse failed: {}", ticker, ex.getMessage());
 			return List.of();
 		}
 	}
