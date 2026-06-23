@@ -367,6 +367,15 @@ export interface PortfolioSnapshot {
 export const getPortfolioValue = (): Promise<PortfolioSnapshot> =>
   apiGet<PortfolioSnapshot>("/api/portfolio/value");
 
+/** One point in the portfolio value chart series (Story 3.6). `date` is an ISO date string. */
+export interface ValuePoint {
+  date: string;
+  totalValueCad: number;
+}
+
+export const getValueHistory = (range: string): Promise<ValuePoint[]> =>
+  apiGet<ValuePoint[]>(`/api/portfolio/value-history?range=${encodeURIComponent(range)}`);
+
 /** Confirm/override a position's purchase FX (Story 3.2): supply a rate, or a date to look one up. */
 export const confirmPositionFx = (
   id: number,
