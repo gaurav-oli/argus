@@ -67,6 +67,50 @@ class DefaultModelGatewayTest {
 		assertTrue(gateway.availablePermits() == 1, "permit must be released after each call");
 	}
 
+	@Test
+	void smallTierBypassesTheBigModelSemaphore() {
+		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
+		DefaultModelGateway gateway = new DefaultModelGateway(model, new StubHaikuFallback(), props(1));
+
+		int threads = 6;
+		var workers = new Thread[threads];
+		for (int i = 0; i < threads; i++) {
+			workers[i] = new Thread(() -> gateway.generate("ping", ModelTier.SMALL));
+		}
+		for (Thread w : workers) {
+			w.start();
+		}
+		for (Thread w : workers) {
+			try {
+				w.join();
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+		}
+
+		assertTrue(model.maxConcurrent.get() > 1, "small-tier calls must run in parallel, not serialized");
+		assertEquals(1, gateway.availablePermits(), "small tier must not consume big-model permits");
+	}
+
+	@Test
+	void smallTierDoesNotFallBackToHaiku() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "fallback";
+		};
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, props(1));
+
+		try {
+			gateway.generate("ping", ModelTier.SMALL);
+		}
+		catch (RuntimeException expected) {
+			// small tier propagates failure rather than paying for a Haiku fallback
+		}
+		assertEquals(0, fallbackCalls.get(), "small tier must never invoke the paid Haiku fallback");
+	}
+
 	/** A ChatModel whose call() always throws, to exercise the fallback path. */
 	private static final class FailingChatModel implements ChatModel {
 		@Override

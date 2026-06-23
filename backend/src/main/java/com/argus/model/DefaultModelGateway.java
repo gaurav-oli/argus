@@ -29,7 +29,24 @@ public class DefaultModelGateway implements ModelGateway {
 	}
 
 	@Override
-	public String generate(String prompt) {
+	public String generate(String prompt, ModelTier tier) {
+		return (tier == ModelTier.SMALL) ? generateSmall(prompt) : generateBig(prompt);
+	}
+
+	/**
+	 * Small-tier: unserialized, no Haiku fallback. High-frequency agents (1/2/3) call this at
+	 * volume, so a per-call paid fallback would blow the budget — failures propagate and the
+	 * caller decides (e.g. default to neutral).
+	 */
+	private String generateSmall(String prompt) {
+		long startNanos = System.nanoTime();
+		String content = chatClient.prompt().user(prompt).call().content();
+		log.debug("small model generate ok ({} ms)", (System.nanoTime() - startNanos) / 1_000_000);
+		return content;
+	}
+
+	/** Big-tier: serialized at concurrency 1 (Decision 1), Haiku fallback on failure. */
+	private String generateBig(String prompt) {
 		boolean acquired = false;
 		try {
 			permits.acquire();
