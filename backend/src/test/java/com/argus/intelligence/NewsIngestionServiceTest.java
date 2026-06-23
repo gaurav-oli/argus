@@ -100,6 +100,42 @@ class NewsIngestionServiceTest {
 	}
 
 	@Test
+	void inBatchDuplicatesFromSameSourceAreStoredOnce() {
+		heldAapl();
+		NewsSource src = mock(NewsSource.class);
+		when(src.name()).thenReturn("good");
+		when(src.fetch(any())).thenReturn(List.of(
+				raw("good", "1", "AAPL story"),
+				raw("good", "1", "AAPL same id again")));
+		when(articles.existsBySourceAndExternalId(eq("good"), anyString())).thenReturn(false);
+		when(articles.save(any())).thenAnswer(inv -> persisted(inv.getArgument(0)));
+
+		int stored = service(List.of(src)).ingestOnce();
+
+		assertEquals(1, stored, "a duplicate (source, externalId) in one cycle is stored once");
+		verify(articles, times(1)).save(any());
+	}
+
+	@Test
+	void aFailingSaveDoesNotAbortTheRestOfTheCycle() {
+		heldAapl();
+		NewsSource src = mock(NewsSource.class);
+		when(src.name()).thenReturn("good");
+		when(src.fetch(any())).thenReturn(List.of(
+				raw("good", "1", "AAPL one"), raw("good", "2", "AAPL two")));
+		when(articles.existsBySourceAndExternalId(eq("good"), anyString())).thenReturn(false);
+		when(articles.save(any()))
+				.thenThrow(new RuntimeException("constraint violation"))
+				.thenAnswer(inv -> persisted(inv.getArgument(0)));
+
+		int stored = service(List.of(src)).ingestOnce();
+
+		assertEquals(1, stored, "the second article is still stored after the first save fails");
+		verify(articles, times(2)).save(any());
+		verify(events, times(1)).publish(anyString(), anyString(), any());
+	}
+
+	@Test
 	void cadenceGateSkipsSecondTickWithinTheInterval() {
 		heldAapl();
 		when(clock.isRegularHours(any())).thenReturn(true); // 5-min regular cadence

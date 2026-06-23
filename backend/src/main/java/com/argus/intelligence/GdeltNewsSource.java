@@ -70,11 +70,11 @@ public class GdeltNewsSource implements NewsSource {
 			for (JsonNode n : articles) {
 				String url = n.path("url").asString("").trim();
 				String headline = n.path("title").asString("").trim();
-				if (url.isEmpty() || headline.isEmpty()) {
-					continue;
+				Instant published = parseSeendate(n.path("seendate").asString(""));
+				if (url.isEmpty() || headline.isEmpty() || published == null) {
+					continue; // drop undated items rather than stamping them "now" (would skew the window)
 				}
-				out.add(new RawArticle(NAME, url, url, headline, null,
-						parseSeendate(n.path("seendate").asString("")), List.of()));
+				out.add(new RawArticle(NAME, url, url, headline, null, published, List.of()));
 			}
 			return out;
 		} catch (InterruptedException ex) {
@@ -86,11 +86,12 @@ public class GdeltNewsSource implements NewsSource {
 		}
 	}
 
+	/** Parse GDELT's seendate, or {@code null} if it's missing/malformed (caller drops the item). */
 	private static Instant parseSeendate(String raw) {
 		try {
 			return LocalDateTime.parse(raw, SEENDATE).toInstant(ZoneOffset.UTC);
 		} catch (RuntimeException ex) {
-			return Instant.now();
+			return null;
 		}
 	}
 }

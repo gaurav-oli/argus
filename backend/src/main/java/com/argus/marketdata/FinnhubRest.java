@@ -81,7 +81,8 @@ public class FinnhubRest {
 			throw new FinnhubTransientException("I/O error: " + ex.getMessage(), ex);
 		} catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
-			throw new FinnhubTransientException("interrupted", ex);
+			// Not retryable: an interrupt means abort now (shutdown), don't back off and re-attempt.
+			throw new IllegalStateException("Finnhub call interrupted", ex);
 		}
 	}
 }

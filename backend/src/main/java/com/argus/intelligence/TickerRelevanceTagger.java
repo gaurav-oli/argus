@@ -2,7 +2,9 @@ package com.argus.intelligence;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +17,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class TickerRelevanceTagger {
+
+	// Compiled whole-word matchers, cached per ticker — tag() runs on every ingested article, so
+	// recompiling a regex per (article × held ticker) would be needless quadratic work on the hot path.
+	private final Map<String, Pattern> patternCache = new ConcurrentHashMap<>();
 
 	/** Tag {@code article} against the held universe; returns the matched symbols (possibly empty). */
 	public List<String> tag(RawArticle article, Set<String> heldTickers) {
@@ -38,10 +44,14 @@ public class TickerRelevanceTagger {
 		return List.copyOf(matched);
 	}
 
-	private static boolean mentions(String haystack, String ticker) {
+	private boolean mentions(String haystack, String ticker) {
 		// Whole-word, case-insensitive match so "AI" doesn't hit "again" and "AAPL" doesn't hit "AAPLE".
-		Pattern p = Pattern.compile("\\b" + Pattern.quote(ticker) + "\\b", Pattern.CASE_INSENSITIVE);
-		return p.matcher(haystack).find();
+		return patternFor(ticker).matcher(haystack).find();
+	}
+
+	private Pattern patternFor(String ticker) {
+		return patternCache.computeIfAbsent(ticker,
+				t -> Pattern.compile("\\b" + Pattern.quote(t) + "\\b", Pattern.CASE_INSENSITIVE));
 	}
 
 	private static String normalize(String ticker) {

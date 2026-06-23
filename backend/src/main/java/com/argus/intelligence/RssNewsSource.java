@@ -25,11 +25,12 @@ import org.w3c.dom.NodeList;
 /**
  * RSS source for Agent 1 (Story 4.1, FR-8) — a free, keyless feed reader over a configured list of
  * finance RSS URLs ({@code argus.news.rss.feeds}). Headlines plus description; relevance to holdings
- * is resolved downstream by the tagger. Active only when at least one feed is configured. Per-feed
- * failures are isolated so one bad feed never breaks the others or the cycle.
+ * is resolved downstream by the tagger. Active unless {@code argus.news.rss.enabled=false} (the
+ * configured {@code feeds} list drives what's polled; empty = nothing fetched). Per-feed failures are
+ * isolated so one bad feed never breaks the others or the cycle.
  */
 @Component
-@ConditionalOnProperty(name = "argus.news.rss.feeds[0]")
+@ConditionalOnProperty(name = "argus.news.rss.enabled", havingValue = "true", matchIfMissing = true)
 public class RssNewsSource implements NewsSource {
 
 	static final String NAME = "rss";

@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The Stranger Danger Protocol (Story 4.4, FR-10). On a schedule it scans recent news for heavy
@@ -72,8 +71,12 @@ public class StrangerDangerService {
 	/**
 	 * Run one scan over the recent-article window. Returns the number of newly-detected strangers
 	 * (those that produced a fresh alert + signal this cycle). Public so tests drive it deterministically.
+	 *
+	 * <p>Not {@code @Transactional}: the scheduled entry point ({@link #scheduledScan()}) invokes this
+	 * on {@code this}, so a method-level transaction would be bypassed by the proxy anyway. Each
+	 * stranger's upsert is an independent repository save, and a failure on one stranger is isolated so
+	 * it can't abort the rest of the scan.
 	 */
-	@Transactional
 	public int scan() {
 		Instant windowStart = Instant.now().minus(Duration.ofMinutes(props.windowMinutes()));
 		Set<String> known = knownUniverse.knownTickers();
@@ -85,8 +88,12 @@ public class StrangerDangerService {
 			if (covering.size() < props.coverageThreshold()) {
 				continue;
 			}
-			if (assess(entry.getKey(), covering, windowStart)) {
-				newlyDetected++;
+			try {
+				if (assess(entry.getKey(), covering, windowStart)) {
+					newlyDetected++;
+				}
+			} catch (RuntimeException ex) {
+				log.warn("Stranger assessment for '{}' failed: {}", entry.getKey(), ex.getMessage());
 			}
 		}
 		if (newlyDetected > 0) {
