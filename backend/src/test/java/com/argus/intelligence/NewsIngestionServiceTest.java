@@ -27,6 +27,7 @@ class NewsIngestionServiceTest {
 	private final PositionRepository positions = mock(PositionRepository.class);
 	private final MarketClock clock = mock(MarketClock.class);
 	private final AgentEventPublisher events = mock(AgentEventPublisher.class);
+	private final SourceCredibilityService credibility = mock(SourceCredibilityService.class);
 	private final TickerRelevanceTagger tagger = new TickerRelevanceTagger();
 
 	private final NewsIngestionProperties props = new NewsIngestionProperties(
@@ -43,7 +44,8 @@ class NewsIngestionServiceTest {
 	}
 
 	private NewsIngestionService service(List<NewsSource> sources) {
-		return new NewsIngestionService(sources, articles, tagger, positions, clock, events, props);
+		return new NewsIngestionService(sources, articles, tagger, positions, clock, events,
+				credibility, props);
 	}
 
 	@Test

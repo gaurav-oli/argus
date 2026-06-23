@@ -37,19 +37,22 @@ public class NewsIngestionService {
 	private final PositionRepository positions;
 	private final MarketClock clock;
 	private final AgentEventPublisher events;
+	private final SourceCredibilityService credibility;
 	private final NewsIngestionProperties props;
 
 	private volatile Instant lastCycle;
 
 	public NewsIngestionService(List<NewsSource> sources, NewsArticleRepository articles,
 			TickerRelevanceTagger tagger, PositionRepository positions, MarketClock clock,
-			AgentEventPublisher events, NewsIngestionProperties props) {
+			AgentEventPublisher events, SourceCredibilityService credibility,
+			NewsIngestionProperties props) {
 		this.sources = sources;
 		this.articles = articles;
 		this.tagger = tagger;
 		this.positions = positions;
 		this.clock = clock;
 		this.events = events;
+		this.credibility = credibility;
 		this.props = props;
 	}
 
@@ -112,6 +115,8 @@ public class NewsIngestionService {
 				|| articles.existsBySourceAndExternalId(raw.source(), raw.externalId())) {
 			return false;
 		}
+		// Register the source in the credibility engine on first sighting (Story 4.3, starts at 35).
+		credibility.register(raw.source());
 		List<String> tickers = tagger.tag(raw, held);
 		NewsArticle saved = articles.save(new NewsArticle(raw.source(), raw.externalId(), raw.url(),
 				raw.headline(), raw.summary(), raw.publishedAt(), tickers.toArray(String[]::new)));
