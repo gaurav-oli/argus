@@ -615,3 +615,13 @@ export const sendRecommendationChat = (
   signal?: AbortSignal,
 ): Promise<ChatMessage> =>
   apiPost<ChatMessage>(`/api/recommendations/${id}/chat`, { messages }, signal);
+
+/**
+ * Ask AI about the whole portfolio (FR-31). Grounded server-side in holdings + health + upcoming
+ * calendar events + recent recommendations + investor profile, via the Model Gateway.
+ */
+export const sendPortfolioChat = (
+  messages: ChatMessage[],
+  signal?: AbortSignal,
+): Promise<ChatMessage> =>
+  apiPost<ChatMessage>(`/api/portfolio/chat`, { messages }, signal);

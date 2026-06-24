@@ -53,6 +53,16 @@ goes through this endpoint (closes the open item from §2). On the Mini, with th
 - [ ] Multi-turn follow-ups stay coherent (the client resends history each turn — server is stateless).
 [Source: 7-1-recommendation-chat.md AC#4; epics.md#Story 7.1; docs/mac-mini-validation.md §1–2]
 
+## 6. Story 7.2 — Portfolio chat (live model)  ⏳ TODO on the Mini
+Dashboard "Ask AI" (TopBar) → `POST /api/portfolio/chat`, grounded in holdings + health + upcoming
+calendar + recent recommendations + investor profile. Built + tested on the laptop via the dev
+`MockChatModel`. On the Mini with `prod` + `gemma4:26b`:
+- [ ] Returns a **grounded** portfolio answer that cites holdings/health/calendar/recs (not hallucinated).
+- [ ] **Latency:** the larger portfolio context still answers within **≤15s** warm (watch prompt size vs
+      context window — grounding is capped at ~14-day calendar window + ≤10 recent recs).
+- [ ] Sample questions behave (e.g. "What should I watch before the Fed meeting?", "Which holding concerns you most?").
+[Source: 7-2-portfolio-chat.md AC#4; epics.md#Story 7.2]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (Epic 10, Story 10.3)._
