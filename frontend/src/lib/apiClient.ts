@@ -94,12 +94,13 @@ export async function apiGet<T>(path: string): Promise<T> {
  * POST JSON. Returns the parsed body for 2xx responses that have one, or `undefined`
  * for empty/204/201 responses. Throws {@link ApiError} on non-2xx.
  */
-export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
+export async function apiPost<T = void>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "include",
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     throw await toApiError(res);
@@ -595,3 +596,22 @@ export const decideRecommendation = (
   reasoning: string,
 ): Promise<void> =>
   apiPost(`/api/recommendations/${id}/decision`, { decision, reasoning });
+
+// ---- Ask AI / Conversation (Epic 7, Story 7.1) ----
+
+/** One turn in an Ask-AI conversation. The server is stateless — send the full history each turn. */
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Ask AI about a recommendation (FR-30). The answer is grounded in that recommendation's signals,
+ * diagnostic, and the current portfolio, via the Model Gateway. Returns the assistant's reply.
+ */
+export const sendRecommendationChat = (
+  id: number,
+  messages: ChatMessage[],
+  signal?: AbortSignal,
+): Promise<ChatMessage> =>
+  apiPost<ChatMessage>(`/api/recommendations/${id}/chat`, { messages }, signal);

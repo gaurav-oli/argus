@@ -41,6 +41,18 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
 - [x] Ollama runs as a background/login service (`brew services start ollama`) — survives reboots.
 - [x] 24/7 operation: all 4 compose services set `restart: unless-stopped` (verified) — behave across reboots.
 
+## 5. Story 7.1 — Ask AI recommendation chat (live model)  ⏳ TODO on the Mini
+The chat backend (`com.argus.conversation`) + the Ask-AI panel are built and fully tested on the
+laptop via the `dev`-profile `MockChatModel` (no Ollama). The **first real backend→Ollama call**
+goes through this endpoint (closes the open item from §2). On the Mini, with the `prod` profile +
+`gemma4:26b`:
+- [ ] `POST /api/recommendations/{id}/chat` returns a **grounded** answer that correctly cites the
+      recommendation's signals/diagnostic + the portfolio (not hallucinated numbers).
+- [ ] **Latency:** warm response within the **≤15s** target (NFR / A-9); confirm the UI "warming up"
+      indicator covers the **~28s cold-load** when the model was idle-unloaded (`ARGUS_MODEL_KEEP_ALIVE=5m`).
+- [ ] Multi-turn follow-ups stay coherent (the client resends history each turn — server is stateless).
+[Source: 7-1-recommendation-chat.md AC#4; epics.md#Story 7.1; docs/mac-mini-validation.md §1–2]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (Epic 10, Story 10.3)._
