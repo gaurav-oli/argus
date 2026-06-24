@@ -6,6 +6,7 @@ import {
   type RecommendationCard as Card,
   type SignalView,
 } from "@/lib/apiClient";
+import { RecommendationChat } from "@/features/conversation/RecommendationChat";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 
@@ -55,6 +56,7 @@ export function RecommendationCards() {
 function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const bull = Math.round(card.bullProbability * 100);
   const decided = card.status === "TAKEN" || card.status === "DECLINED";
 
@@ -120,9 +122,17 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
         )}
       </div>
 
-      <button onClick={() => setOpen((o) => !o)} className="self-start text-[11px] text-text-secondary underline">
-        {open ? "Hide" : "Show"} diagnostic ({card.signals.length} signals)
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={() => setOpen((o) => !o)} className="text-[11px] text-text-secondary underline">
+          {open ? "Hide" : "Show"} diagnostic ({card.signals.length} signals)
+        </button>
+        <button
+          onClick={() => setChatOpen(true)}
+          className="rounded border border-accent/40 px-3 py-1 text-[11px] font-medium text-accent transition-colors hover:bg-accent/10"
+        >
+          Ask AI
+        </button>
+      </div>
       {open && (
         <ul className="flex flex-col gap-1.5 border-t border-border pt-2">
           {card.signals.map((s, i) => (
@@ -147,11 +157,11 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
             className="rounded bg-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary disabled:opacity-50">
             I&apos;ll pass
           </button>
-          <button disabled title="Conversational AI arrives in Epic 7"
-            className="ml-auto rounded border border-border px-3 py-1.5 text-xs text-text-secondary opacity-50">
-            Ask AI
-          </button>
         </div>
+      )}
+
+      {chatOpen && (
+        <RecommendationChat recommendationId={card.id} ticker={card.ticker} onClose={() => setChatOpen(false)} />
       )}
     </div>
   );
