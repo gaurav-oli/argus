@@ -1,17 +1,21 @@
 "use client";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { PortfolioChat } from "@/features/conversation/PortfolioChat";
 import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { portfolio, usd } from "@/lib/mockData";
+import { useState } from "react";
 
 /**
  * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and total value KPI
- * (value still mock on this branch), tap-to-reveal privacy (FR-36), and the theme switch.
- * Sensitive values are masked until revealed.
+ * (value still mock on this branch), a global "Ask AI" portfolio-chat launcher (Story 7.2),
+ * tap-to-reveal privacy (FR-36), and the theme switch. Sensitive values are masked until revealed.
  */
 export function TopBar() {
+  const [chatOpen, setChatOpen] = useState(false);
+
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface px-4 lg:px-6">
       <div className="flex items-center gap-2 lg:hidden">
@@ -31,9 +35,17 @@ export function TopBar() {
             </span>
           </Sensitive>
         </div>
+        <button
+          onClick={() => setChatOpen(true)}
+          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
+        >
+          Ask AI
+        </button>
         <PrivacyToggle />
         <ThemeToggle />
       </div>
+
+      {chatOpen && <PortfolioChat onClose={() => setChatOpen(false)} />}
     </header>
   );
 }

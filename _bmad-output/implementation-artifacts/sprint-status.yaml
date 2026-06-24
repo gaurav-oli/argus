@@ -109,7 +109,7 @@ development_status:
   # Epic 7: Conversational AI & Personas
   epic-7: in-progress
   7-1-recommendation-chat: done
-  7-2-portfolio-chat: backlog
+  7-2-portfolio-chat: done
   7-3-haiku-escalation: backlog
   7-4-four-personas: backlog
   7-5-canadian-investor-persona: backlog
