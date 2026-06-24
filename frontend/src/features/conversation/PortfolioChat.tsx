@@ -15,7 +15,7 @@ export function PortfolioChat({ onClose }: { onClose: () => void }) {
       subtitle="Portfolio"
       emptyStateText="Ask about your whole portfolio — allocation and health, what to watch before upcoming events, or how recent recommendations fit your holdings."
       placeholder="Ask about your portfolio…"
-      sendFn={(messages, signal) => sendPortfolioChat(messages, signal)}
+      sendFn={(messages, deeper, signal) => sendPortfolioChat(messages, deeper, signal)}
       onClose={onClose}
     />
   );

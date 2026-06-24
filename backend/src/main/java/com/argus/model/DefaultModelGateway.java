@@ -33,6 +33,14 @@ public class DefaultModelGateway implements ModelGateway {
 		return (tier == ModelTier.SMALL) ? generateSmall(prompt) : generateBig(prompt);
 	}
 
+	@Override
+	public String escalate(String prompt) {
+		// Explicit "deeper analysis": go straight to Haiku (no local model, not on the big-model
+		// semaphore). HaikuFallback throws ModelGatewayException when unavailable → 503 at the edge.
+		log.info("escalating to Haiku (deeper analysis)");
+		return haikuFallback.generate(prompt);
+	}
+
 	/**
 	 * Small-tier: unserialized, no Haiku fallback. High-frequency agents (1/2/3) call this at
 	 * volume, so a per-call paid fallback would blow the budget — failures propagate and the

@@ -23,7 +23,7 @@ export function RecommendationChat({
       subtitle={ticker}
       emptyStateText={`Ask anything about this recommendation — its signals, the diagnostic, or how it fits your portfolio. Answers are grounded in ${ticker}'s data.`}
       placeholder={`Ask about ${ticker}…`}
-      sendFn={(messages, signal) => sendRecommendationChat(recommendationId, messages, signal)}
+      sendFn={(messages, deeper, signal) => sendRecommendationChat(recommendationId, messages, deeper, signal)}
       onClose={onClose}
     />
   );

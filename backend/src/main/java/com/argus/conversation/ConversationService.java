@@ -66,16 +66,30 @@ public class ConversationService {
 		this.calendarEvents = calendarEvents;
 	}
 
-	/** Answer the latest question in {@code messages}, grounded in {@code rec} + the live portfolio. */
 	public String askAboutRecommendation(Recommendation rec, List<ChatMessage> messages) {
-		PortfolioSnapshot portfolio = livePortfolio.currentSnapshot();
-		HealthScoreResult health = healthScore.compute();
-		String grounding = recommendationAssembler.assemble(rec, portfolio, health);
-		return modelGateway.generate(composePrompt(grounding, safe(messages)), ModelTier.BIG);
+		return askAboutRecommendation(rec, messages, false);
 	}
 
-	/** Answer the latest question, grounded in holdings + health + upcoming calendar + recent recs. */
+	/**
+	 * Answer the latest question, grounded in {@code rec} + the live portfolio. When {@code deeper},
+	 * escalate to Claude Haiku (FR-32) and ground from <b>sanitized</b> context (no raw positions).
+	 */
+	public String askAboutRecommendation(Recommendation rec, List<ChatMessage> messages, boolean deeper) {
+		PortfolioSnapshot portfolio = livePortfolio.currentSnapshot();
+		HealthScoreResult health = healthScore.compute();
+		String grounding = recommendationAssembler.assemble(rec, portfolio, health, deeper);
+		return answer(grounding, messages, deeper);
+	}
+
 	public String askAboutPortfolio(List<ChatMessage> messages) {
+		return askAboutPortfolio(messages, false);
+	}
+
+	/**
+	 * Answer the latest question, grounded in holdings + health + calendar + recent recs. When
+	 * {@code deeper}, escalate to Claude Haiku from <b>sanitized</b> context (no raw positions).
+	 */
+	public String askAboutPortfolio(List<ChatMessage> messages, boolean deeper) {
 		PortfolioSnapshot portfolio = livePortfolio.currentSnapshot();
 		HealthScoreResult health = healthScore.compute();
 		LocalDate today = LocalDate.now(TORONTO);
@@ -83,8 +97,14 @@ public class ConversationService {
 				.findByEventDateBetweenOrderByEventDateAsc(today, today.plusDays(CALENDAR_WINDOW_DAYS));
 		List<Recommendation> recentRecs = recommendations.recent().stream().limit(MAX_RECENT_RECS).toList();
 		String grounding = portfolioAssembler.assemble(portfolio, health, events, recentRecs,
-				INVESTOR_PROFILE, today);
-		return modelGateway.generate(composePrompt(grounding, safe(messages)), ModelTier.BIG);
+				INVESTOR_PROFILE, today, deeper);
+		return answer(grounding, messages, deeper);
+	}
+
+	/** Compose the prompt and route it: Haiku when escalating, the local BIG model otherwise. */
+	private String answer(String grounding, List<ChatMessage> messages, boolean deeper) {
+		String prompt = composePrompt(grounding, safe(messages));
+		return deeper ? modelGateway.escalate(prompt) : modelGateway.generate(prompt, ModelTier.BIG);
 	}
 
 	private static List<ChatMessage> safe(List<ChatMessage> messages) {

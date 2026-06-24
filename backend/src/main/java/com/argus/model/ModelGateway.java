@@ -19,4 +19,12 @@ public interface ModelGateway {
 	default String generate(String prompt) {
 		return generate(prompt, ModelTier.BIG);
 	}
+
+	/**
+	 * Escalate explicitly to Claude Haiku (Story 7.3, FR-32) — the "deeper analysis" path, distinct
+	 * from the on-failure fallback. Bypasses the local model and the big-model semaphore (Haiku is a
+	 * separate remote resource). Throws {@link ModelGatewayException} when escalation is unavailable
+	 * (no Anthropic API key) or the Haiku call fails.
+	 */
+	String escalate(String prompt);
 }

@@ -121,4 +121,15 @@ class PortfolioChatIntegrationTest {
 						.cookie(session).contentType(MediaType.APPLICATION_JSON).content(body))
 				.andExpect(status().isPayloadTooLarge());
 	}
+
+	@Test
+	void deeperEscalationWithoutKeyIs503() throws Exception {
+		Cookie session = login();
+		String body = "{\"messages\":[{\"role\":\"user\",\"content\":\"go deeper\"}],\"deeper\":true}";
+
+		// dev profile has no ANTHROPIC_API_KEY → UnavailableHaikuFallback → ModelGatewayException → 503.
+		mockMvc.perform(post("/api/portfolio/chat")
+						.cookie(session).contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isServiceUnavailable());
+	}
 }

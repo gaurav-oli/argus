@@ -34,7 +34,7 @@ public class ConversationController {
 		List<ChatMessage> messages = ChatValidation.validate(request.messagesOrEmpty());
 		Recommendation rec = recommendations.diagnostic(id)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-		String answer = conversation.askAboutRecommendation(rec, messages);
+		String answer = conversation.askAboutRecommendation(rec, messages, request.deeperRequested());
 		return new ChatMessage("assistant", answer);
 	}
 }

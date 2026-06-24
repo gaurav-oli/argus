@@ -27,9 +27,17 @@ class DefaultModelGatewayTest {
 	@Test
 	void generateReturnsModelContent() {
 		ModelGateway gateway = new DefaultModelGateway(
-				new MockChatModel("pong"), new StubHaikuFallback(), props(1));
+				new MockChatModel("pong"), prompt -> "unused", props(1));
 
 		assertEquals("pong", gateway.generate("ping"));
+	}
+
+	@Test
+	void escalateRoutesDirectlyToHaiku() {
+		ModelGateway gateway = new DefaultModelGateway(
+				new MockChatModel("local"), prompt -> "haiku:" + prompt, props(1));
+
+		assertEquals("haiku:deep question", gateway.escalate("deep question"));
 	}
 
 	@Test
@@ -49,7 +57,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void bigModelAccessIsSerialized() throws InterruptedException {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, new StubHaikuFallback(), props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", props(1));
 
 		int threads = 8;
 		var workers = new Thread[threads];
@@ -70,7 +78,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void smallTierBypassesTheBigModelSemaphore() {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, new StubHaikuFallback(), props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", props(1));
 
 		int threads = 6;
 		var workers = new Thread[threads];
