@@ -26,6 +26,16 @@ public class RecommendationContextAssembler {
 	private static final BigDecimal HUNDRED = new BigDecimal("100");
 
 	public String assemble(Recommendation rec, PortfolioSnapshot portfolio, HealthScoreResult health) {
+		return assemble(rec, portfolio, health, false);
+	}
+
+	/**
+	 * Build the grounding block. When {@code sanitized} (escalation to Claude Haiku, Story 7.3), raw
+	 * positions are withheld — exact CAD dollar values and the portfolio total are omitted; relative
+	 * weights, tickers, directions, health, signals, and probabilities remain.
+	 */
+	public String assemble(Recommendation rec, PortfolioSnapshot portfolio, HealthScoreResult health,
+			boolean sanitized) {
 		StringBuilder b = new StringBuilder();
 
 		b.append("=== RECOMMENDATION: ").append(rec.getTicker()).append(" ===\n");
@@ -54,9 +64,11 @@ public class RecommendationContextAssembler {
 		}
 
 		b.append("\n=== YOUR PORTFOLIO ===\n");
-		b.append("Total value: ").append(cad(portfolio.totalValueCad()))
-				.append(" (cost ").append(cad(portfolio.totalCostCad()))
-				.append(", total P&L ").append(cad(portfolio.totalPnlCad())).append(")\n");
+		if (!sanitized) {
+			b.append("Total value: ").append(cad(portfolio.totalValueCad()))
+					.append(" (cost ").append(cad(portfolio.totalCostCad()))
+					.append(", total P&L ").append(cad(portfolio.totalPnlCad())).append(")\n");
+		}
 		if (portfolio.positions().isEmpty()) {
 			b.append("Holdings: (none imported yet)\n");
 		} else {
@@ -68,10 +80,10 @@ public class RecommendationContextAssembler {
 				}
 				b.append(": ");
 				b.append(p.weightPercent() != null ? plain(p.weightPercent()) + "% of portfolio" : "weight n/a");
-				if (p.cadMarketValue() != null) {
+				if (!sanitized && p.cadMarketValue() != null) {
 					b.append(", value ").append(cad(p.cadMarketValue()));
 				}
-				if (p.cadPnl() != null) {
+				if (!sanitized && p.cadPnl() != null) {
 					b.append(", P&L ").append(cad(p.cadPnl()));
 				}
 				b.append('\n');

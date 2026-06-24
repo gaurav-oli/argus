@@ -1,11 +1,13 @@
 package com.argus.conversation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,6 +18,7 @@ import com.argus.portfolio.HealthScoreResult;
 import com.argus.portfolio.HealthScoreService;
 import com.argus.portfolio.LivePortfolioService;
 import com.argus.portfolio.PortfolioSnapshot;
+import com.argus.portfolio.PositionValue;
 import com.argus.recommendation.AgentSignal;
 import com.argus.recommendation.ProbabilityScore;
 import com.argus.recommendation.Recommendation;
@@ -48,6 +51,39 @@ class ConversationServiceTest {
 	private static PortfolioSnapshot emptySnapshot() {
 		return new PortfolioSnapshot(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, false, Instant.now(),
 				List.of());
+	}
+
+	private static PortfolioSnapshot pricedSnapshot() {
+		PositionValue aapl = new PositionValue("AAPL", "Apple Inc.", new BigDecimal("10"), new BigDecimal("190"),
+				new BigDecimal("1900"), new BigDecimal("1500"), new BigDecimal("400"), new BigDecimal("26.67"),
+				null, null, null, "USD", new BigDecimal("2600"), new BigDecimal("550"), new BigDecimal("40"),
+				false, Instant.now());
+		return new PortfolioSnapshot(new BigDecimal("6500"), new BigDecimal("5000"), new BigDecimal("1500"),
+				false, Instant.now(), List.of(aapl));
+	}
+
+	@Test
+	void portfolioDeeperEscalatesToHaikuWithSanitizedContext() {
+		when(livePortfolio.currentSnapshot()).thenReturn(pricedSnapshot());
+		when(healthScore.compute()).thenReturn(new HealthScoreResult(80, List.of(), Instant.now()));
+		when(calendarEvents.findByEventDateBetweenOrderByEventDateAsc(any(), any())).thenReturn(List.of());
+		when(recommendations.recent()).thenReturn(List.of());
+		when(gateway.escalate(anyString())).thenReturn("deep answer");
+
+		String answer = service.askAboutPortfolio(List.of(new ChatMessage("user", "go deep")), true);
+
+		assertEquals("deep answer", answer);
+		ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+		verify(gateway).escalate(prompt.capture());
+		verify(gateway, never()).generate(anyString(), any());
+		String sent = prompt.getValue();
+		assertTrue(sent.contains("40% of portfolio"), sent);   // relative weight kept
+		assertFalse(sent.contains("CAD "), sent);              // no CAD-prefixed dollar amounts
+		// the snapshot's dollar figures (market value, totals, CAD value/P&L) must not appear
+		assertFalse(sent.contains("2600"), sent);
+		assertFalse(sent.contains("6500"), sent);
+		assertFalse(sent.contains("550"), sent);
+		assertTrue(sent.contains("go deep"), sent);
 	}
 
 	@Test

@@ -612,16 +612,19 @@ export interface ChatMessage {
 export const sendRecommendationChat = (
   id: number,
   messages: ChatMessage[],
+  deeper = false,
   signal?: AbortSignal,
 ): Promise<ChatMessage> =>
-  apiPost<ChatMessage>(`/api/recommendations/${id}/chat`, { messages }, signal);
+  apiPost<ChatMessage>(`/api/recommendations/${id}/chat`, { messages, deeper }, signal);
 
 /**
  * Ask AI about the whole portfolio (FR-31). Grounded server-side in holdings + health + upcoming
- * calendar events + recent recommendations + investor profile, via the Model Gateway.
+ * calendar events + recent recommendations + investor profile, via the Model Gateway. When
+ * {@code deeper}, the answer is escalated to Claude Haiku (FR-32).
  */
 export const sendPortfolioChat = (
   messages: ChatMessage[],
+  deeper = false,
   signal?: AbortSignal,
 ): Promise<ChatMessage> =>
-  apiPost<ChatMessage>(`/api/portfolio/chat`, { messages }, signal);
+  apiPost<ChatMessage>(`/api/portfolio/chat`, { messages, deeper }, signal);

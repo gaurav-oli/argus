@@ -25,6 +25,6 @@ public class PortfolioChatController {
 	@PostMapping("/chat")
 	public ChatMessage chat(@RequestBody ChatRequest request) {
 		List<ChatMessage> messages = ChatValidation.validate(request.messagesOrEmpty());
-		return new ChatMessage("assistant", conversation.askAboutPortfolio(messages));
+		return new ChatMessage("assistant", conversation.askAboutPortfolio(messages, request.deeperRequested()));
 	}
 }

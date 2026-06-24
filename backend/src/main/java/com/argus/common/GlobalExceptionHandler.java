@@ -58,6 +58,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem;
 	}
 
+	// Model Gateway can't produce a response — e.g. escalation requested but Haiku is unavailable
+	// (no API key), or a Haiku call failed (Story 7.3). 503 so the client shows an error/retry,
+	// never placeholder text as a success.
+	@ExceptionHandler(com.argus.model.ModelGatewayException.class)
+	ProblemDetail handleModelUnavailable(com.argus.model.ModelGatewayException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+		problem.setTitle("Model Unavailable");
+		problem.setType(URI.create("https://argus.local/problems/model-unavailable"));
+		return problem;
+	}
+
 	@ExceptionHandler(com.argus.security.LockedException.class)
 	ResponseEntity<ProblemDetail> handleLocked(com.argus.security.LockedException ex) {
 		HttpStatus status = ex.isFull() ? HttpStatus.LOCKED : HttpStatus.TOO_MANY_REQUESTS;

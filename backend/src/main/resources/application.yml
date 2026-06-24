@@ -49,6 +49,14 @@ spring:
       repositories:
         enabled: false
 
+  # Model provider selector: Argus uses Ollama (local) as the Spring-AI-autoconfigured chat model.
+  # Anthropic (Claude Haiku, Story 7.3) is built manually + key-gated in HaikuConfig, so its
+  # chat autoconfig is kept OFF here (it is mutually exclusive with Ollama's, and with no key it
+  # would otherwise try to build a client and fail context startup).
+  ai:
+    model:
+      chat: ollama
+
 # Agent 1 news ingestion (Story 4.1, FR-8). Cadence-gated: ≤5 min in regular hours, ≤15 min off-hours.
 # Finnhub is key-gated (argus.finnhub.api-key); GDELT + RSS are free/keyless and on by default.
 argus:
@@ -59,6 +67,14 @@ argus:
       feeds:
         - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
         - https://www.cnbc.com/id/100003114/device/rss/rss.html
+  # Claude Haiku escalation/fallback (Story 7.3, FR-32). Key-gated: with no ANTHROPIC_API_KEY the
+  # gateway's HaikuFallback is "unavailable" (escalation → 503) and Argus runs fully local. An empty
+  # default is deliberate — it must read blank (not falsely "configured") when the env var is unset.
+  haiku:
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ARGUS_HAIKU_MODEL:claude-haiku-4-5-20251001}
+    max-tokens: 1024
+    temperature: 0.7
 
 management:
   endpoints:

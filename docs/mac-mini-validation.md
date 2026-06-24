@@ -63,6 +63,16 @@ calendar + recent recommendations + investor profile. Built + tested on the lapt
 - [ ] Sample questions behave (e.g. "What should I watch before the Fed meeting?", "Which holding concerns you most?").
 [Source: 7-2-portfolio-chat.md AC#4; epics.md#Story 7.2]
 
+## 7. Story 7.3 — Claude Haiku escalation (live API key)
+Unlike the local-model paths, the Haiku escalation is **API-based and can be exercised on the
+laptop** with a real key — but it's left key-gated by default (tested with a mock / no-key 503).
+With `ANTHROPIC_API_KEY` set (laptop **or** Mini):
+- [ ] "Get deeper analysis" in either chat → a real **Claude Haiku** answer (model `claude-haiku-4-5-20251001`).
+- [ ] The per-call **cost is logged** (`event=haiku_escalation … costUsd=…`, $1/$5 per MTok from response usage).
+- [ ] The escalation prompt is **sanitized** — confirm no exact dollar amounts / share counts leave the network (only weights %, tickers, health, probabilities).
+- [ ] **On the Mini only:** the local-model **on-failure fallback** (gemma4:26b errors → Haiku) returns a Haiku answer when keyed, and a clean **503** when not (no stub text).
+[Source: 7-3-haiku-escalation.md AC#4/#6; epics.md#Story 7.3]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (Epic 10, Story 10.3)._
