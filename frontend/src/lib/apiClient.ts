@@ -279,6 +279,7 @@ export interface ParsedHolding {
   costBasis: number | null;
   costBasisCurrency: string;
   acquisitionDate: string | null;
+  account: string | null;
   needsReview: boolean;
   issues: string[];
 }
@@ -362,6 +363,10 @@ export interface PositionValue {
   asOf: string | null;
   institution: string | null;
   account: string | null;
+  id: number;
+  usdMarketValue: number | null;
+  cadAcb: number | null;
+  fxEstimated: boolean;
 }
 
 /** Mirrors the backend `PortfolioSnapshot` record — totals in CAD. Pushed live on `/topic/portfolio`. */

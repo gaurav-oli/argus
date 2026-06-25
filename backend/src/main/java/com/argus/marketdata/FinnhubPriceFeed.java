@@ -124,7 +124,11 @@ public class FinnhubPriceFeed implements PriceFeed {
 		}
 	}
 
-	/** Seed each symbol's previous close from the Finnhub /quote REST endpoint (best-effort). */
+	/**
+	 * Seed each symbol's previous close AND current price from the Finnhub /quote REST endpoint
+	 * (best-effort). Seeding the current price ({@code c}) means a holding shows a value immediately
+	 * on subscribe, rather than waiting for the first live WS trade to arrive.
+	 */
 	private void seedPreviousCloses(Collection<String> tickers, BiConsumer<String, BigDecimal> previousClose) {
 		HttpClient http = HttpClient.newHttpClient();
 		for (String symbol : tickers) {
@@ -132,12 +136,18 @@ public class FinnhubPriceFeed implements PriceFeed {
 				HttpResponse<String> res = http.send(HttpRequest.newBuilder()
 						.uri(URI.create("https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + apiKey))
 						.GET().build(), HttpResponse.BodyHandlers.ofString());
-				JsonNode pc = JSON.readTree(res.body()).path("pc");
+				JsonNode quote = JSON.readTree(res.body());
+				JsonNode pc = quote.path("pc");
 				if (!pc.isMissingNode() && pc.asDouble() > 0) {
 					previousClose.accept(symbol, new BigDecimal(pc.asString()));
 				}
+				JsonNode c = quote.path("c");
+				PriceTick handler = this.tickHandler;
+				if (handler != null && !c.isMissingNode() && c.asDouble() > 0) {
+					handler.onTick(symbol, new BigDecimal(c.asString()), Instant.now());
+				}
 			} catch (RuntimeException | java.io.IOException | InterruptedException ex) {
-				log.debug("No previous close for {}: {}", symbol, ex.getMessage());
+				log.debug("No quote for {}: {}", symbol, ex.getMessage());
 				if (ex instanceof InterruptedException) {
 					Thread.currentThread().interrupt();
 				}

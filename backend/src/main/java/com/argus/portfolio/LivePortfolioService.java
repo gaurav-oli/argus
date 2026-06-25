@@ -101,11 +101,16 @@ public class LivePortfolioService {
 			BigDecimal cadAcb = p.getCadAcb();
 			BigDecimal cadPnl = (cadMarketValue != null && cadAcb != null)
 					? money(cadMarketValue.subtract(cadAcb)) : null;
+			// USD market value: native for USD holdings, else convert the CAD value back to USD.
+			BigDecimal usdMarketValue = "USD".equalsIgnoreCase(p.getCostBasisCurrency()) ? marketValue
+					: (cadMarketValue != null && isPositive(usdCad))
+							? money(cadMarketValue.divide(usdCad, 6, java.math.RoundingMode.HALF_UP)) : null;
 
 			rows.add(new PositionValue(p.getTicker(), p.getCompanyName(), shares, price, marketValue,
 					costBasis, totalPnl, totalPnlPercent, prevClose, dayPnl, dayPnlPercent,
 					p.getCostBasisCurrency(), cadMarketValue, cadPnl, null, afterHours,
-					pp == null ? null : pp.asOf(), p.getInstitution(), p.getAccount()));
+					pp == null ? null : pp.asOf(), p.getInstitution(), p.getAccount(),
+					p.getId(), usdMarketValue, cadAcb, p.isFxEstimated()));
 
 			// Total value (and the weight base) is the sum of EVERY priced position — including
 			// FX-estimated ones (cadAcb null) — so weights sum to 100%. Cost only sums where the CAD
