@@ -1,5 +1,4 @@
 import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
-import { PerformanceGauges } from "@/components/dashboard/PerformanceGauges";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CorporateActions } from "@/features/portfolio/CorporateActions";
@@ -10,9 +9,8 @@ import { PortfolioChart } from "@/features/portfolio/PortfolioChart";
 import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
 
 /**
- * Portfolio — live value (Story 3.4) + holdings import (3.1) + corporate actions (3.3) sit above
- * the design-prototype widgets (PriceChart / HoldingsTreemap / PerformanceGauges still render dummy
- * data; the holdings table + chart wire to real positions in Stories 3.5–3.6).
+ * Portfolio — live value (3.4) + import (3.1) + corporate actions (3.3) + holdings table (3.5) +
+ * value chart (3.6) + a holdings heatmap, all on real positions.
  */
 export default function PortfolioPage() {
   return (
@@ -39,13 +37,10 @@ export default function PortfolioPage() {
         <MotionCard index={4} className="md:col-span-6" interactive={false}>
           <ManagePositions />
         </MotionCard>
-        <MotionCard index={5} className="md:col-span-4">
+        <MotionCard index={5} className="md:col-span-6">
           <PortfolioChart />
         </MotionCard>
-        <MotionCard index={6} className="md:col-span-2" interactive={false}>
-          <PerformanceGauges />
-        </MotionCard>
-        <MotionCard index={7} className="md:col-span-6" interactive={false}>
+        <MotionCard index={6} className="md:col-span-6" interactive={false}>
           <HoldingsTreemap />
         </MotionCard>
       </div>

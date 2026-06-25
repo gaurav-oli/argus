@@ -5,16 +5,28 @@ import { PortfolioChat } from "@/features/conversation/PortfolioChat";
 import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
 import { Sensitive } from "@/features/privacy/Sensitive";
-import { portfolio, usd } from "@/lib/mockData";
-import { useState } from "react";
+import { getPortfolioValue } from "@/lib/apiClient";
+import { usdOrDash } from "@/lib/format";
+import { useEffect, useState } from "react";
 
 /**
- * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and total value KPI
- * (value still mock on this branch), a global "Ask AI" portfolio-chat launcher (Story 7.2),
+ * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and the real total value
+ * KPI (Story 3.4, /api/portfolio/value), a global "Ask AI" portfolio-chat launcher (Story 7.2),
  * tap-to-reveal privacy (FR-36), and the theme switch. Sensitive values are masked until revealed.
  */
 export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
+  const [totalValue, setTotalValue] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getPortfolioValue()
+      .then((s) => active && setTotalValue(s.totalValueCad))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">
@@ -31,7 +43,7 @@ export function TopBar() {
           </span>
           <Sensitive className="text-lg font-bold text-text-primary">
             <span className="font-mono text-lg font-bold tabular-nums text-text-primary">
-              {usd(portfolio.totalValue)}
+              {usdOrDash(totalValue)}
             </span>
           </Sensitive>
         </div>
