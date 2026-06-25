@@ -26,9 +26,22 @@ function fmtMoney(value: number | null, currency: string): string {
  * After confirming, the current holdings are listed so the persisted result is visible. The full
  * sortable holdings table arrives in Story 3.5.
  */
+const BANKS = [
+  "National Bank",
+  "RBC",
+  "TD",
+  "Scotiabank",
+  "BMO",
+  "CIBC",
+  "Wealthsimple",
+  "Questrade",
+  "Other",
+];
+
 export function ImportStatement() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [bank, setBank] = useState<string>(BANKS[0]);
   const [busy, setBusy] = useState<"idle" | "uploading" | "confirming">("idle");
   const [error, setError] = useState<string | null>(null);
   const [editingFxId, setEditingFxId] = useState<number | null>(null);
@@ -57,7 +70,7 @@ export function ImportStatement() {
     setError(null);
     setBusy("uploading");
     try {
-      setPreview(await uploadStatement(file));
+      setPreview(await uploadStatement(file, { mode: "llm", institution: bank }));
     } catch (err) {
       setPreview(null);
       setError(err instanceof ApiError ? err.message : "Couldn't read that file");
@@ -113,19 +126,34 @@ export function ImportStatement() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium text-text-primary">Import statement</h3>
-          <p className="text-xs text-text-secondary">Upload a brokerage PDF to load your holdings.</p>
+          <p className="text-xs text-text-secondary">Pick the bank, then upload its PDF — parsed with AI.</p>
         </div>
-        <label className="cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-accent transition-colors hover:border-accent">
-          {busy === "uploading" ? "Reading…" : "Choose PDF"}
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="sr-only"
+        <div className="flex items-center gap-2">
+          <select
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
             disabled={busy !== "idle"}
-            onChange={handleFile}
-          />
-        </label>
+            aria-label="Bank"
+            className="cursor-pointer rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-medium text-text-primary transition-colors hover:border-accent focus:border-accent focus:outline-none"
+          >
+            {BANKS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+          <label className="cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-accent transition-colors hover:border-accent">
+            {busy === "uploading" ? "Reading…" : "Choose PDF"}
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              disabled={busy !== "idle"}
+              onChange={handleFile}
+            />
+          </label>
+        </div>
       </div>
 
       {error && (

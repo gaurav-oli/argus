@@ -310,11 +310,18 @@ export interface Position {
 }
 
 /** Upload a brokerage statement PDF; returns the parsed preview (nothing is persisted yet). */
-export async function uploadStatement(file: File): Promise<ImportPreview> {
+export async function uploadStatement(
+  file: File,
+  opts?: { mode?: "heuristic" | "llm"; institution?: string },
+): Promise<ImportPreview> {
   const form = new FormData();
   form.append("file", file);
+  const params = new URLSearchParams();
+  if (opts?.mode) params.set("mode", opts.mode);
+  if (opts?.institution) params.set("institution", opts.institution);
+  const query = params.toString() ? `?${params.toString()}` : "";
   // No explicit Content-Type — the browser sets multipart/form-data with the boundary.
-  const res = await fetch(`${BASE_URL}/api/portfolio/imports`, {
+  const res = await fetch(`${BASE_URL}/api/portfolio/imports${query}`, {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json" },
@@ -353,6 +360,8 @@ export interface PositionValue {
   weightPercent: number | null;
   afterHours: boolean;
   asOf: string | null;
+  institution: string | null;
+  account: string | null;
 }
 
 /** Mirrors the backend `PortfolioSnapshot` record — totals in CAD. Pushed live on `/topic/portfolio`. */
