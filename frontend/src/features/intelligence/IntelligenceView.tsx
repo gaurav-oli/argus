@@ -10,6 +10,7 @@ import {
   type StrangerAlertItem,
 } from "@/lib/apiClient";
 import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 
@@ -39,25 +40,26 @@ export function IntelligenceView() {
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">Intelligence</h1>
-        <p className="text-sm text-text-secondary">
-          News, sentiment, source trust, and pump-and-dump watch — from Agent 1.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        eyebrow="Agent 1 · News"
+        title="Intelligence"
+        subtitle="News, sentiment, source trust, and pump-and-dump watch."
+      />
 
+      <div className="flex flex-col gap-6">
       <RecommendationCards />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
       <NewsSection items={news} />
       <SourceSection items={sources} />
+      </div>
     </div>
   );
 }
 
 function Card({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-border bg-surface p-6">
+    <section className="glass relative overflow-hidden rounded-2xl p-6">
       <h2 className="mb-4 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
         {title}
         {count != null && (
