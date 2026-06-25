@@ -26,12 +26,22 @@ Status: **done**. Validated on the Mini (Gemma 4 26B MoE, full Docker stack runn
 > paging the model back in before generation** — a recurring penalty, not the one-time cold-load §1
 > accepted. Measured 40-token answers took 23s and 65s wall-clock with only ~1.7s of compute.
 > `gemma4:12b` (Gemma 4 12B dense "Unified", 7.6GB) fixes it: **56% mem free, 100% GPU, no stalls,
-> predictable**. Trade-off: 12B is **slower per token (~12.5 vs ~28 tok/s)** because it's dense vs the
-> 26B MoE, so a long ~380-token answer is still ~30s — but predictably. Closing the ≤15s gap for long
-> answers needs the **token-streaming** work deferred in `deferred-work.md` (story 7.1); short answers
-> already pass. `.env` `ARGUS_BIG_MODEL=gemma4:12b`; 26B stays the quality target for when the box has
-> dedicated RAM (it's the deploy box — close IntelliJ/dev apps). Committed prod defaults still say 26b;
-> revisit them when streaming lands or the RAM picture changes.
+> predictable**. `.env` `ARGUS_BIG_MODEL=gemma4:12b`; 26B stays a quality option for when the box has
+> dedicated RAM (it's the deploy box — close IntelliJ/dev apps). Committed prod defaults still say 26b.
+
+> **CORRECTION 2026-06-25 — the dominant latency cause is a BROKEN `gemma4` MODEL BUILD, not RAM/streaming.**
+> Deeper investigation during the §5 live smoke test found that *every* chat call generates **~400–640
+> tokens regardless of answer length** — a 28-word answer reported `eval_count=461`, with ~420 of those
+> tokens decoding to the **empty string** (invisible special/pad tokens). At ~12 tok/s that junk tail
+> *is* the 35–55s latency. Root cause: the custom-imported `gemma4` tags (both 12B and 26B — multimodal
+> builds with a clip projector) ship a stripped `TEMPLATE {{ .Prompt }}` and **no `PARAMETER stop`**;
+> `ollama show` confirms it. Re-templating a throwaway copy with a proper Gemma template + `stop
+> "<end_of_turn>"` did **not** stop the junk generation, so the GGUF/tokenizer itself is bad. Therefore:
+> **token-streaming would NOT fix this** (the model still generates the junk before any stop), and it's
+> not primarily a RAM problem (12B has 56% mem free and still does it). The real fix is to **replace the
+> model** with a properly-packaged one (e.g. official `gemma3:12b`/`gemma3:27b`), deferred per the user
+> (2026-06-25): some local latency is acceptable since **Anthropic Haiku handles heavy lifting** (§7,
+> validated, ~5.6s) and local Gemma is only for lighter grounded Q&A. Logged as a known issue.
 
 ## 2. Story 1.8 — deploy + Tailscale, real run  (Mini run done 2026-06-21; iPhone/WS check open)
 The artifacts (Dockerfiles, compose `deploy` profile, runbook) are built + verified
@@ -55,16 +65,18 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
 - [x] Ollama runs as a background/login service (`brew services start ollama`) — survives reboots.
 - [x] 24/7 operation: all 4 compose services set `restart: unless-stopped` (verified) — behave across reboots.
 
-## 5. Story 7.1 — Ask AI recommendation chat (live model)  ⏳ TODO on the Mini
+## 5. Story 7.1 — Ask AI recommendation chat (live model)  ✅ MOSTLY DONE 2026-06-25 (latency caveat)
 The chat backend (`com.argus.conversation`) + the Ask-AI panel are built and fully tested on the
 laptop via the `dev`-profile `MockChatModel` (no Ollama). The **first real backend→Ollama call**
-goes through this endpoint (closes the open item from §2). On the Mini, with the `prod` profile +
-`gemma4:12b` (model switched 2026-06-24 — see §1 REVISION):
-- [ ] `POST /api/recommendations/{id}/chat` returns a **grounded** answer that correctly cites the
-      recommendation's signals/diagnostic + the portfolio (not hallucinated numbers).
-- [ ] **Latency:** warm response within the **≤15s** target (NFR / A-9); confirm the UI "warming up"
-      indicator covers the **~28s cold-load** when the model was idle-unloaded (`ARGUS_MODEL_KEEP_ALIVE=5m`).
-- [ ] Multi-turn follow-ups stay coherent (the client resends history each turn — server is stateless).
+goes through this endpoint (closes the open item from §2). Smoke-tested live on the Mini (`prod` +
+`gemma4:12b`) 2026-06-25 via `POST /api/recommendations/1/chat`:
+- [x] **Grounded** answer correctly cites the recommendation's signals/diagnostic (agent-1-news w0.9,
+      agent-7-calendar w0.3 BEARISH), 75%/25% bull/bear, 29% confidence — **no hallucinated numbers**.
+- [ ] **Latency: FAILS ≤15s — 35–55s.** NOT a hardware/streaming issue: the `gemma4` model build is
+      broken (generates ~400 invisible junk tokens/call — see §1 CORRECTION). Accepted as a known issue
+      for now (Haiku covers heavy lifting; replace the local model later). UI "warming up" state untested.
+- [x] **Multi-turn follow-ups stay coherent** — tracked "that risk" → the earnings event across turns.
+- [ ] Live UI check on the device (PIN login → Ask AI panel) still open; validated here via curl.
 [Source: 7-1-recommendation-chat.md AC#4; epics.md#Story 7.1; docs/mac-mini-validation.md §1–2]
 
 ## 6. Story 7.2 — Portfolio chat (live model)  ⏳ TODO on the Mini
@@ -77,14 +89,17 @@ calendar + recent recommendations + investor profile. Built + tested on the lapt
 - [ ] Sample questions behave (e.g. "What should I watch before the Fed meeting?", "Which holding concerns you most?").
 [Source: 7-2-portfolio-chat.md AC#4; epics.md#Story 7.2]
 
-## 7. Story 7.3 — Claude Haiku escalation (live API key)
-Unlike the local-model paths, the Haiku escalation is **API-based and can be exercised on the
-laptop** with a real key — but it's left key-gated by default (tested with a mock / no-key 503).
-With `ANTHROPIC_API_KEY` set (laptop **or** Mini):
-- [ ] "Get deeper analysis" in either chat → a real **Claude Haiku** answer (model `claude-haiku-4-5-20251001`).
-- [ ] The per-call **cost is logged** (`event=haiku_escalation … costUsd=…`, $1/$5 per MTok from response usage).
-- [ ] The escalation prompt is **sanitized** — confirm no exact dollar amounts / share counts leave the network (only weights %, tickers, health, probabilities).
-- [ ] **On the Mini only:** the local-model **on-failure fallback** (gemma4:26b errors → Haiku) returns a Haiku answer when keyed, and a clean **503** when not (no stub text).
+## 7. Story 7.3 — Claude Haiku escalation (live API key)  ✅ DONE 2026-06-25
+Validated live on the Mini 2026-06-25 (`ANTHROPIC_API_KEY` set; backend logged "Anthropic Haiku
+escalation enabled"). `POST /api/recommendations/1/chat` with `deeper:true`:
+- [x] **Real Claude Haiku answer** (`claude-haiku-4-5-20251001`) — high-quality structured analysis,
+      correctly grounded in the signals, **5.6s** wall (the fast "heavy lifting" path).
+- [x] **Cost logged:** `event=haiku_escalation model=claude-haiku-4-5-20251001 inputTokens=268
+      outputTokens=321 costUsd=0.001873` — exact at $1/$5 per MTok.
+- [x] **Sanitized context** — only 268 input tokens, no exact dollar amounts (escalate path uses the
+      `sanitized=true` grounding; portfolio was empty here regardless).
+- [ ] **On-failure fallback** (local model *errors* → Haiku) not force-tested yet; the explicit
+      "deeper analysis" escalation (the main path) is confirmed. No-key → clean 503 was verified earlier.
 [Source: 7-3-haiku-escalation.md AC#4/#6; epics.md#Story 7.3]
 
 ---
