@@ -47,7 +47,8 @@ public class PortfolioImportController {
 
 	@PostMapping(path = "/imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
-	public ImportPreview upload(@RequestParam("file") MultipartFile file) {
+	public ImportPreview upload(@RequestParam("file") MultipartFile file,
+			@RequestParam(name = "mode", defaultValue = "heuristic") String mode) {
 		if (file == null || file.isEmpty()) {
 			throw new BadRequestException("Missing file");
 		}
@@ -58,7 +59,11 @@ public class PortfolioImportController {
 			throw new PayloadTooLargeException(
 					"File exceeds the maximum size of " + (maxFileBytes / (1024 * 1024)) + " MB");
 		}
-		return service.stageImport(originalName(file), readBytes(file));
+		String name = originalName(file);
+		byte[] bytes = readBytes(file);
+		// "llm" routes to the AI-assisted parser (robust to real multi-account bank statements).
+		return "llm".equalsIgnoreCase(mode) ? service.stageImportLlm(name, bytes)
+				: service.stageImport(name, bytes);
 	}
 
 	@PostMapping("/imports/{id}/confirm")

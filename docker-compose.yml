@@ -74,6 +74,10 @@ services:
       ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma4:26b}   # validated by Story 1.3 (2026-06-21)
       ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-5m}   # unload-when-idle (frees ~17GB)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
+      # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed
+      # cost — chat answers still use only what they need.
+      ARGUS_HAIKU_MAX_TOKENS: ${ARGUS_HAIKU_MAX_TOKENS:-4096}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       # The Finnhub beans gate on the Spring property `argus.finnhub.api-key`; relaxed binding
       # populates it from ARGUS_FINNHUB_API_KEY (NOT FINNHUB_API_KEY). When no key is set this is an

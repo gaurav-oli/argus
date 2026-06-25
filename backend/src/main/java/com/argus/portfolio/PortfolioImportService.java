@@ -29,6 +29,7 @@ public class PortfolioImportService {
 	};
 
 	private final StatementParser parser;
+	private final LlmStatementParser llmParser;
 	private final PortfolioImportRepository imports;
 	private final PositionRepository positions;
 	private final PositionLotRepository lots;
@@ -39,10 +40,11 @@ public class PortfolioImportService {
 	// LocalDate/BigDecimal natively for the staged-preview JSON round-trip.
 	private final ObjectMapper json = JsonMapper.builder().build();
 
-	public PortfolioImportService(StatementParser parser, PortfolioImportRepository imports,
-			PositionRepository positions, PositionLotRepository lots, PositionAcbService acbService,
-			FxRateService fx) {
+	public PortfolioImportService(StatementParser parser, LlmStatementParser llmParser,
+			PortfolioImportRepository imports, PositionRepository positions, PositionLotRepository lots,
+			PositionAcbService acbService, FxRateService fx) {
 		this.parser = parser;
+		this.llmParser = llmParser;
 		this.imports = imports;
 		this.positions = positions;
 		this.lots = lots;
@@ -53,7 +55,16 @@ public class PortfolioImportService {
 	/** Parse the uploaded PDF and persist a pending import batch holding the preview. */
 	@Transactional
 	public ImportPreview stageImport(String filename, byte[] pdfBytes) {
-		StatementParser.ParseResult result = parser.parse(pdfBytes);
+		return stage(filename, parser.parse(pdfBytes));
+	}
+
+	/** Same as {@link #stageImport} but uses the LLM-assisted parser (robust to real bank layouts). */
+	@Transactional
+	public ImportPreview stageImportLlm(String filename, byte[] pdfBytes) {
+		return stage(filename, llmParser.parse(pdfBytes));
+	}
+
+	private ImportPreview stage(String filename, StatementParser.ParseResult result) {
 		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
