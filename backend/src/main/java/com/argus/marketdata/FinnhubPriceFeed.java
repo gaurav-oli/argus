@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -28,7 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
  * validated with a key (laptop/Mini); the value engine that consumes it is unit-tested separately.
  */
 @Component
-@ConditionalOnProperty(name = "argus.finnhub.api-key")
+@ConditionalOnExpression("'${argus.finnhub.api-key:}'.length() > 0")
 public class FinnhubPriceFeed implements PriceFeed {
 
 	private static final Logger log = LoggerFactory.getLogger(FinnhubPriceFeed.class);

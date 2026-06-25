@@ -75,6 +75,11 @@ services:
       ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-5m}   # unload-when-idle (frees ~17GB)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      # The Finnhub beans gate on the Spring property `argus.finnhub.api-key`; relaxed binding
+      # populates it from ARGUS_FINNHUB_API_KEY (NOT FINNHUB_API_KEY). When no key is set this is an
+      # empty string — the beans use @ConditionalOnExpression to require a NON-EMPTY value, so empty
+      # safely means "off" (degrade to free GDELT/RSS), matching the no-key design.
+      ARGUS_FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       # Browser origins allowed to call the API (CORS). On the Mini = the tailnet host, since
       # tailscale serve makes same-origin POSTs look cross-origin to the backend (Story 2.1).
       ARGUS_WEB_ALLOWED_ORIGINS: ${ARGUS_WEB_ALLOWED_ORIGINS:-http://localhost:3000}

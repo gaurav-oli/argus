@@ -10,7 +10,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -23,7 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
  * so an approached Finnhub limit degrades the run instead of breaking it.
  */
 @Component
-@ConditionalOnProperty(name = "argus.finnhub.api-key")
+@ConditionalOnExpression("'${argus.finnhub.api-key:}'.length() > 0")
 public class FinnhubEarningsSource implements CalendarSource {
 
 	static final String NAME = "finnhub-earnings";
