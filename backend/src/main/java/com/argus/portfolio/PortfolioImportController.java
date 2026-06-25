@@ -48,7 +48,8 @@ public class PortfolioImportController {
 	@PostMapping(path = "/imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
 	public ImportPreview upload(@RequestParam("file") MultipartFile file,
-			@RequestParam(name = "mode", defaultValue = "heuristic") String mode) {
+			@RequestParam(name = "mode", defaultValue = "heuristic") String mode,
+			@RequestParam(name = "institution", required = false) String institution) {
 		if (file == null || file.isEmpty()) {
 			throw new BadRequestException("Missing file");
 		}
@@ -62,7 +63,7 @@ public class PortfolioImportController {
 		String name = originalName(file);
 		byte[] bytes = readBytes(file);
 		// "llm" routes to the AI-assisted parser (robust to real multi-account bank statements).
-		return "llm".equalsIgnoreCase(mode) ? service.stageImportLlm(name, bytes)
+		return "llm".equalsIgnoreCase(mode) ? service.stageImportLlm(name, bytes, institution)
 				: service.stageImport(name, bytes);
 	}
 

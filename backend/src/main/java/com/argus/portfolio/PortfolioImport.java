@@ -42,6 +42,10 @@ public class PortfolioImport {
 	/** Top-level parse note surfaced to the user (e.g. "no holdings found"); null when clean. */
 	private String message;
 
+	/** Bank chosen at upload, applied to every holding on confirm (multi-bank holdings). */
+	@Column(name = "institution")
+	private String institution;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -56,6 +60,14 @@ public class PortfolioImport {
 		this.filename = filename;
 		this.rawHoldings = rawHoldings;
 		this.message = message;
+	}
+
+	public String getInstitution() {
+		return institution;
+	}
+
+	public void setInstitution(String institution) {
+		this.institution = institution;
 	}
 
 	public void markConfirmed() {

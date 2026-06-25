@@ -7,8 +7,12 @@ import com.argus.marketdata.FxRateService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
@@ -58,23 +62,28 @@ public class PortfolioImportService {
 	/** Parse the uploaded PDF and persist a pending import batch holding the preview. */
 	@Transactional
 	public ImportPreview stageImport(String filename, byte[] pdfBytes) {
-		return stage(filename, parser.parse(pdfBytes));
+		return stage(filename, parser.parse(pdfBytes), null);
 	}
 
 	/** Same as {@link #stageImport} but uses the LLM-assisted parser (robust to real bank layouts). */
 	@Transactional
-	public ImportPreview stageImportLlm(String filename, byte[] pdfBytes) {
-		return stage(filename, llmParser.parse(pdfBytes));
+	public ImportPreview stageImportLlm(String filename, byte[] pdfBytes, String institution) {
+		return stage(filename, llmParser.parse(pdfBytes), institution);
 	}
 
-	private ImportPreview stage(String filename, StatementParser.ParseResult result) {
+	private ImportPreview stage(String filename, StatementParser.ParseResult result, String institution) {
 		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
+		batch.setInstitution(institution);
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
 				saved.getMessage(), result.holdings());
 	}
 
-	/** Commit a pending import: one position + lot per holding, with purchase-time FX resolved. */
+	/**
+	 * Commit a pending import, reconciling within its (bank + the accounts it covers): a holding that
+	 * already exists (same bank, account, ticker) is updated in place; new holdings are added; a
+	 * holding that vanished from a covered account is flagged. Other banks/accounts are never touched.
+	 */
 	@Transactional
 	public List<PositionView> confirmImport(long importId) {
 		// Row write-lock so two concurrent confirms can't both read 'pending' and double-commit.
@@ -84,20 +93,65 @@ public class PortfolioImportService {
 			throw new ConflictException("Import " + importId + " is already " + batch.getStatus());
 		}
 
-		List<Position> created = new ArrayList<>();
-		for (ParsedHolding h : read(batch.getRawHoldings())) {
-			Position position = positions.save(new Position(h.ticker(), h.companyName(), h.shares(),
-					h.costBasis(), h.costBasisCurrency(), h.acquisitionDate(), h.needsReview(), "pdf_import"));
+		String institution = batch.getInstitution();
+		List<ParsedHolding> parsed = read(batch.getRawHoldings());
+
+		// Index existing holdings for this bank by (account|ticker) for the reconcile.
+		List<Position> existingForBank = institution == null ? List.of()
+				: positions.findByInstitution(institution);
+		Map<String, Position> existingByKey = new HashMap<>();
+		for (Position p : existingForBank) {
+			existingByKey.put(reconcileKey(p.getAccount(), p.getTicker()), p);
+		}
+		Set<String> coveredAccounts = new HashSet<>();
+		Set<String> seenKeys = new HashSet<>();
+
+		List<Position> result = new ArrayList<>();
+		for (ParsedHolding h : parsed) {
+			coveredAccounts.add(normAccount(h.account()));
+			String key = reconcileKey(h.account(), h.ticker());
+			seenKeys.add(key);
+			Position position = existingByKey.get(key);
+			if (position != null) {
+				// Update in place: replace the lot, refresh tags, recompute ACB from the new lot.
+				lots.deleteAll(lots.findByPositionIdOrderByTradeDateAsc(position.getId()));
+				position.setCompanyName(h.companyName());
+				position.setBankAccount(institution, h.account());
+				position.setNeedsReview(h.needsReview());
+			}
+			else {
+				position = positions.save(new Position(h.ticker(), h.companyName(), h.shares(), h.costBasis(),
+						h.costBasisCurrency(), h.acquisitionDate(), h.needsReview(), "pdf_import"));
+				position.setBankAccount(institution, h.account());
+			}
+			positions.save(position);
 			lots.save(newLot(position.getId(), h));
 			acbService.recompute(position);
-			created.add(position);
+			result.add(position);
+		}
+
+		// A holding that was in a covered account but is no longer on the statement → flag for review.
+		for (Position p : existingForBank) {
+			String key = reconcileKey(p.getAccount(), p.getTicker());
+			if (!seenKeys.contains(key) && coveredAccounts.contains(normAccount(p.getAccount()))) {
+				p.setNeedsReview(true);
+				positions.save(p);
+			}
 		}
 
 		batch.markConfirmed();
 		imports.save(batch);
 		// Re-subscribe the live price feed to the new tickers (no restart needed).
 		events.publishEvent(new PortfolioChangedEvent());
-		return created.stream().map(PositionView::of).toList();
+		return result.stream().map(PositionView::of).toList();
+	}
+
+	private static String normAccount(String account) {
+		return account == null ? "" : account.trim().toUpperCase();
+	}
+
+	private static String reconcileKey(String account, String ticker) {
+		return normAccount(account) + "|" + (ticker == null ? "" : ticker.trim().toUpperCase());
 	}
 
 	/**

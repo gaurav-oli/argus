@@ -131,7 +131,7 @@ public class StatementParser {
 		}
 
 		boolean needsReview = !issues.isEmpty();
-		return new ParsedHolding(ticker, null, shares, costBasis, currency, acquisitionDate, needsReview, issues);
+		return new ParsedHolding(ticker, null, shares, costBasis, currency, acquisitionDate, null, needsReview, issues);
 	}
 
 	private static BigDecimal parseNumber(String token) {

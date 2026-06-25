@@ -44,10 +44,12 @@ public class LlmStatementParser {
 			- "shares" is the quantity held.
 			- "bookValue" is the TOTAL book/cost value (the "Book Value" column), not the per-unit price.
 			- "currency" is the account's currency: "CAD" or "USD".
+			- "account" is a short label for the account the holding sits in, combining the account number
+			  and type when available, e.g. "687WK3-B USD Cash", "RRSP (USD)", "TFSA", "Family RESP".
 			- If the same security is held in more than one account, return it once per account (separate rows).
 
 			Return ONLY a JSON array, no prose, no markdown fences:
-			[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD"}]
+			[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD","account":"687WK3-B USD Cash"}]
 
 			STATEMENT TEXT:
 			""";
@@ -80,7 +82,7 @@ public class LlmStatementParser {
 		}
 		return new ParsedHolding(h.ticker().trim().toUpperCase(),
 				h.companyName() == null ? null : h.companyName().trim(), h.shares(), h.bookValue(), ccy, null,
-				false, List.of());
+				h.account() == null ? null : h.account().trim(), false, List.of());
 	}
 
 	/** Slice the JSON array out of the response (tolerates fences/prose) and deserialize it. */
@@ -106,6 +108,6 @@ public class LlmStatementParser {
 
 	/** Loose mirror of the model's JSON objects. */
 	private record LlmHolding(String ticker, String companyName, BigDecimal shares, BigDecimal bookValue,
-			String currency) {
+			String currency, String account) {
 	}
 }

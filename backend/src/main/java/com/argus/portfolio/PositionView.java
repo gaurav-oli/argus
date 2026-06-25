@@ -15,11 +15,13 @@ public record PositionView(
 		boolean fxEstimated,
 		LocalDate acquisitionDate,
 		boolean needsReview,
-		String source) {
+		String source,
+		String institution,
+		String account) {
 
 	static PositionView of(Position p) {
 		return new PositionView(p.getId(), p.getTicker(), p.getCompanyName(), p.getShares(),
 				p.getCostBasis(), p.getCostBasisCurrency(), p.getCadAcb(), p.isFxEstimated(),
-				p.getAcquisitionDate(), p.isNeedsReview(), p.getSource());
+				p.getAcquisitionDate(), p.isNeedsReview(), p.getSource(), p.getInstitution(), p.getAccount());
 	}
 }

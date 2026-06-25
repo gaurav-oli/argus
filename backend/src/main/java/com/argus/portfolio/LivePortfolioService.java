@@ -105,7 +105,7 @@ public class LivePortfolioService {
 			rows.add(new PositionValue(p.getTicker(), p.getCompanyName(), shares, price, marketValue,
 					costBasis, totalPnl, totalPnlPercent, prevClose, dayPnl, dayPnlPercent,
 					p.getCostBasisCurrency(), cadMarketValue, cadPnl, null, afterHours,
-					pp == null ? null : pp.asOf()));
+					pp == null ? null : pp.asOf(), p.getInstitution(), p.getAccount()));
 
 			// Total value (and the weight base) is the sum of EVERY priced position — including
 			// FX-estimated ones (cadAcb null) — so weights sum to 100%. Cost only sums where the CAD

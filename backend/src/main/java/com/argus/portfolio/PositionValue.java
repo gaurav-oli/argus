@@ -26,12 +26,14 @@ public record PositionValue(
 		BigDecimal cadPnl,
 		BigDecimal weightPercent,
 		boolean afterHours,
-		Instant asOf) {
+		Instant asOf,
+		String institution,
+		String account) {
 
 	/** Return a copy with {@code weightPercent} set (computed once portfolio totals are known). */
 	PositionValue withWeight(BigDecimal weightPercent) {
 		return new PositionValue(ticker, companyName, shares, price, marketValue, costBasis, totalPnl,
 				totalPnlPercent, previousClose, dayPnl, dayPnlPercent, currency, cadMarketValue, cadPnl,
-				weightPercent, afterHours, asOf);
+				weightPercent, afterHours, asOf, institution, account);
 	}
 }

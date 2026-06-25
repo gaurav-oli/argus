@@ -17,6 +17,7 @@ public record ParsedHolding(
 		BigDecimal costBasis,
 		String costBasisCurrency,
 		LocalDate acquisitionDate,
+		String account,
 		boolean needsReview,
 		List<String> issues) {
 

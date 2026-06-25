@@ -56,6 +56,14 @@ public class Position {
 	@Column(nullable = false)
 	private String source = "pdf_import";
 
+	/** Bank this holding belongs to (multi-bank holdings), e.g. {@code "National Bank"}. */
+	@Column(name = "institution")
+	private String institution;
+
+	/** Account within the bank, e.g. {@code "687WK3-B · USD Cash"} or {@code "TFSA"}. */
+	@Column(name = "account")
+	private String account;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -64,6 +72,25 @@ public class Position {
 
 	protected Position() {
 		// JPA
+	}
+
+	/** Tag this holding with its bank + account (multi-bank holdings). */
+	public void setBankAccount(String institution, String account) {
+		this.institution = institution;
+		this.account = account;
+	}
+
+	/** Reconcile helper (re-import update-in-place) — clears/sets the review flag. */
+	public void setNeedsReview(boolean needsReview) {
+		this.needsReview = needsReview;
+	}
+
+	public String getInstitution() {
+		return institution;
+	}
+
+	public String getAccount() {
+		return account;
 	}
 
 	public Position(String ticker, String companyName, BigDecimal shares, BigDecimal costBasis,
