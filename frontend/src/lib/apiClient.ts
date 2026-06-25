@@ -663,3 +663,12 @@ export interface LiveAlert {
 
 export const getLiveAlerts = (): Promise<LiveAlert[]> =>
   apiGet<LiveAlert[]>("/api/alerts/live");
+
+/** Ops summary for the dashboard bottom strip — agents active + cumulative paid (Haiku) spend. */
+export interface OpsSummary {
+  agentsActive: number;
+  agentsTotal: number;
+  haikuSpendUsd: number;
+}
+
+export const getOpsSummary = (): Promise<OpsSummary> => apiGet<OpsSummary>("/api/ops/summary");
