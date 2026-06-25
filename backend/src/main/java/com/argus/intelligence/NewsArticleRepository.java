@@ -24,4 +24,16 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
 			WHERE :ticker = ANY(tickers) AND analyzed_at IS NOT NULL AND published_at > :since
 			ORDER BY published_at DESC""", nativeQuery = true)
 	List<NewsArticle> findAnalyzedForTicker(@Param("ticker") String ticker, @Param("since") Instant since);
+
+	/** Most-recent ingest time across all articles — Agent 1 "last run" (Operations dashboard). */
+	@Query("select max(a.ingestedAt) from NewsArticle a")
+	Instant latestIngestedAt();
+
+	/** Count of articles that have been sentiment-analyzed — Agent 2 throughput. */
+	@Query("select count(a) from NewsArticle a where a.sentimentLabel is not null")
+	long countAnalyzed();
+
+	/** Most-recent sentiment-analysis time — Agent 2 "last run". */
+	@Query("select max(a.analyzedAt) from NewsArticle a")
+	Instant latestAnalyzedAt();
 }

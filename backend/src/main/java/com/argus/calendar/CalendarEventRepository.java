@@ -1,14 +1,20 @@
 package com.argus.calendar;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 /** Persistence for {@link CalendarEvent} rows (Story 5.1). */
 public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Long> {
 
 	/** Dedup guard for Agent 7's idempotent daily run. */
 	boolean existsBySourceAndExternalId(String source, String externalId);
+
+	/** Most-recent calendar ingest — Agent 7 "last run" (Operations dashboard). */
+	@Query("select max(c.ingestedAt) from CalendarEvent c")
+	Instant latestIngestedAt();
 
 	/** Events occurring within {@code [from, to]}, soonest first — alert scans + the UI calendar. */
 	List<CalendarEvent> findByEventDateBetweenOrderByEventDateAsc(LocalDate from, LocalDate to);

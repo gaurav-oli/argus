@@ -1,8 +1,10 @@
 package com.argus.intelligence;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 /** Persistence for {@link SourceCredibility} records (Story 4.3). */
 public interface SourceCredibilityRepository extends JpaRepository<SourceCredibility, Long> {
@@ -11,4 +13,8 @@ public interface SourceCredibilityRepository extends JpaRepository<SourceCredibi
 
 	/** All sources ranked most-credible first — for the Intelligence view. */
 	List<SourceCredibility> findAllByOrderByScoreDesc();
+
+	/** Most-recent credibility update — Agent 3 "last run" (Operations dashboard). */
+	@Query("select max(s.updatedAt) from SourceCredibility s")
+	Instant latestUpdatedAt();
 }

@@ -628,3 +628,24 @@ export const sendPortfolioChat = (
   signal?: AbortSignal,
 ): Promise<ChatMessage> =>
   apiPost<ChatMessage>(`/api/portfolio/chat`, { messages, deeper }, signal);
+
+// ---- Agents / Operations dashboard (Epic 9, Story 9.1) ----
+
+/** Live status of one agent in the fleet. */
+export interface AgentStatus {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  status: "ACTIVE" | "IDLE";
+  captured: number;
+  captureLabel: string;
+  /** ISO instant of the most-recent capture, or null if it has never run. */
+  lastActivity: string | null;
+  schedule: string;
+  /** Optional data-source/degradation note, or null. */
+  note: string | null;
+}
+
+export const getAgentStatus = (): Promise<AgentStatus[]> =>
+  apiGet<AgentStatus[]>("/api/agents/status");
