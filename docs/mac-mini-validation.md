@@ -19,6 +19,20 @@ Status: **done**. Validated on the Mini (Gemma 4 26B MoE, full Docker stack runn
 - [x] Updated sprint-status `1-3-…` → done.
 [Source: epics.md#Story 1.3; architecture.md#GAP-1/2]
 
+> **REVISION 2026-06-24 (during Epic 7 live Ask-AI validation): Mini runtime switched to `gemma4:12b`.**
+> The first *real* backend→Ollama chat calls exposed that the 26B is not viable for interactive
+> chat **under the full prod Docker stack**: with the 4 containers (Docker VM) + the 17GB model
+> loaded, the box runs at ~0 mem free / swap saturated (~8.8GB), and every request stalls **20–60s
+> paging the model back in before generation** — a recurring penalty, not the one-time cold-load §1
+> accepted. Measured 40-token answers took 23s and 65s wall-clock with only ~1.7s of compute.
+> `gemma4:12b` (Gemma 4 12B dense "Unified", 7.6GB) fixes it: **56% mem free, 100% GPU, no stalls,
+> predictable**. Trade-off: 12B is **slower per token (~12.5 vs ~28 tok/s)** because it's dense vs the
+> 26B MoE, so a long ~380-token answer is still ~30s — but predictably. Closing the ≤15s gap for long
+> answers needs the **token-streaming** work deferred in `deferred-work.md` (story 7.1); short answers
+> already pass. `.env` `ARGUS_BIG_MODEL=gemma4:12b`; 26B stays the quality target for when the box has
+> dedicated RAM (it's the deploy box — close IntelliJ/dev apps). Committed prod defaults still say 26b;
+> revisit them when streaming lands or the RAM picture changes.
+
 ## 2. Story 1.8 — deploy + Tailscale, real run  (Mini run done 2026-06-21; iPhone/WS check open)
 The artifacts (Dockerfiles, compose `deploy` profile, runbook) are built + verified
 on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy-runbook.md`**.
@@ -45,7 +59,7 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
 The chat backend (`com.argus.conversation`) + the Ask-AI panel are built and fully tested on the
 laptop via the `dev`-profile `MockChatModel` (no Ollama). The **first real backend→Ollama call**
 goes through this endpoint (closes the open item from §2). On the Mini, with the `prod` profile +
-`gemma4:26b`:
+`gemma4:12b` (model switched 2026-06-24 — see §1 REVISION):
 - [ ] `POST /api/recommendations/{id}/chat` returns a **grounded** answer that correctly cites the
       recommendation's signals/diagnostic + the portfolio (not hallucinated numbers).
 - [ ] **Latency:** warm response within the **≤15s** target (NFR / A-9); confirm the UI "warming up"
@@ -56,7 +70,7 @@ goes through this endpoint (closes the open item from §2). On the Mini, with th
 ## 6. Story 7.2 — Portfolio chat (live model)  ⏳ TODO on the Mini
 Dashboard "Ask AI" (TopBar) → `POST /api/portfolio/chat`, grounded in holdings + health + upcoming
 calendar + recent recommendations + investor profile. Built + tested on the laptop via the dev
-`MockChatModel`. On the Mini with `prod` + `gemma4:26b`:
+`MockChatModel`. On the Mini with `prod` + `gemma4:12b` (model switched 2026-06-24 — see §1 REVISION):
 - [ ] Returns a **grounded** portfolio answer that cites holdings/health/calendar/recs (not hallucinated).
 - [ ] **Latency:** the larger portfolio context still answers within **≤15s** warm (watch prompt size vs
       context window — grounding is capped at ~14-day calendar window + ≤10 recent recs).
