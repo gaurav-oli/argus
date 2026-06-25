@@ -23,6 +23,15 @@ public interface PriceFeed {
 
 	void stop();
 
+	/**
+	 * Re-read the symbol supplier and reconcile subscriptions to the current holdings — subscribe to
+	 * newly-held tickers (seeding their previous close) and drop ones no longer held. Called after a
+	 * portfolio change (import/manual edit) so new positions get live prices without a restart.
+	 * No-op by default and when the feed isn't running.
+	 */
+	default void resubscribe() {
+	}
+
 	/** A single price observation. */
 	@FunctionalInterface
 	interface PriceTick {

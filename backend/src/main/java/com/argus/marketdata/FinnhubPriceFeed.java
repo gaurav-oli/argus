@@ -46,6 +46,8 @@ public class FinnhubPriceFeed implements PriceFeed {
 	private volatile boolean running;
 	private volatile Supplier<Collection<String>> symbolsSupplier;
 	private volatile PriceTick tickHandler;
+	private volatile BiConsumer<String, BigDecimal> previousCloseConsumer;
+	private final java.util.Set<String> subscribed = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
 	public FinnhubPriceFeed(@Value("${argus.finnhub.api-key}") String apiKey) {
 		this.apiKey = apiKey;
@@ -56,9 +58,42 @@ public class FinnhubPriceFeed implements PriceFeed {
 			BiConsumer<String, BigDecimal> previousClose) {
 		this.symbolsSupplier = symbols;
 		this.tickHandler = handler;
+		this.previousCloseConsumer = previousClose;
 		this.running = true;
 		seedPreviousCloses(symbols.get(), previousClose);
 		connect();
+	}
+
+	/**
+	 * Reconcile subscriptions to the current holdings — subscribe to newly-held tickers (seeding
+	 * their previous close off-thread) and unsubscribe ones no longer held. Called after a portfolio
+	 * change so new positions get live prices without a restart.
+	 */
+	@Override
+	public void resubscribe() {
+		WebSocket s = this.socket;
+		if (!running || s == null || symbolsSupplier == null) {
+			return;
+		}
+		java.util.Set<String> desired = symbolsSupplier.get().stream().filter(java.util.Objects::nonNull)
+				.map(t -> t.trim().toUpperCase()).collect(java.util.stream.Collectors.toSet());
+		java.util.List<String> added = new java.util.ArrayList<>();
+		for (String sym : desired) {
+			if (subscribed.add(sym)) {
+				s.sendText("{\"type\":\"subscribe\",\"symbol\":\"" + sym + "\"}", true);
+				added.add(sym);
+			}
+		}
+		for (String sym : new java.util.HashSet<>(subscribed)) {
+			if (!desired.contains(sym)) {
+				s.sendText("{\"type\":\"unsubscribe\",\"symbol\":\"" + sym + "\"}", true);
+				subscribed.remove(sym);
+			}
+		}
+		if (!added.isEmpty() && previousCloseConsumer != null) {
+			reconnects.execute(() -> seedPreviousCloses(added, previousCloseConsumer));
+		}
+		log.info("Finnhub price feed re-subscribed; +{} now {} symbols", added.size(), subscribed.size());
 	}
 
 	/** (Re)connect and subscribe; on failure schedule a retry so the feed survives drops. */
@@ -71,8 +106,10 @@ public class FinnhubPriceFeed implements PriceFeed {
 					.buildAsync(URI.create("wss://ws.finnhub.io?token=" + apiKey), new Listener(tickHandler))
 					.join();
 			Collection<String> tickers = symbolsSupplier.get();
+			subscribed.clear();
 			for (String symbol : tickers) {
 				socket.sendText("{\"type\":\"subscribe\",\"symbol\":\"" + symbol + "\"}", true);
+				subscribed.add(symbol.trim().toUpperCase());
 			}
 			log.info("Finnhub price feed connected; subscribed to {} symbols", tickers.size());
 		} catch (RuntimeException ex) {

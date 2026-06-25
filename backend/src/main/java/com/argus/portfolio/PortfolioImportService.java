@@ -35,6 +35,7 @@ public class PortfolioImportService {
 	private final PositionLotRepository lots;
 	private final PositionAcbService acbService;
 	private final FxRateService fx;
+	private final org.springframework.context.ApplicationEventPublisher events;
 
 	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
 	// LocalDate/BigDecimal natively for the staged-preview JSON round-trip.
@@ -42,7 +43,8 @@ public class PortfolioImportService {
 
 	public PortfolioImportService(StatementParser parser, LlmStatementParser llmParser,
 			PortfolioImportRepository imports, PositionRepository positions, PositionLotRepository lots,
-			PositionAcbService acbService, FxRateService fx) {
+			PositionAcbService acbService, FxRateService fx,
+			org.springframework.context.ApplicationEventPublisher events) {
 		this.parser = parser;
 		this.llmParser = llmParser;
 		this.imports = imports;
@@ -50,6 +52,7 @@ public class PortfolioImportService {
 		this.lots = lots;
 		this.acbService = acbService;
 		this.fx = fx;
+		this.events = events;
 	}
 
 	/** Parse the uploaded PDF and persist a pending import batch holding the preview. */
@@ -92,6 +95,8 @@ public class PortfolioImportService {
 
 		batch.markConfirmed();
 		imports.save(batch);
+		// Re-subscribe the live price feed to the new tickers (no restart needed).
+		events.publishEvent(new PortfolioChangedEvent());
 		return created.stream().map(PositionView::of).toList();
 	}
 

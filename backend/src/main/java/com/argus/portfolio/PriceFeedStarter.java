@@ -36,6 +36,22 @@ public class PriceFeedStarter {
 		}
 	}
 
+	/**
+	 * After a portfolio change (import confirm, manual edit), reconcile the feed's subscriptions to
+	 * the new holdings and push a fresh snapshot — so new tickers stream live prices without a
+	 * restart. Runs after the committing transaction so the new positions are visible.
+	 */
+	@org.springframework.transaction.event.TransactionalEventListener(
+			phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT,
+			fallbackExecution = true)
+	public void onPortfolioChanged(PortfolioChangedEvent event) {
+		PriceFeed feed = priceFeed.getIfAvailable();
+		if (feed != null) {
+			feed.resubscribe();
+		}
+		live.pushCurrent();
+	}
+
 	@PreDestroy
 	public void stopFeed() {
 		PriceFeed feed = priceFeed.getIfAvailable();
