@@ -203,7 +203,10 @@ public class PortfolioImportService {
 			fxToCad = rate.orElse(null);
 			estimated = rate.isEmpty(); // no rate for that date → flag, await confirm
 		} else {
-			fxToCad = null; // unknown purchase date → can't price the FX
+			// Statements rarely carry a purchase date for long-held positions, so true purchase-time
+			// FX isn't derivable. Estimate the CAD cost at the latest BoC USD/CAD rate (flagged
+			// estimated); the user can set the real purchase date/rate per holding (confirmFx).
+			fxToCad = fx.usdCadOn(LocalDate.now()).orElse(null);
 			estimated = true;
 		}
 		return new PositionLot(positionId, h.shares(), h.costBasis(), currency, h.acquisitionDate(),
