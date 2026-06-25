@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/PageHeader";
 import { AgentFleet } from "@/features/agents/AgentFleet";
 
 /**
@@ -7,11 +8,11 @@ import { AgentFleet } from "@/features/agents/AgentFleet";
 export default function AgentsPage() {
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary lg:text-3xl">Agents</h1>
-        <p className="text-sm text-text-secondary">Your AI fleet, working in real time.</p>
-      </header>
-
+      <PageHeader
+        eyebrow="Operations"
+        title="Agents"
+        subtitle="Your AI fleet, working in real time."
+      />
       <AgentFleet />
     </div>
   );

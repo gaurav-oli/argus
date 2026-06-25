@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentActivity, type PipelineAgent } from "@/components/dashboard/AgentActivity";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { getAgentStatus, type AgentStatus } from "@/lib/apiClient";
@@ -53,7 +54,11 @@ export function AgentFleet() {
           suffix={`/ ${agents.length}`}
           live={online > 0}
         />
-        <StatTile label="Items captured" value={compact(totalCaptured)} suffix="total" />
+        <StatTile
+          label="Items captured"
+          value={<AnimatedNumber value={totalCaptured} format={(n) => compact(Math.round(n))} />}
+          suffix="total"
+        />
         <StatTile
           label="Last activity"
           value={relTime(lastActivity ?? null)}
@@ -84,7 +89,7 @@ function StatTile({
   className,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   suffix?: string;
   live?: boolean;
   className?: string;
@@ -106,7 +111,7 @@ function StatTile({
         <span className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">{label}</span>
       </div>
       <p className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold tabular-nums tracking-tight text-text-primary">{value}</span>
+        <span className="font-display text-2xl font-bold tabular-nums text-text-primary">{value}</span>
         {suffix && <span className="text-xs text-text-secondary">{suffix}</span>}
       </p>
     </div>
@@ -150,7 +155,7 @@ function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
             <span className="font-mono text-[10px] uppercase tracking-wider text-text-secondary">{agent.code}</span>
             <StatusPill active={active} />
           </div>
-          <h3 className="mt-0.5 truncate text-base font-semibold text-text-primary">{agent.name}</h3>
+          <h3 className="mt-0.5 truncate font-display text-base font-semibold text-text-primary">{agent.name}</h3>
         </div>
       </div>
 
@@ -160,9 +165,11 @@ function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
       <div className="flex items-end justify-between border-t border-[var(--hairline)] pt-3.5">
         <div>
           <p className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold tabular-nums tracking-tight text-text-primary">
-              {agent.captured.toLocaleString("en-CA")}
-            </span>
+            <AnimatedNumber
+              value={agent.captured}
+              format={(n) => Math.round(n).toLocaleString("en-CA")}
+              className="font-display text-2xl font-bold tabular-nums text-text-primary"
+            />
             <span className="text-xs text-text-secondary">{agent.captureLabel}</span>
           </p>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">

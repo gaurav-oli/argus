@@ -12,13 +12,14 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-      <div className="flex h-16 items-center gap-2 px-6">
+    <aside className="glass-chrome hidden h-full w-60 shrink-0 flex-col border-r border-[var(--glass-border)] lg:flex">
+      <div className="flex h-16 items-center gap-2.5 px-6">
         <span
           className="inline-block h-2.5 w-2.5 rounded-full bg-accent"
+          style={{ boxShadow: "0 0 12px var(--color-accent), 0 0 4px var(--color-accent)" }}
           aria-hidden
         />
-        <span className="text-lg font-bold tracking-tight text-text-primary">
+        <span className="font-display text-lg font-bold tracking-tight text-text-primary">
           Argus
         </span>
       </div>
@@ -32,10 +33,10 @@ export function Sidebar() {
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 active
-                  ? "bg-accent/10 text-accent"
-                  : "text-text-secondary hover:bg-border/40 hover:text-text-primary",
+                  ? "bg-accent/12 text-accent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-accent)_25%,transparent)]"
+                  : "text-text-secondary hover:bg-[var(--hover-wash)] hover:text-text-primary",
               )}
             >
               <Icon className="h-5 w-5" />

@@ -1,33 +1,22 @@
 "use client";
 
-import { useEffect } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Sensitive } from "@/features/privacy/Sensitive";
-import { useConfetti } from "@/lib/useConfetti";
 import { useMounted } from "@/lib/useMounted";
 import { pct, portfolio, trend, usdPrecise } from "@/lib/mockData";
 
 /**
- * Hero card: total value counts up, the day's move animates in with up/down
- * colour + arrow, a gradient area sparkline sits behind, and a small confetti
- * burst fires once when the day is green. Motion-sensitive users opt out (the
- * confetti lib + the global reduced-motion reset both honour the OS setting).
+ * Hero card: total value counts up, the day's move animates in with up/down colour + arrow, and a
+ * gradient area sparkline sits behind. Motion-sensitive users opt out via the global reduced-motion
+ * reset.
  */
 export function PortfolioHero() {
-  const fire = useConfetti();
   const mounted = useMounted();
   const reduce = useReducedMotion();
   const up = portfolio.dayChange >= 0;
   const accent = up ? "var(--chart-gains)" : "var(--chart-losses)";
-
-  useEffect(() => {
-    if (up) {
-      const t = setTimeout(() => fire(), 700);
-      return () => clearTimeout(t);
-    }
-  }, [up, fire]);
 
   return (
     <div className="relative flex h-full flex-col justify-between">

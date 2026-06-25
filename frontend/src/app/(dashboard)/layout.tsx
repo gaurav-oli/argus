@@ -1,3 +1,4 @@
+import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { BottomStrip } from "@/components/shell/BottomStrip";
 import { RightPanel } from "@/components/shell/RightPanel";
@@ -23,6 +24,7 @@ export default function DashboardLayout({
     <AuthGate>
       <PanicProvider>
       <PrivacyProvider>
+        <AmbientBackground />
         <div className="flex h-dvh overflow-hidden">
           <Sidebar />
 

@@ -1,6 +1,7 @@
 import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
 import { PerformanceGauges } from "@/components/dashboard/PerformanceGauges";
 import { MotionCard } from "@/components/ui/MotionCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { CorporateActions } from "@/features/portfolio/CorporateActions";
 import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatement } from "@/features/portfolio/ImportStatement";
@@ -16,10 +17,11 @@ import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
 export default function PortfolioPage() {
   return (
     <div className="mx-auto max-w-6xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Portfolio</h1>
-        <p className="text-sm text-text-secondary">Value, allocation, and how each position is moving.</p>
-      </header>
+      <PageHeader
+        eyebrow="Holdings"
+        title="Portfolio"
+        subtitle="Value, allocation, and how each position is moving."
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
         <MotionCard index={0} className="md:col-span-6" interactive={false}>

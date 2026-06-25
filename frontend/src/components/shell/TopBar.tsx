@@ -17,7 +17,7 @@ export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface px-4 lg:px-6">
+    <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">
       <div className="flex items-center gap-2 lg:hidden">
         <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" aria-hidden />
         <span className="text-lg font-bold tracking-tight">Argus</span>

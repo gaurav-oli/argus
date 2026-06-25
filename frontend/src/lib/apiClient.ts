@@ -649,3 +649,17 @@ export interface AgentStatus {
 
 export const getAgentStatus = (): Promise<AgentStatus[]> =>
   apiGet<AgentStatus[]>("/api/agents/status");
+
+/** One item in the dashboard Live Alerts feed — composed from real agent output. */
+export interface LiveAlert {
+  id: string;
+  tier: "critical" | "warning" | "info";
+  title: string;
+  body: string;
+  source: string;
+  ticker: string | null;
+  time: string | null;
+}
+
+export const getLiveAlerts = (): Promise<LiveAlert[]> =>
+  apiGet<LiveAlert[]>("/api/alerts/live");
