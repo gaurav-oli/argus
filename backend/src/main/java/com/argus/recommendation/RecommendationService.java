@@ -33,9 +33,16 @@ public class RecommendationService {
 
 	@Transactional(readOnly = true)
 	public List<Recommendation> recent() {
-		List<Recommendation> recs = repository.findTop50ByOrderByCreatedAtDesc();
-		recs.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx for the card
-		return recs;
+		// One current card per ticker. Each trigger (6h review, stranger event) appends a new row, so
+		// the feed would otherwise show the same holding many times; collapse to the latest per ticker.
+		// findTop50…Desc is newest-first, so the first row seen for a ticker is its current view.
+		java.util.Map<String, Recommendation> latestByTicker = new java.util.LinkedHashMap<>();
+		for (Recommendation r : repository.findTop50ByOrderByCreatedAtDesc()) {
+			latestByTicker.putIfAbsent(r.getTicker(), r);
+		}
+		List<Recommendation> current = new java.util.ArrayList<>(latestByTicker.values());
+		current.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx for the card
+		return current;
 	}
 
 	/** A recommendation with its diagnostic signals loaded (Story 6.2). */

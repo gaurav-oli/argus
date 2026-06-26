@@ -64,11 +64,13 @@ public class RecommendationTrigger implements Agent {
 	@Scheduled(cron = "0 0 */6 * * *")
 	public void scheduledReview() {
 		try {
-			for (Position p : positions.findAllByOrderByTickerAsc()) {
-				if (p.getTicker() != null) {
-					trigger(p.getTicker());
-				}
-			}
+			// Distinct tickers, not lots — a holding split across accounts (e.g. TSLA in Cash/TFSA/RRSP)
+			// is one position to recommend on, not four.
+			positions.findAllByOrderByTickerAsc().stream()
+					.map(Position::getTicker)
+					.filter(java.util.Objects::nonNull)
+					.distinct()
+					.forEach(this::trigger);
 		} catch (RuntimeException ex) {
 			log.warn("Scheduled recommendation review failed: {}", ex.getMessage());
 		}
