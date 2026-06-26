@@ -34,15 +34,16 @@ public class RecommendationService {
 	@Transactional(readOnly = true)
 	public List<Recommendation> recent() {
 		// One current card per ticker. Each trigger (6h review, stranger event) appends a new row, so
-		// the feed would otherwise show the same holding many times; collapse to the latest per ticker.
-		// findTop50…Desc is newest-first, so the first row seen for a ticker is its current view.
-		java.util.Map<String, Recommendation> latestByTicker = new java.util.LinkedHashMap<>();
+		// the feed would otherwise show the same holding many times. Among a ticker's recent rows show
+		// the RICHEST one — most agent signals — with newest as the tiebreaker, so a thin rec (e.g. a
+		// burst where one trigger only caught news) never hides the complete analysis beside it.
+		java.util.Map<String, Recommendation> bestByTicker = new java.util.LinkedHashMap<>();
 		for (Recommendation r : repository.findTop50ByOrderByCreatedAtDesc()) {
-			latestByTicker.putIfAbsent(r.getTicker(), r);
+			r.getSignals().size(); // initialize the diagnostic within the tx
+			bestByTicker.merge(r.getTicker(), r,
+					(newer, older) -> older.getSignals().size() > newer.getSignals().size() ? older : newer);
 		}
-		List<Recommendation> current = new java.util.ArrayList<>(latestByTicker.values());
-		current.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx for the card
-		return current;
+		return new java.util.ArrayList<>(bestByTicker.values());
 	}
 
 	/** A recommendation with its diagnostic signals loaded (Story 6.2). */
