@@ -645,20 +645,23 @@ export const sendPortfolioChat = (
 
 // ---- Agents / Operations dashboard (Epic 9, Story 9.1) ----
 
-/** Live status of one agent in the fleet. */
+/** Live status of one agent in the fleet (architecture's 7-agent roster). */
 export interface AgentStatus {
   id: string;
   code: string;
   name: string;
   description: string;
-  status: "ACTIVE" | "IDLE";
+  /** ACTIVE/IDLE = built & running; PARTIAL = MVP subsystem; PLANNED = roadmap (not built). */
+  status: "ACTIVE" | "IDLE" | "PARTIAL" | "PLANNED";
   captured: number;
   captureLabel: string;
   /** ISO instant of the most-recent capture, or null if it has never run. */
   lastActivity: string | null;
   schedule: string;
-  /** Optional data-source/degradation note, or null. */
+  /** Optional data-source/spend hint, or null. */
   note: string | null;
+  /** Roadmap phase for not-yet-built agents (e.g. "Phase 2"), or null. */
+  phase: string | null;
 }
 
 export const getAgentStatus = (): Promise<AgentStatus[]> =>

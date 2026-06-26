@@ -120,10 +120,12 @@ function StatTile({
 
 function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
   const active = agent.status === "ACTIVE";
+  const planned = agent.status === "PLANNED";
+  const partial = agent.status === "PARTIAL";
   const num = agent.code.replace(/[^0-9]/g, "");
 
   return (
-    <MotionCard index={index} className="flex flex-col gap-4">
+    <MotionCard index={index} interactive={!planned} className={cn("flex flex-col gap-4", planned && "opacity-60")}>
       {/* status accent line */}
       <span
         className={cn(
@@ -153,7 +155,7 @@ function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-text-secondary">{agent.code}</span>
-            <StatusPill active={active} />
+            <StatusPill status={agent.status} />
           </div>
           <h3 className="mt-0.5 truncate font-display text-base font-semibold text-text-primary">{agent.name}</h3>
         </div>
@@ -162,46 +164,61 @@ function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
       <p className="text-sm leading-relaxed text-text-secondary">{agent.description}</p>
 
       {/* metrics */}
-      <div className="flex items-end justify-between border-t border-[var(--hairline)] pt-3.5">
-        <div>
-          <p className="flex items-baseline gap-1.5">
-            <AnimatedNumber
-              value={agent.captured}
-              format={(n) => Math.round(n).toLocaleString("en-CA")}
-              className="font-display text-2xl font-bold tabular-nums text-text-primary"
-            />
-            <span className="text-xs text-text-secondary">{agent.captureLabel}</span>
-          </p>
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">
-            <ClockIcon />
-            <span>
-              last run <span className="text-text-primary">{relTime(agent.lastActivity)}</span>
-            </span>
-          </p>
+      {planned ? (
+        <div className="flex items-center justify-between border-t border-[var(--hairline)] pt-3.5 text-xs text-text-secondary">
+          <span>Not yet built — on the roadmap.</span>
+          <Chip>{agent.phase ?? "Planned"}</Chip>
         </div>
-        <Chip>{agent.schedule}</Chip>
-      </div>
+      ) : (
+        <div className="flex items-end justify-between border-t border-[var(--hairline)] pt-3.5">
+          <div>
+            {partial ? (
+              <p className="font-display text-lg font-semibold text-text-primary">{agent.note ?? "Subsystem"}</p>
+            ) : (
+              <>
+                <p className="flex items-baseline gap-1.5">
+                  <AnimatedNumber
+                    value={agent.captured}
+                    format={(n) => Math.round(n).toLocaleString("en-CA")}
+                    className="font-display text-2xl font-bold tabular-nums text-text-primary"
+                  />
+                  <span className="text-xs text-text-secondary">{agent.captureLabel}</span>
+                </p>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">
+                  <ClockIcon />
+                  <span>
+                    last run <span className="text-text-primary">{relTime(agent.lastActivity)}</span>
+                  </span>
+                </p>
+              </>
+            )}
+          </div>
+          <Chip>{partial ? agent.phase ?? "MVP" : agent.schedule}</Chip>
+        </div>
+      )}
 
-      {agent.note && <NoteLine note={agent.note} />}
+      {!partial && !planned && agent.note && <NoteLine note={agent.note} />}
     </MotionCard>
   );
 }
 
-function StatusPill({ active }: { active: boolean }) {
+function StatusPill({ status }: { status: AgentStatus["status"] }) {
+  const map = {
+    ACTIVE: { label: "Active", cls: "bg-gains/10 text-gains", dot: "bg-gains" },
+    IDLE: { label: "Idle", cls: "bg-border/40 text-text-secondary", dot: "bg-text-secondary/60" },
+    PARTIAL: { label: "Subsystem", cls: "bg-warning/10 text-warning", dot: "bg-warning" },
+    PLANNED: { label: "Planned", cls: "bg-border/40 text-text-secondary", dot: "bg-text-secondary/40" },
+  } as const;
+  const s = map[status];
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-        active ? "bg-gains/10 text-gains" : "bg-border/40 text-text-secondary",
+        s.cls,
       )}
     >
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          active ? "bg-gains" : "bg-text-secondary/60",
-        )}
-      />
-      {active ? "Active" : "Idle"}
+      <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />
+      {s.label}
     </span>
   );
 }
