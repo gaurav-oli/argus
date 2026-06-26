@@ -704,3 +704,20 @@ export interface TickerSentiment {
 
 export const getSocialSentiment = (): Promise<TickerSentiment[]> =>
   apiGet<TickerSentiment[]>("/api/social/sentiment");
+
+// ---- Agent 4 — Financial Reports (SEC insider activity) ----
+
+/** One insider (Form 4) transaction. */
+export interface InsiderActivity {
+  ticker: string;
+  insiderName: string | null;
+  insiderTitle: string | null;
+  transactionType: "BUY" | "SELL" | "GRANT" | "OTHER";
+  shares: number | null;
+  value: number | null;
+  filedAt: string | null;
+  url: string | null;
+}
+
+export const getInsiderActivity = (): Promise<InsiderActivity[]> =>
+  apiGet<InsiderActivity[]>("/api/sec/insider");

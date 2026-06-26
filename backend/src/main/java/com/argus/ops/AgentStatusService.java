@@ -6,6 +6,7 @@ import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
 import com.argus.recommendation.RecommendationRepository;
+import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
 import java.time.Instant;
 import java.util.List;
@@ -29,14 +30,15 @@ public class AgentStatusService {
 	private final RecommendationRepository recommendations;
 	private final CalendarEventRepository calendar;
 	private final SocialPostRepository social;
+	private final SecFilingRepository sec;
 	private final CostRecorder cost;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
 	public AgentStatusService(NewsArticleRepository news, SourceCredibilityRepository credibility,
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
-			CalendarEventRepository calendar, SocialPostRepository social, CostRecorder cost,
-			@Value("${argus.finnhub.api-key:}") String finnhubKey,
+			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
+			CostRecorder cost, @Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
 		this.credibility = credibility;
@@ -44,6 +46,7 @@ public class AgentStatusService {
 		this.recommendations = recommendations;
 		this.calendar = calendar;
 		this.social = social;
+		this.sec = sec;
 		this.cost = cost;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
@@ -67,8 +70,10 @@ public class AgentStatusService {
 						redditEnabled ? "StockTwits + Reddit live" : "StockTwits live · Reddit needs API keys"),
 				planned("internet", "Agent 3", "Internet Intelligence",
 						"Broad web monitoring beyond curated feeds.", "Phase 3"),
-				planned("filings", "Agent 4", "Financial Reports",
-						"SEC filings + insider Form 4 parsing.", "Phase 2"),
+				active("filings", "Agent 4", "Financial Reports",
+						"Watches SEC EDGAR for insider activity (Form 4) on your holdings — open-market "
+								+ "purchases vs sales — and feeds Agent 5.",
+						sec.count(), "filings", sec.latestIngestedAt(), "every 6h", null),
 				active("recommender", "Agent 5", "Recommender",
 						"The only agent that recommends — fuses agent signals into auditable, "
 								+ "probability-scored forecasts via a graduation state machine.",

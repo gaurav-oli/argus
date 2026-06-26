@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  getInsiderActivity,
   getNewsFeed,
   getSocialSentiment,
   getSourceCredibility,
   getStrangerAlerts,
+  type InsiderActivity,
   type NewsItem,
   type SentimentLabel,
   type SourceCredibilityItem,
@@ -27,6 +29,7 @@ export function IntelligenceView() {
   const [sources, setSources] = useState<SourceCredibilityItem[] | null>(null);
   const [strangers, setStrangers] = useState<StrangerAlertItem[] | null>(null);
   const [social, setSocial] = useState<TickerSentiment[] | null>(null);
+  const [insider, setInsider] = useState<InsiderActivity[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +41,7 @@ export function IntelligenceView() {
     load(getSourceCredibility, setSources);
     load(getStrangerAlerts, setStrangers);
     load(getSocialSentiment, setSocial);
+    load(getInsiderActivity, setInsider);
     return () => {
       active = false;
     };
@@ -55,6 +59,7 @@ export function IntelligenceView() {
       <RecommendationCards />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
       <SocialSection items={social} />
+      <InsiderSection items={insider} />
       <NewsSection items={news} />
       <SourceSection items={sources} />
       </div>
@@ -103,6 +108,51 @@ function SocialSection({ items }: { items: TickerSentiment[] | null }) {
             </li>
           );
         })}
+      </ul>
+    </Card>
+  );
+}
+
+function InsiderSection({ items }: { items: InsiderActivity[] | null }) {
+  if (items === null) {
+    return (
+      <Card title="Insider activity · Agent 4">
+        <Skeleton className="h-20 w-full" />
+      </Card>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <Card title="Insider activity · Agent 4">
+        <p className="text-sm text-text-secondary">
+          No recent insider filings — Agent 4 watches SEC EDGAR Form 4s on your holdings (refreshes every ~6h).
+        </p>
+      </Card>
+    );
+  }
+  const tone = (t: string) =>
+    t === "BUY" ? "var(--color-gains)" : t === "SELL" ? "var(--color-losses)" : "var(--color-text-secondary)";
+  const fmtShares = (n: number | null) => (n == null ? "" : `${Math.round(n).toLocaleString()} sh`);
+  return (
+    <Card title="Insider activity · Agent 4" count={items.length}>
+      <ul className="flex flex-col divide-y divide-border/50">
+        {items.slice(0, 12).map((x, i) => (
+          <li key={i} className="flex items-center gap-3 py-2 text-sm">
+            <span className="w-12 shrink-0 font-mono font-semibold text-text-primary">{x.ticker}</span>
+            <span
+              className="w-14 shrink-0 text-xs font-semibold uppercase"
+              style={{ color: tone(x.transactionType) }}
+            >
+              {x.transactionType}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-text-secondary">
+              <span className="text-text-primary">{x.insiderName ?? "—"}</span>
+              {x.insiderTitle && <span className="ml-1.5 text-xs">· {x.insiderTitle}</span>}
+            </span>
+            <span className="shrink-0 font-mono text-[11px] text-text-secondary">{fmtShares(x.shares)}</span>
+            <span className="w-20 shrink-0 text-right font-mono text-[11px] text-text-secondary">{x.filedAt}</span>
+          </li>
+        ))}
       </ul>
     </Card>
   );

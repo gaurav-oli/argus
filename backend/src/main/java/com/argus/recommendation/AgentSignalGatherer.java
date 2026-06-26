@@ -5,9 +5,12 @@ import com.argus.calendar.QuietPeriodStatus;
 import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentLabel;
+import com.argus.sec.SecFiling;
+import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,14 +34,18 @@ public class AgentSignalGatherer {
 	/** Crowd sentiment is noisier than curated news — cap its max influence below Agent 1's. */
 	private static final double SOCIAL_MAX_WEIGHT = 0.6;
 
+	private static final int INSIDER_WINDOW_DAYS = 30;
+
 	private final NewsArticleRepository news;
 	private final SocialPostRepository social;
+	private final SecFilingRepository sec;
 	private final EarningsQuietPeriodService quietPeriod;
 
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
-			EarningsQuietPeriodService quietPeriod) {
+			SecFilingRepository sec, EarningsQuietPeriodService quietPeriod) {
 		this.news = news;
 		this.social = social;
+		this.sec = sec;
 		this.quietPeriod = quietPeriod;
 	}
 
@@ -46,8 +53,32 @@ public class AgentSignalGatherer {
 		List<AgentSignal> signals = new ArrayList<>();
 		newsSignal(ticker).ifPresent(signals::add);
 		socialSignal(ticker).ifPresent(signals::add);
+		insiderSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
 		return signals;
+	}
+
+	/**
+	 * Agent 4 — insider (Form 4) activity. Open-market PURCHASES are a strong bullish signal (rare,
+	 * high conviction); SALES are common and routine, so they read mildly bearish at low weight.
+	 */
+	private Optional<AgentSignal> insiderSignal(String ticker) {
+		List<SecFiling> filings = sec.findByTickerAndTransactionTypeInAndFiledAtAfter(ticker,
+				List.of("BUY", "SELL"), LocalDate.now().minusDays(INSIDER_WINDOW_DAYS));
+		long buys = filings.stream().filter(f -> "BUY".equals(f.getTransactionType())).count();
+		long sells = filings.stream().filter(f -> "SELL".equals(f.getTransactionType())).count();
+		if (buys == 0 && sells == 0) {
+			return Optional.empty();
+		}
+		if (buys > 0) {
+			double weight = Math.min(0.8, 0.4 + 0.2 * buys);
+			String rationale = buys + " insider purchase(s) in " + INSIDER_WINDOW_DAYS + "d"
+					+ (sells > 0 ? ", " + sells + " sale(s)" : "");
+			return Optional.of(new AgentSignal("agent-4-financial", SignalDirection.BULLISH, weight, rationale));
+		}
+		double weight = Math.min(0.35, 0.1 + 0.05 * sells); // sales are noisy → low influence
+		return Optional.of(new AgentSignal("agent-4-financial", SignalDirection.BEARISH, weight,
+				sells + " insider sale(s) in " + INSIDER_WINDOW_DAYS + "d (often routine)"));
 	}
 
 	/** Agent 2 — crowd sentiment: net bullish/bearish skew, weighted by post volume and conviction. */
