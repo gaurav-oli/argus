@@ -689,3 +689,18 @@ export interface OpsSummary {
 }
 
 export const getOpsSummary = (): Promise<OpsSummary> => apiGet<OpsSummary>("/api/ops/summary");
+
+// ---- Agent 2 — Social Media Intelligence ----
+
+/** Crowd sentiment for one ticker over the recent window (StockTwits/Reddit). */
+export interface TickerSentiment {
+  ticker: string;
+  bullish: number;
+  bearish: number;
+  neutral: number;
+  total: number;
+  mood: "Bullish" | "Bearish" | "Mixed";
+}
+
+export const getSocialSentiment = (): Promise<TickerSentiment[]> =>
+  apiGet<TickerSentiment[]>("/api/social/sentiment");

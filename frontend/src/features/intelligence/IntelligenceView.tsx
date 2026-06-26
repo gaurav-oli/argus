@@ -2,12 +2,14 @@
 
 import {
   getNewsFeed,
+  getSocialSentiment,
   getSourceCredibility,
   getStrangerAlerts,
   type NewsItem,
   type SentimentLabel,
   type SourceCredibilityItem,
   type StrangerAlertItem,
+  type TickerSentiment,
 } from "@/lib/apiClient";
 import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -24,6 +26,7 @@ export function IntelligenceView() {
   const [news, setNews] = useState<NewsItem[] | null>(null);
   const [sources, setSources] = useState<SourceCredibilityItem[] | null>(null);
   const [strangers, setStrangers] = useState<StrangerAlertItem[] | null>(null);
+  const [social, setSocial] = useState<TickerSentiment[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +37,7 @@ export function IntelligenceView() {
     load(getNewsFeed, setNews);
     load(getSourceCredibility, setSources);
     load(getStrangerAlerts, setStrangers);
+    load(getSocialSentiment, setSocial);
     return () => {
       active = false;
     };
@@ -42,18 +46,65 @@ export function IntelligenceView() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Agent 1 · News"
+        eyebrow="Agents 1 & 2"
         title="Intelligence"
-        subtitle="News, sentiment, source trust, and pump-and-dump watch."
+        subtitle="News, sentiment, source trust, social chatter, and pump-and-dump watch."
       />
 
       <div className="flex flex-col gap-6">
       <RecommendationCards />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
+      <SocialSection items={social} />
       <NewsSection items={news} />
       <SourceSection items={sources} />
       </div>
     </div>
+  );
+}
+
+function SocialSection({ items }: { items: TickerSentiment[] | null }) {
+  if (items === null) {
+    return (
+      <Card title="Social sentiment · Agent 2">
+        <Skeleton className="h-24 w-full" />
+      </Card>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <Card title="Social sentiment · Agent 2">
+        <p className="text-sm text-text-secondary">
+          No social posts yet — Agent 2 tracks StockTwits chatter on your holdings (gathers every ~10 min).
+        </p>
+      </Card>
+    );
+  }
+  const moodColor = (m: string) =>
+    m === "Bullish" ? "var(--color-gains)" : m === "Bearish" ? "var(--color-losses)" : "var(--color-text-secondary)";
+  return (
+    <Card title="Social sentiment · Agent 2" count={items.length}>
+      <ul className="flex flex-col gap-3">
+        {items.map((t) => {
+          const scored = t.bullish + t.bearish;
+          const bullPct = scored === 0 ? 50 : Math.round((t.bullish / scored) * 100);
+          return (
+            <li key={t.ticker} className="flex items-center gap-3">
+              <span className="w-14 shrink-0 font-mono text-sm font-semibold text-text-primary">{t.ticker}</span>
+              <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[var(--hairline)]">
+                <div className="h-full bg-gains" style={{ width: `${bullPct}%` }} />
+                <div className="h-full bg-losses" style={{ width: `${100 - bullPct}%` }} />
+              </div>
+              <span className="w-28 shrink-0 text-right font-mono text-[11px] text-text-secondary">
+                {t.bullish}▲ {t.bearish}▼ · {t.total}
+              </span>
+              <span className="w-16 shrink-0 text-right text-xs font-semibold" style={{ color: moodColor(t.mood) }}>
+                {t.mood}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

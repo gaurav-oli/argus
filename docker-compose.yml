@@ -84,6 +84,12 @@ services:
       # empty string — the beans use @ConditionalOnExpression to require a NON-EMPTY value, so empty
       # safely means "off" (degrade to free GDELT/RSS), matching the no-key design.
       ARGUS_FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      # Agent 2 (social). StockTwits works with no key; the token just raises its rate limit. Reddit
+      # is key-gated (RedditSource requires a non-empty client id). Relaxed-binding aliases.
+      ARGUS_STOCKTWITS_ACCESS_TOKEN: ${STOCKTWITS_ACCESS_TOKEN:-}
+      ARGUS_REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      ARGUS_REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+      ARGUS_REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-Argus/1.0}
       # Browser origins allowed to call the API (CORS). On the Mini = the tailnet host, since
       # tailscale serve makes same-origin POSTs look cross-origin to the backend (Story 2.1).
       ARGUS_WEB_ALLOWED_ORIGINS: ${ARGUS_WEB_ALLOWED_ORIGINS:-http://localhost:3000}

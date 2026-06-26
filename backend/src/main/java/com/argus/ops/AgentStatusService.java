@@ -6,6 +6,7 @@ import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
 import com.argus.recommendation.RecommendationRepository;
+import com.argus.social.SocialPostRepository;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,20 +28,25 @@ public class AgentStatusService {
 	private final StrangerAlertRepository stranger;
 	private final RecommendationRepository recommendations;
 	private final CalendarEventRepository calendar;
+	private final SocialPostRepository social;
 	private final CostRecorder cost;
 	private final boolean finnhubEnabled;
+	private final boolean redditEnabled;
 
 	public AgentStatusService(NewsArticleRepository news, SourceCredibilityRepository credibility,
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
-			CalendarEventRepository calendar, CostRecorder cost,
-			@Value("${argus.finnhub.api-key:}") String finnhubKey) {
+			CalendarEventRepository calendar, SocialPostRepository social, CostRecorder cost,
+			@Value("${argus.finnhub.api-key:}") String finnhubKey,
+			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
 		this.credibility = credibility;
 		this.stranger = stranger;
 		this.recommendations = recommendations;
 		this.calendar = calendar;
+		this.social = social;
 		this.cost = cost;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
+		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
 
 	/** The current status of every agent in the fleet, in roster order. */
@@ -54,8 +60,11 @@ public class AgentStatusService {
 						"Ingests market news (Finnhub/GDELT/RSS), tags ticker relevance, scores source "
 								+ "credibility, and runs the Stranger Danger pump-and-dump watch.",
 						news.count(), "articles", news.latestIngestedAt(), "≤5 min · market hours", agent1Note),
-				planned("social", "Agent 2", "Social Media Intelligence",
-						"StockTwits + Reddit sentiment, every 2–5 min.", "Phase 2"),
+				active("social", "Agent 2", "Social Media Intelligence",
+						"Tracks crowd sentiment on your holdings from StockTwits (and Reddit when keyed), "
+								+ "tagging each post bullish/bearish.",
+						social.count(), "posts", social.latestIngestedAt(), "≤10 min",
+						redditEnabled ? "StockTwits + Reddit live" : "StockTwits live · Reddit needs API keys"),
 				planned("internet", "Agent 3", "Internet Intelligence",
 						"Broad web monitoring beyond curated feeds.", "Phase 3"),
 				planned("filings", "Agent 4", "Financial Reports",
