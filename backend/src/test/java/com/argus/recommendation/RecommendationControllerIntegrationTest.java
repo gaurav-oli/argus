@@ -69,7 +69,7 @@ class RecommendationControllerIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].ticker").value("AAPL"))
 				.andExpect(jsonPath("$[0].direction").value("BULLISH"))
-				.andExpect(jsonPath("$[0].badge").value("UNVALIDATED")) // fresh agent = SHADOW
+				.andExpect(jsonPath("$[0].badge").value("UNPROVEN")) // fresh agent = SHADOW
 				.andExpect(jsonPath("$[0].blackSwanActive").value(false))
 				.andExpect(jsonPath("$[0].signals.length()").value(2));
 	}

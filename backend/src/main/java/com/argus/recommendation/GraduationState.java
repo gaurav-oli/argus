@@ -24,7 +24,7 @@ public enum GraduationState {
 	/** The badge to show on cards from this state, or null when none applies. */
 	public String badge() {
 		return switch (this) {
-			case PROBATION, SHADOW -> "UNVALIDATED";
+			case PROBATION, SHADOW -> "UNPROVEN";
 			case FROZEN -> "FROZEN";
 			case ACTIVE -> null;
 		};

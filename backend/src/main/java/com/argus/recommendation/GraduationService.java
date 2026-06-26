@@ -34,10 +34,26 @@ public class GraduationService {
 		this.trades = trades;
 	}
 
+	/** Agent 5's trust posture for the UI: state, badge, and the real track record behind it. */
+	public record GraduationSummary(String state, String badge, boolean canRecommend, long trades,
+			int winRatePct, long tradesToValidated) {
+	}
+
 	@Transactional(readOnly = true)
 	public GraduationState currentState() {
 		return graduation.findById(AgentGraduation.SINGLETON_ID)
 				.map(AgentGraduation::getState).orElse(GraduationState.SHADOW);
+	}
+
+	/** State + track record, so the "UNPROVEN" badge can be shown with honest context. */
+	@Transactional(readOnly = true)
+	public GraduationSummary summary() {
+		GraduationState state = currentState();
+		long total = trades.count();
+		long wins = trades.countByWonTrue();
+		int pct = total == 0 ? 0 : (int) Math.round(100.0 * wins / total);
+		return new GraduationSummary(state.name(), state.badge(), state.canRecommend(), total, pct,
+				Math.max(0, ACTIVE_TRADES - total));
 	}
 
 	/** Record a recommendation outcome and re-evaluate the state. Returns the (possibly new) state. */

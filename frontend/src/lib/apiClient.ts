@@ -765,3 +765,16 @@ export interface PersonaTake {
 
 export const getPersonas = (recommendationId: number): Promise<PersonaTake[]> =>
   apiGet<PersonaTake[]>(`/api/recommendations/${recommendationId}/personas`);
+
+/** Agent 5's trust posture + track record behind the UNPROVEN/validated badge. */
+export interface GraduationSummary {
+  state: string;
+  badge: string | null;
+  canRecommend: boolean;
+  trades: number;
+  winRatePct: number;
+  tradesToValidated: number;
+}
+
+export const getGraduation = (): Promise<GraduationSummary> =>
+  apiGet<GraduationSummary>("/api/recommendations/graduation");

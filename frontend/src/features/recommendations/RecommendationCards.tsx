@@ -2,8 +2,10 @@
 
 import {
   decideRecommendation,
+  getGraduation,
   getPersonas,
   getRecommendations,
+  type GraduationSummary,
   type PersonaTake,
   type RecommendationCard as Card,
   type SignalView,
@@ -19,12 +21,16 @@ import { useEffect, useState } from "react";
  */
 export function RecommendationCards() {
   const [cards, setCards] = useState<Card[] | null>(null);
+  const [grad, setGrad] = useState<GraduationSummary | null>(null);
 
   useEffect(() => {
     let active = true;
     getRecommendations()
       .then((c) => active && setCards(c))
       .catch(() => active && setCards([]));
+    getGraduation()
+      .then((g) => active && setGrad(g))
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -43,9 +49,18 @@ export function RecommendationCards() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-        Recommendations · Agent 5
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+          Recommendations · Agent 5
+        </h2>
+        {grad && grad.badge && (
+          <p className="text-[11px] text-text-secondary">
+            <span className="font-medium text-text-primary">{prettyState(grad.state)}</span> — building a track
+            record: {grad.trades} confirmed trade{grad.trades === 1 ? "" : "s"}
+            {grad.trades > 0 && <> · {grad.winRatePct}% win rate</>} · validates after a proven win rate
+          </p>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {cards.map((c) => (
           <ForecastCard key={c.id} card={c} onDecided={(id) => setCards((cs) => cs?.filter((x) => x.id !== id) ?? null)} />
@@ -89,7 +104,14 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
               {card.direction === "BULLISH" ? "▲ Bullish" : "▼ Bearish"}
             </span>
             {card.badge && (
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${card.badge === "FROZEN" ? "bg-losses/15 text-losses" : "bg-warning/15 text-warning"}`}>
+              <span
+                title={
+                  card.badge === "FROZEN"
+                    ? "Agent 5 is paused after a run of poor calls — under review."
+                    : "Agent 5 hasn't built a track record yet — recommendations stay UNPROVEN until enough confirmed outcomes validate its win rate. It's honest, not a defect."
+                }
+                className={`cursor-help rounded px-1.5 py-0.5 text-[10px] font-medium ${card.badge === "FROZEN" ? "bg-losses/15 text-losses" : "bg-border/60 text-text-secondary"}`}
+              >
                 {card.badge}
               </span>
             )}
@@ -228,6 +250,17 @@ function PersonaTakes({ recId }: { recId: number }) {
       )}
     </div>
   );
+}
+
+function prettyState(state: string): string {
+  switch (state) {
+    case "ACTIVE":
+      return "Validated";
+    case "FROZEN":
+      return "Paused";
+    default:
+      return "Unproven"; // SHADOW / PROBATION
+  }
 }
 
 function stanceColor(stance: string): string {

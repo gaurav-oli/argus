@@ -62,7 +62,7 @@ class GraduationServiceTest {
 
 	@Test
 	void badgesAndRecommendability() {
-		assertEquals("UNVALIDATED", GraduationState.PROBATION.badge());
+		assertEquals("UNPROVEN", GraduationState.PROBATION.badge());
 		assertEquals("FROZEN", GraduationState.FROZEN.badge());
 		assertEquals(true, GraduationState.ACTIVE.canRecommend());
 		assertEquals(false, GraduationState.SHADOW.canRecommend());

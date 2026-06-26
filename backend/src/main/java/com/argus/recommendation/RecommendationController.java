@@ -44,6 +44,11 @@ public class RecommendationController {
 		return recommendations.recent().stream().map(r -> RecommendationCard.from(r, state, blackSwan)).toList();
 	}
 
+	@GetMapping("/graduation")
+	public GraduationService.GraduationSummary graduation() {
+		return graduation.summary();
+	}
+
 	@GetMapping("/{id}")
 	public RecommendationCard get(@PathVariable Long id) {
 		return recommendations.diagnostic(id)
