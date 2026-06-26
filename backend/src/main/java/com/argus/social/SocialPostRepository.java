@@ -27,4 +27,11 @@ public interface SocialPostRepository extends JpaRepository<SocialPost, Long> {
 			from SocialPost p where p.postedAt > :since
 			group by p.ticker, p.sentimentLabel""")
 	List<Object[]> sentimentCountsSince(Instant since);
+
+	/** Per-sentiment counts for one ticker since {@code since} — Agent 5's social signal input. */
+	@Query("""
+			select p.sentimentLabel, count(p)
+			from SocialPost p where p.ticker = :ticker and p.postedAt > :since
+			group by p.sentimentLabel""")
+	List<Object[]> sentimentCountsForTicker(String ticker, Instant since);
 }

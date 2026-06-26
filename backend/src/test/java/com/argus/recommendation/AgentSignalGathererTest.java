@@ -13,6 +13,7 @@ import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentAnalysis;
 import com.argus.intelligence.SentimentLabel;
+import com.argus.social.SocialPostRepository;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -22,8 +23,9 @@ import org.junit.jupiter.api.Test;
 class AgentSignalGathererTest {
 
 	private final NewsArticleRepository news = mock(NewsArticleRepository.class);
+	private final SocialPostRepository social = mock(SocialPostRepository.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
-	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, quietPeriod);
+	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, quietPeriod);
 
 	private static NewsArticle analyzed(SentimentLabel label, double score, double relevance) {
 		NewsArticle a = new NewsArticle("Reuters", "id" + Math.random(), "u", "h", "s",
