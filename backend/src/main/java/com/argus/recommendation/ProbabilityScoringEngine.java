@@ -11,8 +11,10 @@ import org.springframework.stereotype.Component;
  * comes from an LLM</b>, and every output is traceable to its input {@link Contribution}s.
  *
  * <ul>
- *   <li><b>Probability</b> = bullish weight ÷ (bullish + bearish weight). Neutral signals abstain. With
- *       no directional signal the probability is 0.5 (maximum uncertainty).</li>
+ *   <li><b>Probability</b> = bullish weight ÷ (bullish + bearish weight), <b>shrunk toward 0.5 by a
+ *       neutral prior</b> so thin evidence reads as near-50/50 rather than a false 100%. One weak
+ *       signal nudges the odds; only broad, strong, consistent signals approach the extremes. With no
+ *       directional signal the probability is exactly 0.5 (maximum uncertainty).</li>
  *   <li><b>Confidence</b> = agreement × (0.4 + 0.6 × coverage), where <i>agreement</i> is the directional
  *       consensus |bull − bear| ÷ (bull + bear) and <i>coverage</i> is how many of the 7 agents weighed
  *       in. Conflicting signals drive confidence toward 0; broad consensus drives it toward 1.</li>
@@ -23,6 +25,14 @@ public class ProbabilityScoringEngine {
 
 	/** The full agent fleet — coverage is measured against this (FR-13's "7-agent" signal dots). */
 	static final int EXPECTED_AGENTS = 7;
+
+	/**
+	 * Pseudo-weight of neutral prior evidence pinned at 0.5. Acts as Bayesian shrinkage: the bull
+	 * probability only departs from 50/50 as the real directional weight grows past this. Tuned so a
+	 * lone mid-strength signal lands ~60–67% (a nudge), while several strong consistent signals can
+	 * still reach the 80s.
+	 */
+	static final double NEUTRAL_PRIOR = 1.0;
 
 	public ProbabilityScore score(List<AgentSignal> signals) {
 		double bullScore = 0;
@@ -42,7 +52,8 @@ public class ProbabilityScoringEngine {
 		}
 
 		double directional = bullScore + bearScore;
-		double bullProbability = directional == 0 ? 0.5 : bullScore / directional;
+		// Shrink toward 0.5 with a neutral prior so a single thin signal isn't reported as 100%.
+		double bullProbability = (bullScore + NEUTRAL_PRIOR * 0.5) / (directional + NEUTRAL_PRIOR);
 		double agreement = directional == 0 ? 0 : Math.abs(bullScore - bearScore) / directional;
 		double coverage = Math.min(1.0, (double) directionalCount / EXPECTED_AGENTS);
 		double confidence = clamp01(agreement * (0.4 + 0.6 * coverage));

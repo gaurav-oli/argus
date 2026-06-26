@@ -28,6 +28,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class AgentSignalGatherer {
 
+	private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AgentSignalGatherer.class);
+
 	private static final Duration NEWS_WINDOW = Duration.ofDays(7);
 	private static final int FULL_COVERAGE_ARTICLES = 5;
 	private static final Duration SOCIAL_WINDOW = Duration.ofDays(3);
@@ -66,6 +68,8 @@ public class AgentSignalGatherer {
 		insiderSignal(ticker).ifPresent(signals::add);
 		internetSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
+		log.info("gather({}) → [{}]", ticker,
+				signals.stream().map(AgentSignal::agent).reduce((a, b) -> a + "," + b).orElse("NONE"));
 		return signals;
 	}
 

@@ -16,14 +16,25 @@ class ProbabilityScoringEngineTest {
 	}
 
 	@Test
-	void unanimousBullishGivesFullBullProbability() {
+	void unanimousBullishIsStrongButShyOfCertainty() {
 		ProbabilityScore s = engine.score(List.of(
 				signal("a1", SignalDirection.BULLISH, 1),
 				signal("a2", SignalDirection.BULLISH, 1),
 				signal("a7", SignalDirection.BULLISH, 1)));
-		assertEquals(1.0, s.bullProbability(), 1e-9);
-		assertEquals(0.0, s.bearProbability(), 1e-9);
+		// (3 + 0.5) / (3 + 1) = 0.875 — strong, but the neutral prior keeps it off a false 100%.
+		assertEquals(0.875, s.bullProbability(), 1e-9);
+		assertEquals(0.125, s.bearProbability(), 1e-9);
 		assertTrue(s.confidence() > 0.6, "unanimous + decent coverage ⇒ high confidence");
+	}
+
+	@Test
+	void aSingleThinSignalOnlyNudgesOffFiftyFifty() {
+		ProbabilityScore s = engine.score(List.of(signal("a1", SignalDirection.BULLISH, 1)));
+		// (1 + 0.5) / (1 + 1) = 0.75 — one mid-weight signal, not "100% bull".
+		assertEquals(0.75, s.bullProbability(), 1e-9);
+		// A faint signal barely moves it: (0.2 + 0.5) / (0.2 + 1) ≈ 0.583.
+		assertEquals(0.5833333, engine.score(List.of(signal("a1", SignalDirection.BULLISH, 0.2)))
+				.bullProbability(), 1e-6);
 	}
 
 	@Test
@@ -40,7 +51,8 @@ class ProbabilityScoringEngineTest {
 		ProbabilityScore s = engine.score(List.of(
 				signal("a1", SignalDirection.BULLISH, 3),
 				signal("a4", SignalDirection.BEARISH, 1)));
-		assertEquals(0.75, s.bullProbability(), 1e-9);
+		// (3 + 0.5) / (4 + 1) = 0.70 — bull-leaning in proportion to the weights, prior-shrunk.
+		assertEquals(0.7, s.bullProbability(), 1e-9);
 		assertEquals(3.0, s.bullScore(), 1e-9);
 		assertEquals(1.0, s.bearScore(), 1e-9);
 	}
@@ -50,7 +62,8 @@ class ProbabilityScoringEngineTest {
 		ProbabilityScore s = engine.score(List.of(
 				signal("a1", SignalDirection.BULLISH, 1),
 				signal("a2", SignalDirection.NEUTRAL, 5)));
-		assertEquals(1.0, s.bullProbability(), 1e-9, "neutral carries no directional weight");
+		// Neutral adds no directional weight, so this is the lone-bull case: (1 + 0.5) / (1 + 1) = 0.75.
+		assertEquals(0.75, s.bullProbability(), 1e-9, "neutral carries no directional weight");
 		assertEquals(0.0, s.bearScore(), 1e-9);
 		assertEquals(2, s.contributions().size(), "every input signal is in the audit trail");
 	}
