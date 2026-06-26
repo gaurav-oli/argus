@@ -4,7 +4,7 @@ import { AgentActivity, type PipelineAgent } from "@/components/dashboard/AgentA
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { getAgentStatus, type AgentStatus } from "@/lib/apiClient";
+import { getAgentStatus, getBudgetStatus, type AgentStatus, type BudgetStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
@@ -15,12 +15,16 @@ import { useEffect, useState } from "react";
  */
 export function AgentFleet() {
   const [agents, setAgents] = useState<AgentStatus[] | null>(null);
+  const [budget, setBudget] = useState<BudgetStatus | null>(null);
 
   useEffect(() => {
     let active = true;
     getAgentStatus()
       .then((v) => active && setAgents(v))
       .catch(() => active && setAgents([]));
+    getBudgetStatus()
+      .then((v) => active && setBudget(v))
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -66,6 +70,9 @@ export function AgentFleet() {
         />
       </div>
 
+      {/* Cost Governor budget panel (Agent 6) */}
+      {budget && <BudgetPanel b={budget} />}
+
       {/* Pipeline hero */}
       <MotionCard index={0} interactive={false} entrance="fade">
         <AgentActivity agents={pipeline} />
@@ -78,6 +85,60 @@ export function AgentFleet() {
         ))}
       </div>
     </div>
+  );
+}
+
+function BudgetPanel({ b }: { b: BudgetStatus }) {
+  const color =
+    b.band === "CRITICAL"
+      ? "var(--color-losses)"
+      : b.band === "WARNING"
+        ? "var(--color-warning)"
+        : b.band === "NOTICE"
+          ? "var(--color-accent)"
+          : "var(--color-gains)";
+  const pct = Math.min(100, b.percentUsed);
+  const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
+  return (
+    <MotionCard index={0} interactive={false} entrance="fade" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">
+            Cost Governor · Agent 6
+          </p>
+          <p className="mt-1 font-display text-xl font-bold text-text-primary">
+            {usd(b.spentUsd)} <span className="text-sm font-normal text-text-secondary">of {usd(b.budgetUsd)} this month</span>
+          </p>
+        </div>
+        <span
+          className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+          style={{ color, backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)` }}
+        >
+          {b.band}
+        </span>
+      </div>
+
+      {/* progress with threshold markers at 70 / 80 / 95 */}
+      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-[var(--hairline)]">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+        {[70, 80, 95].map((m) => (
+          <span key={m} className="absolute top-0 h-full w-px bg-text-secondary/40" style={{ left: `${m}%` }} />
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text-secondary">
+        <span>
+          Projected <span className="font-mono text-text-primary">{usd(b.projectedUsd)}</span>
+        </span>
+        <span>
+          {b.paidCalls} paid call{b.paidCalls === 1 ? "" : "s"}
+        </span>
+        <span>{b.daysLeftInMonth}d left in {b.month}</span>
+        {b.paidCallsBlocked && (
+          <span className="ml-auto font-semibold text-losses">⚠ Budget reached — escalations on local model</span>
+        )}
+      </div>
+    </MotionCard>
   );
 }
 

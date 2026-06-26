@@ -2,7 +2,10 @@ package com.argus.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
+import com.argus.cost.CostEventRepository;
+import com.argus.cost.CostGovernor;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,10 +27,15 @@ class DefaultModelGatewayTest {
 		return new ModelGatewayProperties(concurrency, Duration.ofMinutes(10), "gemma3:27b", "unused");
 	}
 
+	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
+	private static CostGovernor gov() {
+		return new CostGovernor(mock(CostEventRepository.class), 0);
+	}
+
 	@Test
 	void generateReturnsModelContent() {
 		ModelGateway gateway = new DefaultModelGateway(
-				new MockChatModel("pong"), prompt -> "unused", props(1));
+				new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
 
 		assertEquals("pong", gateway.generate("ping"));
 	}
@@ -35,7 +43,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void escalateRoutesDirectlyToHaiku() {
 		ModelGateway gateway = new DefaultModelGateway(
-				new MockChatModel("local"), prompt -> "haiku:" + prompt, props(1));
+				new MockChatModel("local"), prompt -> "haiku:" + prompt, gov(), props(1));
 
 		assertEquals("haiku:deep question", gateway.escalate("deep question"));
 	}
@@ -48,7 +56,7 @@ class DefaultModelGatewayTest {
 			return "fallback-response";
 		};
 
-		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, props(1));
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
 
 		assertEquals("fallback-response", gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get(), "Haiku fallback should be invoked exactly once on failure");
@@ -57,7 +65,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void bigModelAccessIsSerialized() throws InterruptedException {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), props(1));
 
 		int threads = 8;
 		var workers = new Thread[threads];
@@ -78,7 +86,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void smallTierBypassesTheBigModelSemaphore() {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), props(1));
 
 		int threads = 6;
 		var workers = new Thread[threads];
@@ -108,7 +116,7 @@ class DefaultModelGatewayTest {
 			fallbackCalls.incrementAndGet();
 			return "fallback";
 		};
-		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, props(1));
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
 
 		try {
 			gateway.generate("ping", ModelTier.SMALL);

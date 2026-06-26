@@ -78,6 +78,9 @@ services:
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed
       # cost — chat answers still use only what they need.
       ARGUS_HAIKU_MAX_TOKENS: ${ARGUS_HAIKU_MAX_TOKENS:-4096}
+      # Agent 6 (Cost Governor): monthly paid-API budget in USD. At 95% it auto-switches escalations
+      # to the local model. Set 0 to disable governance (unlimited).
+      ARGUS_BUDGET_MONTHLY_USD: ${BUDGET_MONTHLY_USD:-20}
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       # The Finnhub beans gate on the Spring property `argus.finnhub.api-key`; relaxed binding
       # populates it from ARGUS_FINNHUB_API_KEY (NOT FINNHUB_API_KEY). When no key is set this is an

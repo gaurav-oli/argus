@@ -19,12 +19,14 @@ public class DefaultModelGateway implements ModelGateway {
 
 	private final ChatClient chatClient;
 	private final HaikuFallback haikuFallback;
+	private final com.argus.cost.CostGovernor costGovernor;
 	private final Semaphore permits;
 
 	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
-			ModelGatewayProperties properties) {
+			com.argus.cost.CostGovernor costGovernor, ModelGatewayProperties properties) {
 		this.chatClient = ChatClient.builder(chatModel).build();
 		this.haikuFallback = haikuFallback;
+		this.costGovernor = costGovernor;
 		this.permits = new Semaphore(properties.concurrency());
 	}
 
@@ -35,8 +37,14 @@ public class DefaultModelGateway implements ModelGateway {
 
 	@Override
 	public String escalate(String prompt) {
-		// Explicit "deeper analysis": go straight to Haiku (no local model, not on the big-model
-		// semaphore). HaikuFallback throws ModelGatewayException when unavailable → 503 at the edge.
+		// Cost Governor (Agent 6, FR-46): once the monthly budget hits 95%, auto-switch escalations to
+		// the local model instead of making another paid Haiku call.
+		if (!costGovernor.allowPaidCall()) {
+			log.info("Budget threshold reached — serving 'deeper analysis' from the local model, not Haiku");
+			return generateBig(prompt);
+		}
+		// Explicit "deeper analysis": go to Haiku (not on the big-model semaphore). HaikuFallback throws
+		// ModelGatewayException when unavailable → 503 at the edge.
 		log.info("escalating to Haiku (deeper analysis)");
 		return haikuFallback.generate(prompt);
 	}

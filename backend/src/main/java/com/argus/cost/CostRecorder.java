@@ -26,6 +26,13 @@ public class CostRecorder {
 	private final AtomicLong totalMicroUsd = new AtomicLong();
 	private volatile double lastCostUsd;
 
+	/** Persists each call so spend survives restarts (Agent 6). Null in unit tests (in-memory only). */
+	private final CostEventRepository events;
+
+	public CostRecorder(org.springframework.beans.factory.ObjectProvider<CostEventRepository> events) {
+		this.events = events.getIfAvailable();
+	}
+
 	/** Record one Haiku call; returns its USD cost. Negative counts are clamped to 0. */
 	public double record(String model, long inputTokens, long outputTokens) {
 		long in = Math.max(0, inputTokens);
@@ -35,6 +42,14 @@ public class CostRecorder {
 		this.totalMicroUsd.addAndGet(Math.round(cost * 1_000_000));
 		log.info("event=haiku_escalation model={} inputTokens={} outputTokens={} costUsd={}",
 				model, in, out, String.format("%.6f", cost));
+		if (events != null) {
+			try {
+				events.save(new CostEvent(model, "haiku_escalation", in, out, java.math.BigDecimal.valueOf(cost)));
+			}
+			catch (RuntimeException ex) {
+				log.warn("Could not persist cost event: {}", ex.getMessage());
+			}
+		}
 		return cost;
 	}
 

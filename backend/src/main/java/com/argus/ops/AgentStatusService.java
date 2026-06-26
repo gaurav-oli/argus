@@ -1,6 +1,8 @@
 package com.argus.ops;
 
 import com.argus.calendar.CalendarEventRepository;
+import com.argus.cost.BudgetStatus;
+import com.argus.cost.CostGovernor;
 import com.argus.cost.CostRecorder;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
@@ -31,14 +33,14 @@ public class AgentStatusService {
 	private final CalendarEventRepository calendar;
 	private final SocialPostRepository social;
 	private final SecFilingRepository sec;
-	private final CostRecorder cost;
+	private final CostGovernor costGovernor;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
 	public AgentStatusService(NewsArticleRepository news, SourceCredibilityRepository credibility,
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
-			CostRecorder cost, @Value("${argus.finnhub.api-key:}") String finnhubKey,
+			CostGovernor costGovernor, @Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
 		this.credibility = credibility;
@@ -47,7 +49,7 @@ public class AgentStatusService {
 		this.calendar = calendar;
 		this.social = social;
 		this.sec = sec;
-		this.cost = cost;
+		this.costGovernor = costGovernor;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -79,9 +81,7 @@ public class AgentStatusService {
 								+ "probability-scored forecasts via a graduation state machine.",
 						recommendations.count(), "recommendations", recommendations.latestCreatedAt(), "every 6h",
 						null),
-				partial("cost", "Agent 6", "Cost Governor",
-						"Tracks paid-API (Haiku) spend; full budget governance + auto-switch is Phase 2 (Epic 10).",
-						String.format("$%.4f spent this run", cost.totalUsd())),
+				costGovernor(),
 				active("calendar", "Agent 7", "Economic Calendar",
 						"Tracks earnings, Fed/CPI/jobs/GDP, ex-dividend and lock-up dates; flags pre-event quiet periods.",
 						calendar.count(), "events tracked", calendar.latestIngestedAt(), "daily · 6am ET",
@@ -94,9 +94,14 @@ public class AgentStatusService {
 				captureLabel, lastActivity, schedule, note, null);
 	}
 
-	private static AgentStatusView partial(String id, String code, String name, String description, String note) {
-		return new AgentStatusView(id, code, name, description, "PARTIAL", 0, "", null, "continuous", note,
-				"MVP subsystem");
+	private AgentStatusView costGovernor() {
+		BudgetStatus b = costGovernor.status();
+		String note = String.format("$%.2f of $%.0f this month (%.0f%%) · %s", b.spentUsd(), b.budgetUsd(),
+				b.percentUsed(), b.band()) + (b.paidCallsBlocked() ? " · auto-switched to local" : "");
+		return new AgentStatusView("cost", "Agent 6", "Cost Governor",
+				"Tracks paid-API (Haiku) spend against the monthly budget; warns at 70/80%, and at 95% "
+						+ "auto-switches escalations to the local model.",
+				"ACTIVE", b.paidCalls(), "paid calls", null, "continuous", note, null);
 	}
 
 	private static AgentStatusView planned(String id, String code, String name, String description, String phase) {

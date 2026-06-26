@@ -690,6 +690,21 @@ export interface OpsSummary {
 
 export const getOpsSummary = (): Promise<OpsSummary> => apiGet<OpsSummary>("/api/ops/summary");
 
+/** Agent 6 — Cost Governor budget posture (Epic 10). */
+export interface BudgetStatus {
+  spentUsd: number;
+  budgetUsd: number;
+  percentUsed: number;
+  band: "NORMAL" | "NOTICE" | "WARNING" | "CRITICAL";
+  month: string;
+  daysLeftInMonth: number;
+  projectedUsd: number;
+  paidCallsBlocked: boolean;
+  paidCalls: number;
+}
+
+export const getBudgetStatus = (): Promise<BudgetStatus> => apiGet<BudgetStatus>("/api/budget/status");
+
 // ---- Agent 2 — Social Media Intelligence ----
 
 /** Crowd sentiment for one ticker over the recent window (StockTwits/Reddit). */
