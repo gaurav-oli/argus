@@ -13,6 +13,7 @@ import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentAnalysis;
 import com.argus.intelligence.SentimentLabel;
+import com.argus.internet.WebMentionRepository;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
 import java.time.Instant;
@@ -26,8 +27,9 @@ class AgentSignalGathererTest {
 	private final NewsArticleRepository news = mock(NewsArticleRepository.class);
 	private final SocialPostRepository social = mock(SocialPostRepository.class);
 	private final SecFilingRepository sec = mock(SecFilingRepository.class);
+	private final WebMentionRepository web = mock(WebMentionRepository.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
-	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, quietPeriod);
+	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod);
 
 	private static NewsArticle analyzed(SentimentLabel label, double score, double relevance) {
 		NewsArticle a = new NewsArticle("Reuters", "id" + Math.random(), "u", "h", "s",

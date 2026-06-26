@@ -736,3 +736,18 @@ export interface InsiderActivity {
 
 export const getInsiderActivity = (): Promise<InsiderActivity[]> =>
   apiGet<InsiderActivity[]>("/api/sec/insider");
+
+// ---- Agent 3 — Internet Intelligence (web buzz) ----
+
+/** Web attention for one ticker — Hacker News discussion + Wikipedia pageview trend. */
+export interface TickerBuzz {
+  ticker: string;
+  hnStories: number;
+  hnBullish: number;
+  hnBearish: number;
+  wikiViewsRecent: number;
+  attentionRatio: number;
+  mood: "Bullish" | "Bearish" | "Trending" | "Quiet";
+}
+
+export const getWebBuzz = (): Promise<TickerBuzz[]> => apiGet<TickerBuzz[]>("/api/internet/buzz");

@@ -5,6 +5,8 @@ import com.argus.calendar.QuietPeriodStatus;
 import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentLabel;
+import com.argus.internet.WebMention;
+import com.argus.internet.WebMentionRepository;
 import com.argus.sec.SecFiling;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
@@ -36,16 +38,24 @@ public class AgentSignalGatherer {
 
 	private static final int INSIDER_WINDOW_DAYS = 30;
 
+	private static final Duration INTERNET_WINDOW = Duration.ofDays(14);
+	private static final Duration INTERNET_RECENT = Duration.ofDays(3);
+	private static final double ATTENTION_SPIKE = 1.3;
+	/** Internet buzz is the noisiest, lowest-ROI source — hard-cap its influence below all others. */
+	private static final double INTERNET_MAX_WEIGHT = 0.35;
+
 	private final NewsArticleRepository news;
 	private final SocialPostRepository social;
 	private final SecFilingRepository sec;
+	private final WebMentionRepository web;
 	private final EarningsQuietPeriodService quietPeriod;
 
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
-			SecFilingRepository sec, EarningsQuietPeriodService quietPeriod) {
+			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod) {
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
+		this.web = web;
 		this.quietPeriod = quietPeriod;
 	}
 
@@ -54,8 +64,47 @@ public class AgentSignalGatherer {
 		newsSignal(ticker).ifPresent(signals::add);
 		socialSignal(ticker).ifPresent(signals::add);
 		insiderSignal(ticker).ifPresent(signals::add);
+		internetSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
 		return signals;
+	}
+
+	/**
+	 * Agent 3 — internet attention. Direction from Hacker News story sentiment (when present); a
+	 * Wikipedia pageview spike over baseline adds conviction. Capped well below the other agents —
+	 * it's broad-web noise, useful mainly as corroboration.
+	 */
+	private Optional<AgentSignal> internetSignal(String ticker) {
+		List<WebMention> recent = web.findByTickerAndPostedAtAfter(ticker, Instant.now().minus(INTERNET_WINDOW));
+		if (recent.isEmpty()) {
+			return Optional.empty();
+		}
+		long hn = recent.stream().filter(m -> "hackernews".equals(m.getSource())).count();
+		long bull = recent.stream().filter(m -> m.getSentimentLabel() == SentimentLabel.BULLISH).count();
+		long bear = recent.stream().filter(m -> m.getSentimentLabel() == SentimentLabel.BEARISH).count();
+
+		Instant recentCut = Instant.now().minus(INTERNET_RECENT);
+		List<WebMention> wiki = recent.stream().filter(m -> "wikipedia".equals(m.getSource())).toList();
+		double recentAvg = wiki.stream().filter(m -> m.getPostedAt().isAfter(recentCut))
+				.mapToLong(WebMention::getScore).average().orElse(0);
+		double baseAvg = wiki.stream().filter(m -> !m.getPostedAt().isAfter(recentCut))
+				.mapToLong(WebMention::getScore).average().orElse(0);
+		double ratio = baseAvg > 0 ? recentAvg / baseAvg : 0;
+		boolean spike = ratio >= ATTENTION_SPIKE;
+
+		long scored = bull + bear;
+		if (scored == 0 && !spike) {
+			return Optional.empty(); // attention is steady and undirected — nothing to add
+		}
+		double net = scored == 0 ? 0 : (double) (bull - bear) / scored;
+		SignalDirection dir = net > 0.15 ? SignalDirection.BULLISH
+				: net < -0.15 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
+		double conviction = Math.min(1.0, hn / 10.0) * Math.abs(net);
+		double spikeBoost = spike ? Math.min(1.0, ratio - 1.0) : 0;
+		double weight = Math.min(INTERNET_MAX_WEIGHT, 0.1 + 0.2 * conviction + 0.1 * spikeBoost);
+		String rationale = String.format("Web buzz: %d HN stories (%d↑/%d↓)%s", hn, bull, bear,
+				spike ? String.format(", Wikipedia attention %.1f× baseline", ratio) : "");
+		return Optional.of(new AgentSignal("agent-3-internet", dir, weight, rationale));
 	}
 
 	/**

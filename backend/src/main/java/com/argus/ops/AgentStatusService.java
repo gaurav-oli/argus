@@ -7,6 +7,7 @@ import com.argus.cost.CostRecorder;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
+import com.argus.internet.WebMentionRepository;
 import com.argus.recommendation.RecommendationRepository;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
@@ -18,10 +19,10 @@ import org.springframework.util.StringUtils;
 
 /**
  * Per-agent status for the Agents dashboard (Epic 9, Story 9.1), aligned to the architecture's
- * 7-agent roster. Phase-1 agents run on real data: Agent 1 (News — which also owns the Source
- * Credibility Engine and the Stranger Danger watch), Agent 5 (Recommender), Agent 7 (Calendar).
- * Agent 6 (Cost Governor) ships as an MVP subsystem (cost tracking only). Agents 2/3/4 and full
- * Agent 6 are planned (Phase 2/3) and shown as such — not yet built.
+ * 7-agent roster. All seven now run on real data: Agent 1 (News — which also owns the Source
+ * Credibility Engine and the Stranger Danger watch), Agent 2 (Social), Agent 3 (Internet),
+ * Agent 4 (SEC filings), Agent 5 (Recommender), Agent 6 (Cost Governor — budget governance with
+ * auto-switch), and Agent 7 (Calendar).
  */
 @Service
 public class AgentStatusService {
@@ -33,6 +34,7 @@ public class AgentStatusService {
 	private final CalendarEventRepository calendar;
 	private final SocialPostRepository social;
 	private final SecFilingRepository sec;
+	private final WebMentionRepository web;
 	private final CostGovernor costGovernor;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
@@ -40,7 +42,8 @@ public class AgentStatusService {
 	public AgentStatusService(NewsArticleRepository news, SourceCredibilityRepository credibility,
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
-			CostGovernor costGovernor, @Value("${argus.finnhub.api-key:}") String finnhubKey,
+			WebMentionRepository web, CostGovernor costGovernor,
+			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
 		this.credibility = credibility;
@@ -49,6 +52,7 @@ public class AgentStatusService {
 		this.calendar = calendar;
 		this.social = social;
 		this.sec = sec;
+		this.web = web;
 		this.costGovernor = costGovernor;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
@@ -70,8 +74,10 @@ public class AgentStatusService {
 								+ "tagging each post bullish/bearish.",
 						social.count(), "posts", social.latestIngestedAt(), "≤10 min",
 						redditEnabled ? "StockTwits + Reddit live" : "StockTwits live · Reddit needs API keys"),
-				planned("internet", "Agent 3", "Internet Intelligence",
-						"Broad web monitoring beyond curated feeds.", "Phase 3"),
+				active("internet", "Agent 3", "Internet Intelligence",
+						"Gauges broad public attention on your holdings — Hacker News discussion + Wikipedia "
+								+ "pageview spikes — beyond the curated feeds.",
+						web.count(), "web mentions", web.latestIngestedAt(), "every 6h", null),
 				active("filings", "Agent 4", "Financial Reports",
 						"Watches SEC EDGAR for insider activity (Form 4) on your holdings — open-market "
 								+ "purchases vs sales — and feeds Agent 5.",

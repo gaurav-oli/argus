@@ -8,7 +8,7 @@ import java.util.Set;
  * Lightweight crowd-post sentiment for Agent 2: prefer the source's own tag (StockTwits), else a
  * fast keyword classifier tuned for short cashtag posts (no model call — social runs at volume).
  */
-final class SocialSentiment {
+public final class SocialSentiment {
 
 	private static final Set<String> BULLISH = Set.of("buy", "buying", "bought", "long", "calls", "call",
 			"bull", "bullish", "moon", "rocket", "breakout", "rip", "rips", "up", "green", "undervalued",
@@ -25,7 +25,7 @@ final class SocialSentiment {
 		return hint != null ? hint : classify(body);
 	}
 
-	static SentimentLabel classify(String body) {
+	public static SentimentLabel classify(String body) {
 		if (body == null || body.isBlank()) {
 			return SentimentLabel.NEUTRAL;
 		}

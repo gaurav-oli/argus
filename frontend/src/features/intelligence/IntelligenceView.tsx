@@ -6,11 +6,13 @@ import {
   getSocialSentiment,
   getSourceCredibility,
   getStrangerAlerts,
+  getWebBuzz,
   type InsiderActivity,
   type NewsItem,
   type SentimentLabel,
   type SourceCredibilityItem,
   type StrangerAlertItem,
+  type TickerBuzz,
   type TickerSentiment,
 } from "@/lib/apiClient";
 import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
@@ -30,6 +32,7 @@ export function IntelligenceView() {
   const [strangers, setStrangers] = useState<StrangerAlertItem[] | null>(null);
   const [social, setSocial] = useState<TickerSentiment[] | null>(null);
   const [insider, setInsider] = useState<InsiderActivity[] | null>(null);
+  const [buzz, setBuzz] = useState<TickerBuzz[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +45,7 @@ export function IntelligenceView() {
     load(getStrangerAlerts, setStrangers);
     load(getSocialSentiment, setSocial);
     load(getInsiderActivity, setInsider);
+    load(getWebBuzz, setBuzz);
     return () => {
       active = false;
     };
@@ -50,9 +54,9 @@ export function IntelligenceView() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Agents 1 & 2"
+        eyebrow="Agents 1–4"
         title="Intelligence"
-        subtitle="News, sentiment, source trust, social chatter, and pump-and-dump watch."
+        subtitle="News, social chatter, insider filings, web buzz, source trust, and pump-and-dump watch."
       />
 
       <div className="flex flex-col gap-6">
@@ -60,6 +64,7 @@ export function IntelligenceView() {
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
       <SocialSection items={social} />
       <InsiderSection items={insider} />
+      <WebBuzzSection items={buzz} />
       <NewsSection items={news} />
       <SourceSection items={sources} />
       </div>
@@ -151,6 +156,70 @@ function InsiderSection({ items }: { items: InsiderActivity[] | null }) {
             </span>
             <span className="shrink-0 font-mono text-[11px] text-text-secondary">{fmtShares(x.shares)}</span>
             <span className="w-20 shrink-0 text-right font-mono text-[11px] text-text-secondary">{x.filedAt}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function WebBuzzSection({ items }: { items: TickerBuzz[] | null }) {
+  if (items === null) {
+    return (
+      <Card title="Web buzz · Agent 3">
+        <Skeleton className="h-20 w-full" />
+      </Card>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <Card title="Web buzz · Agent 3">
+        <p className="text-sm text-text-secondary">
+          No web activity yet — Agent 3 tracks Hacker News discussion + Wikipedia attention on your holdings (every ~6h).
+        </p>
+      </Card>
+    );
+  }
+  const moodColor = (m: string) =>
+    m === "Bullish"
+      ? "var(--color-gains)"
+      : m === "Bearish"
+        ? "var(--color-losses)"
+        : m === "Trending"
+          ? "var(--color-accent)"
+          : "var(--color-text-secondary)";
+  return (
+    <Card title="Web buzz · Agent 3" count={items.length}>
+      <ul className="flex flex-col divide-y divide-border/50">
+        {items.slice(0, 10).map((t) => (
+          <li key={t.ticker} className="flex items-center gap-3 py-2 text-sm">
+            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
+            <span className="min-w-0 flex-1 text-text-secondary">
+              {t.hnStories > 0 ? (
+                <>
+                  <span className="text-text-primary">{t.hnStories}</span> HN
+                  {(t.hnBullish > 0 || t.hnBearish > 0) && (
+                    <span className="ml-1 text-xs">
+                      ({t.hnBullish}↑/{t.hnBearish}↓)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-xs">no HN chatter</span>
+              )}
+              {t.wikiViewsRecent > 0 && (
+                <span className="ml-2 text-xs">
+                  · {t.wikiViewsRecent.toLocaleString()} wiki views
+                  {t.attentionRatio >= 1.3 && <span className="ml-1 text-accent">↑ {t.attentionRatio}×</span>}
+                </span>
+              )}
+            </span>
+            <span
+              className="w-16 shrink-0 text-right text-xs font-semibold"
+              style={{ color: moodColor(t.mood) }}
+            >
+              {t.mood}
+            </span>
           </li>
         ))}
       </ul>
