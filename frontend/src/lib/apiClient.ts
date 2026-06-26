@@ -751,3 +751,17 @@ export interface TickerBuzz {
 }
 
 export const getWebBuzz = (): Promise<TickerBuzz[]> => apiGet<TickerBuzz[]>("/api/internet/buzz");
+
+// ---- F11 Personas ----
+
+/** One investor persona's take on a recommendation. */
+export interface PersonaTake {
+  persona: string;
+  key: string;
+  lens: string;
+  stance: "AGREE" | "DISAGREE" | "CAUTION";
+  rationale: string;
+}
+
+export const getPersonas = (recommendationId: number): Promise<PersonaTake[]> =>
+  apiGet<PersonaTake[]>(`/api/recommendations/${recommendationId}/personas`);

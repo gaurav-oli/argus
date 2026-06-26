@@ -2,7 +2,9 @@
 
 import {
   decideRecommendation,
+  getPersonas,
   getRecommendations,
+  type PersonaTake,
   type RecommendationCard as Card,
   type SignalView,
 } from "@/lib/apiClient";
@@ -147,6 +149,8 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
         </ul>
       )}
 
+      <PersonaTakes recId={card.id} />
+
       {!decided && (
         <div className="flex gap-2">
           <button disabled={busy} onClick={() => decide("TAKEN")}
@@ -165,6 +169,73 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
       )}
     </div>
   );
+}
+
+function PersonaTakes({ recId }: { recId: number }) {
+  const [takes, setTakes] = useState<PersonaTake[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const isWarming = (t: PersonaTake[]) =>
+      t.length > 0 && t.every((x) => x.stance === "CAUTION" && x.rationale.includes("warming up"));
+    let timer: ReturnType<typeof setTimeout>;
+    const load = () =>
+      getPersonas(recId)
+        .then((t) => {
+          if (!active) return;
+          setTakes(t);
+          if (isWarming(t)) timer = setTimeout(load, 15000); // poll until the warmer fills them in
+        })
+        .catch(() => active && setTakes([]));
+    load();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [recId]);
+
+  const warming =
+    takes != null &&
+    takes.length > 0 &&
+    takes.every((t) => t.stance === "CAUTION" && t.rationale.includes("warming up"));
+
+  return (
+    <div className="border-t border-border pt-2">
+      <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+        What the personas think
+      </p>
+      {takes === null || warming ? (
+        <p className="text-[11px] italic text-text-secondary">Personas analyzing… (first look can take a moment)</p>
+      ) : takes.length === 0 ? (
+        <p className="text-[11px] text-text-secondary">No persona takes yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {takes.map((t) => (
+            <li key={t.key} className="flex items-start gap-2 text-xs">
+              <span className="mt-px w-24 shrink-0 font-medium text-text-primary" title={t.lens}>
+                {t.persona}
+              </span>
+              <span
+                className="mt-px w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ color: stanceColor(t.stance) }}
+              >
+                {t.stance}
+              </span>
+              <span className="text-text-secondary">{t.rationale}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function stanceColor(stance: string): string {
+  return stance === "AGREE"
+    ? "var(--color-gains)"
+    : stance === "DISAGREE"
+      ? "var(--color-losses)"
+      : "var(--color-text-secondary)";
 }
 
 const AGENT_SLOTS = ["agent-1", "agent-2", "agent-3", "agent-4", "agent-5", "agent-6", "agent-7"];

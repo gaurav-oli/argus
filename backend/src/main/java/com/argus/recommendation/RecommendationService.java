@@ -46,6 +46,12 @@ public class RecommendationService {
 		return new java.util.ArrayList<>(bestByTicker.values());
 	}
 
+	/** IDs of the currently-surfaced recommendations (one per ticker) — for persona pre-warming. */
+	@Transactional(readOnly = true)
+	public List<Long> currentRecommendationIds() {
+		return recent().stream().map(Recommendation::getId).toList();
+	}
+
 	/** A recommendation with its diagnostic signals loaded (Story 6.2). */
 	@Transactional(readOnly = true)
 	public Optional<Recommendation> diagnostic(Long id) {
