@@ -1,17 +1,14 @@
 import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { CashBalances } from "@/features/portfolio/CashBalances";
-import { CorporateActions } from "@/features/portfolio/CorporateActions";
 import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatement } from "@/features/portfolio/ImportStatement";
-import { ManagePositions } from "@/features/portfolio/ManagePositions";
 import { PortfolioChart } from "@/features/portfolio/PortfolioChart";
 import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
 
 /**
- * Portfolio — live value (3.4) + import (3.1) + corporate actions (3.3) + holdings table (3.5) +
- * value chart (3.6) + a holdings heatmap, all on real positions.
+ * Portfolio — live value (3.4) + statement import (3.1) + the holdings table (3.5, with cash folded
+ * in) + value chart (3.6) + a holdings heatmap, all on real positions.
  */
 export default function PortfolioPage() {
   return (
@@ -30,21 +27,12 @@ export default function PortfolioPage() {
           <ImportStatement />
         </MotionCard>
         <MotionCard index={2} className="md:col-span-6" interactive={false}>
-          <CorporateActions />
-        </MotionCard>
-        <MotionCard index={3} className="md:col-span-6" interactive={false}>
           <HoldingsTable />
         </MotionCard>
-        <MotionCard index={4} className="md:col-span-6" interactive={false}>
-          <CashBalances />
-        </MotionCard>
-        <MotionCard index={5} className="md:col-span-6" interactive={false}>
-          <ManagePositions />
-        </MotionCard>
-        <MotionCard index={5} className="md:col-span-6">
+        <MotionCard index={3} className="md:col-span-6">
           <PortfolioChart />
         </MotionCard>
-        <MotionCard index={6} className="md:col-span-6" interactive={false}>
+        <MotionCard index={4} className="md:col-span-6" interactive={false}>
           <HoldingsTreemap />
         </MotionCard>
       </div>

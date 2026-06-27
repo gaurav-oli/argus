@@ -3,7 +3,10 @@
 import {
   ApiError,
   confirmPositionFx,
+  getCash,
   getPortfolioValue,
+  setCash,
+  type CashBalanceView,
   type PortfolioSnapshot,
   type PositionValue,
 } from "@/lib/apiClient";
@@ -34,12 +37,15 @@ const ALL = "All";
 
 /**
  * The single Holdings table (Story 3.5 + Multi-Bank Holdings). Live from `/topic/portfolio`.
- * Per-account rows with Bank + Account, value in the native currency / USD / CAD, CAD cost basis
- * (with a set-rate affordance when FX is estimated), and P&L. Filter by bank/account/currency;
+ * Per-account rows with Bank + Account, value in USD / CAD, CAD cost basis (with a set-rate
+ * affordance when FX is estimated), and P&L. Uninvested cash is shown here too (as rows, editable),
+ * so the table totals to the same figure as the brokerage. Filter by bank/account/currency;
  * "Group by ticker" combines the same stock across accounts.
  */
 export function HoldingsTable() {
   const [positions, setPositions] = useState<PositionValue[]>([]);
+  const [totalValueCad, setTotalValueCad] = useState(0);
+  const [cash, setCashRows] = useState<CashBalanceView[]>([]);
   const [bank, setBank] = useState<string>(ALL);
   const [account, setAccount] = useState<string>(ALL);
   const [currency, setCurrency] = useState<string>(ALL);
@@ -49,17 +55,36 @@ export function HoldingsTable() {
   const [fxRate, setFxRate] = useState("");
   const [fxError, setFxError] = useState<string | null>(null);
 
-  const refetch = () => getPortfolioValue().then((s) => setPositions(s.positions)).catch(() => {});
+  // add-cash form
+  const [newAccount, setNewAccount] = useState("");
+  const [newCurrency, setNewCurrency] = useState("CAD");
+  const [newAmount, setNewAmount] = useState("");
+
+  const applySnapshot = (s: PortfolioSnapshot) => {
+    setPositions(s.positions);
+    setTotalValueCad(s.totalValueCad ?? 0);
+  };
+  const refetch = () => getPortfolioValue().then(applySnapshot).catch(() => {});
+  const refetchCash = () => getCash().then(setCashRows).catch(() => {});
 
   useEffect(() => {
     let active = true;
-    getPortfolioValue().then((s) => active && setPositions(s.positions)).catch(() => {});
-    const handle = subscribeToTopic<PortfolioSnapshot>("/topic/portfolio", (s) => setPositions(s.positions));
+    getPortfolioValue().then((s) => active && applySnapshot(s)).catch(() => {});
+    refetchCash();
+    const handle = subscribeToTopic<PortfolioSnapshot>("/topic/portfolio", applySnapshot);
     return () => {
       active = false;
       handle.disconnect();
     };
   }, []);
+
+  // USD→CAD rate derived from any priced USD position (for displaying USD cash in CAD).
+  const fx = useMemo(() => {
+    const p = positions.find(
+      (x) => x.currency === "USD" && x.usdMarketValue && x.cadMarketValue,
+    );
+    return p && p.usdMarketValue ? (p.cadMarketValue ?? 0) / p.usdMarketValue : 1.42;
+  }, [positions]);
 
   const banks = useMemo(() => uniq(positions.map((p) => p.institution)), [positions]);
   const accounts = useMemo(
@@ -78,6 +103,14 @@ export function HoldingsTable() {
   );
   const groups = useMemo(() => groupByTicker(filtered), [filtered]);
 
+  // Cash respects the account + currency filters (it has no bank).
+  const cashFiltered = useMemo(
+    () =>
+      cash.filter(
+        (c) => (account === ALL || c.account === account) && (currency === ALL || c.currency === currency),
+      ),
+    [cash, account, currency],
+  );
   async function saveFx(id: number) {
     const rate = Number(fxRate);
     if (!Number.isFinite(rate) || rate <= 0) {
@@ -95,7 +128,21 @@ export function HoldingsTable() {
     }
   }
 
-  if (positions.length === 0) {
+  async function removeCash(c: CashBalanceView) {
+    await setCash(c.account, c.currency, 0);
+    await refetchCash();
+  }
+
+  async function addCash() {
+    const amt = parseFloat(newAmount);
+    if (!newAccount.trim() || !Number.isFinite(amt) || amt <= 0) return;
+    await setCash(newAccount.trim(), newCurrency, amt);
+    setNewAccount("");
+    setNewAmount("");
+    await refetchCash();
+  }
+
+  if (positions.length === 0 && cash.length === 0) {
     return (
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-text-primary">Holdings</h3>
@@ -104,10 +151,19 @@ export function HoldingsTable() {
     );
   }
 
+  const cashRows = (
+    <CashRows rows={cashFiltered} grouped={grouped} total={totalValueCad} fx={fx} onRemove={removeCash} />
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-text-primary">Holdings</h3>
+        <h3 className="text-sm font-medium text-text-primary">
+          Holdings
+          <span className="ml-2 text-xs font-normal text-text-secondary">
+            Total {money(totalValueCad)} CAD
+          </span>
+        </h3>
         <div className="flex flex-wrap items-center gap-2">
           {banks.length > 1 && (
             <FilterSelect label="Bank" value={bank} options={banks} onChange={(v) => { setBank(v); setAccount(ALL); }} />
@@ -130,7 +186,7 @@ export function HoldingsTable() {
 
       <div className="overflow-x-auto">
         {grouped ? (
-          <GroupedTable groups={groups} expanded={expanded} setExpanded={setExpanded} />
+          <GroupedTable groups={groups} expanded={expanded} setExpanded={setExpanded} cashRows={cashRows} />
         ) : (
           <FlatTable
             rows={filtered}
@@ -140,10 +196,99 @@ export function HoldingsTable() {
             onEditFx={(id) => { setFxEditId(id); setFxRate(""); setFxError(null); }}
             onSaveFx={saveFx}
             onCancelFx={() => { setFxEditId(null); setFxRate(""); }}
+            cashRows={cashRows}
           />
         )}
       </div>
+
+      {/* add cash inline */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 text-xs">
+        <span className="text-text-secondary">Add cash:</span>
+        <input
+          list="holdings-cash-accounts"
+          value={newAccount}
+          onChange={(e) => setNewAccount(e.target.value)}
+          placeholder="Account"
+          className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1.5 text-text-primary placeholder:text-text-secondary"
+        />
+        <datalist id="holdings-cash-accounts">
+          {uniq(positions.map((p) => p.account)).map((a) => (
+            <option key={a} value={a} />
+          ))}
+        </datalist>
+        <select
+          value={newCurrency}
+          onChange={(e) => setNewCurrency(e.target.value)}
+          className="rounded border border-border bg-background px-2 py-1.5 text-text-primary"
+        >
+          <option value="CAD">CAD</option>
+          <option value="USD">USD</option>
+        </select>
+        <input
+          type="number"
+          value={newAmount}
+          onChange={(e) => setNewAmount(e.target.value)}
+          placeholder="Amount"
+          className="w-28 rounded border border-border bg-background px-2 py-1.5 text-text-primary placeholder:text-text-secondary"
+        />
+        <button onClick={addCash} className="rounded bg-accent/15 px-3 py-1.5 font-medium text-accent hover:bg-accent/25">
+          Add
+        </button>
+      </div>
     </div>
+  );
+}
+
+/** Cash rows shared by both table layouts (flat = 9 cols, grouped = 8 cols). */
+function CashRows({
+  rows,
+  grouped,
+  total,
+  fx,
+  onRemove,
+}: {
+  rows: CashBalanceView[];
+  grouped: boolean;
+  total: number;
+  fx: number;
+  onRemove: (c: CashBalanceView) => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <>
+      {rows.map((c) => {
+        const cad = c.currency === "CAD" ? c.amount : c.amount * fx;
+        const weight = total > 0 ? (cad / total) * 100 : null;
+        return (
+          <tr key={`cash-${c.id}`} className="border-t border-border/60">
+            <td className="py-1.5 pr-3 font-medium text-text-primary">
+              💵 Cash
+              <button
+                onClick={() => onRemove(c)}
+                className="ml-2 text-[10px] text-losses hover:underline"
+                title="Remove cash"
+              >
+                remove
+              </button>
+            </td>
+            {grouped ? (
+              <td className="hidden py-1.5 pr-3 text-text-secondary md:table-cell">{c.account}</td>
+            ) : (
+              <>
+                <td className="hidden py-1.5 pr-3 text-text-secondary lg:table-cell">—</td>
+                <td className="hidden py-1.5 pr-3 text-text-secondary md:table-cell">{c.account}</td>
+              </>
+            )}
+            <td className="py-1.5 pr-3 text-right text-text-secondary">—</td>
+            <td className="py-1.5 pr-3 text-right text-text-primary">{c.currency === "USD" ? money(c.amount) : "—"}</td>
+            <td className="hidden py-1.5 pr-3 text-right text-text-primary md:table-cell">{money(cad)}</td>
+            <td className="hidden py-1.5 pr-3 text-right text-text-primary md:table-cell">{money(cad)}</td>
+            <td className="py-1.5 pr-3 text-right text-text-secondary">—</td>
+            <td className="hidden py-1.5 pr-3 text-right text-text-secondary lg:table-cell">{pct(weight)}</td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
@@ -155,6 +300,7 @@ function FlatTable({
   onEditFx,
   onSaveFx,
   onCancelFx,
+  cashRows,
 }: {
   rows: PositionValue[];
   fxEditId: number | null;
@@ -163,6 +309,7 @@ function FlatTable({
   onEditFx: (id: number) => void;
   onSaveFx: (id: number) => void;
   onCancelFx: () => void;
+  cashRows: React.ReactNode;
 }) {
   const sorted = useMemo(() => [...rows].sort((a, b) => (b.weightPercent ?? 0) - (a.weightPercent ?? 0)), [rows]);
   return (
@@ -228,6 +375,7 @@ function FlatTable({
             <td className="hidden py-1.5 pr-3 text-right text-text-secondary lg:table-cell">{pct(p.weightPercent)}</td>
           </tr>
         ))}
+        {cashRows}
       </tbody>
     </table>
   );
@@ -237,10 +385,12 @@ function GroupedTable({
   groups,
   expanded,
   setExpanded,
+  cashRows,
 }: {
   groups: GroupedRow[];
   expanded: string | null;
   setExpanded: (t: string | null) => void;
+  cashRows: React.ReactNode;
 }) {
   const sorted = useMemo(() => [...groups].sort((a, b) => b.cadValue - a.cadValue), [groups]);
   return (
@@ -299,6 +449,7 @@ function GroupedTable({
             </Frag>
           );
         })}
+        {cashRows}
       </tbody>
     </table>
   );
