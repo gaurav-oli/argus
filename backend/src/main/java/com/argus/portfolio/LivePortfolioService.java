@@ -64,6 +64,15 @@ public class LivePortfolioService {
 		livePush.publish(TOPIC, currentSnapshot());
 	}
 
+	/** Held tickers with no live price yet — candidates for a supplemental (e.g. TSX) price source. */
+	@Transactional(readOnly = true)
+	public java.util.Set<String> unpricedHeldTickers() {
+		return positions.findAllByOrderByTickerAsc().stream()
+				.map(Position::getTicker)
+				.filter(t -> t != null && !prices.containsKey(t.trim().toUpperCase()))
+				.collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+	}
+
 	/** Record a ticker's previous close (for day P&L). Does not itself push a snapshot. */
 	public void recordPreviousClose(String ticker, BigDecimal previousClose) {
 		if (ticker != null && previousClose != null) {
