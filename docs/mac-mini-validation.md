@@ -56,11 +56,12 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
 - [x] Frontend image built with single-origin args (`NEXT_PUBLIC_API_BASE_URL=` empty → same-origin `/api`; `NEXT_PUBLIC_WS_URL=wss://leannas-mac-mini.taila43287.ts.net/ws`).
 [Source: 1-8-tailscale-access-deploy-to-mini-runbook.md AC#6]
 
-## 3. Epic 8 — Push notifications (FR-17) + Morning Briefing (FR-16)  ⏳ TODO on the Mini
+## 3. Epic 8 — Push (FR-17) + Briefing (FR-16) + Alert discipline (FR-18/19/20)  ⏳ TODO on the Mini
 Built + statically verified on the laptop (backend `mvn compile` **and** `test-compile` green against the
-real `nl.martijndwars:web-push` API; frontend `tsc --noEmit` + `eslint` green). Everything below needs a
-real browser over HTTPS, a real VAPID private key, network egress to the push services, and the live model
-— none of which exist on the dev MacBook.
+real `nl.martijndwars:web-push` API; the alert-discipline pipeline 8.2/8.3/8.4 has **passing laptop unit
+tests** — `NotificationServiceTest`; frontend `tsc --noEmit` + `eslint` green). Everything below needs a
+real browser over HTTPS, a real VAPID private key, network egress to the push services, the live model,
+and a running Redis — none fully exercisable on the dev MacBook.
 
 **Prerequisite (carried over):**
 - [ ] Tailscale HTTPS origin valid so the service worker + Web Push can register on the iPhone (HTTPS set up in §2).
@@ -84,6 +85,16 @@ real browser over HTTPS, a real VAPID private key, network egress to the push se
 - [ ] **Stranger-Danger critical alert** fires a push: drive `StrangerDangerService.scan()` to a new detection
       and confirm the "⚠️ Stranger danger" push arrives and deep-links to `/intelligence`.
 - [ ] Expired-subscription pruning: a 404/410 from the push service deletes the row (`WebPushSender` → `EXPIRED`).
+
+**Alert discipline (FR-18/19/20) — logic unit-tested on laptop; confirm live behaviour with real Redis:**
+- [ ] **Dedup (8.4):** re-flagging the same stranger ticker within 30 min does NOT re-push (Redis key
+      `argus:notif:dedup:*` with TTL); the collapsed count is logged. (CRITICAL bypasses the gate but still dedups.)
+- [ ] **Fatigue gate (8.3):** non-critical alerts below `argus.notification.min-confidence`/`min-portfolio-impact`
+      are suppressed and logged; CRITICAL always passes. Tune the thresholds against real signal volume.
+- [ ] **Tier routing (8.2):** CRITICAL arrives with `requireInteraction` (stays until acted on); IMPORTANT pushes
+      immediately; NORMAL/INFO do NOT push (they're left for the briefing/digest). Note: NORMAL→briefing and
+      INFO→weekly-digest are currently *defer-and-log* — no queue is persisted, and only Stranger-Danger
+      currently feeds the pipeline. Wiring recommendation/calendar producers + a real weekly digest is follow-up.
 
 **Morning Briefing (FR-16):**
 - [ ] `POST /api/briefing/generate` produces a sensible **model** narrative (local Gemma, BIG tier) — headline +

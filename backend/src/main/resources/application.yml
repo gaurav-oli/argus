@@ -93,6 +93,13 @@ argus:
     cron: ${ARGUS_BRIEFING_CRON:0 0 8 * * *}
     overnight-hours: ${ARGUS_BRIEFING_OVERNIGHT_HOURS:16}
 
+  # Alert discipline (Epic 8, FR-18/19/20). The fatigue gate floors (non-critical alerts only) and
+  # the dedup window for collapsing repeats of the same ticker+direction.
+  notification:
+    min-confidence: ${ARGUS_NOTIFICATION_MIN_CONFIDENCE:0.60}
+    min-portfolio-impact: ${ARGUS_NOTIFICATION_MIN_PORTFOLIO_IMPACT:0.02}
+    dedup-window-seconds: ${ARGUS_NOTIFICATION_DEDUP_WINDOW_SECONDS:1800}
+
 management:
   endpoints:
     web:

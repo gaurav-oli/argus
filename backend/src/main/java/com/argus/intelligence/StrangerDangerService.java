@@ -2,7 +2,9 @@ package com.argus.intelligence;
 
 import com.argus.agent.AgentEventPublisher;
 import com.argus.intelligence.MarketDataPort.MarketStats;
-import com.argus.push.PushService;
+import com.argus.notification.Notification;
+import com.argus.notification.NotificationService;
+import com.argus.notification.UrgencyTier;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,12 +45,12 @@ public class StrangerDangerService {
 	private final ObjectProvider<MarketDataPort> marketData;
 	private final AgentEventPublisher events;
 	private final StrangerDangerProperties props;
-	private final PushService push;
+	private final NotificationService notifications;
 
 	public StrangerDangerService(NewsArticleRepository articles, CashtagExtractor cashtags,
 			KnownUniverse knownUniverse, SourceCredibilityRepository credibility, StrangerRiskScorer scorer,
 			StrangerAlertRepository alerts, ObjectProvider<MarketDataPort> marketData,
-			AgentEventPublisher events, StrangerDangerProperties props, PushService push) {
+			AgentEventPublisher events, StrangerDangerProperties props, NotificationService notifications) {
 		this.articles = articles;
 		this.cashtags = cashtags;
 		this.knownUniverse = knownUniverse;
@@ -58,7 +60,7 @@ public class StrangerDangerService {
 		this.marketData = marketData;
 		this.events = events;
 		this.props = props;
-		this.push = push;
+		this.notifications = notifications;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.news.stranger.poll-ms:60000}",
@@ -145,13 +147,16 @@ public class StrangerDangerService {
 				"requiredConsensus", props.requiredAgentConsensus()));
 		log.warn("Stranger Danger: '{}' flagged (risk {}, {} articles, elevated consensus {}/7)",
 				ticker, risk, covering.size(), props.requiredAgentConsensus());
-		// Critical alert → Web Push (Epic 8, FR-17). Best-effort: a push failure must never abort a scan.
+		// CRITICAL alert → notification pipeline (Epic 8). CRITICAL bypasses the fatigue gate but still
+		// dedups by ticker so re-flags don't re-ping. Best-effort: a failure must never abort a scan.
 		try {
-			push.sendToAll("⚠️ Stranger danger: " + ticker,
+			notifications.notify(Notification.forTicker(UrgencyTier.CRITICAL, ticker, "STRANGER",
+					risk / 100.0, 0.0,
+					"⚠️ Stranger danger: " + ticker,
 					ticker + " is under heavy unverified coverage (risk " + risk + "/100). Treat with caution.",
-					"/intelligence");
+					"/intelligence"));
 		} catch (RuntimeException ex) {
-			log.warn("Stranger Danger push for '{}' failed: {}", ticker, ex.getMessage());
+			log.warn("Stranger Danger notification for '{}' failed: {}", ticker, ex.getMessage());
 		}
 		return true;
 	}

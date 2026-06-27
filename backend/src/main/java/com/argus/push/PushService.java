@@ -65,11 +65,20 @@ public class PushService {
 	 */
 	@Transactional
 	public int sendToAll(String title, String body, String url) {
+		return sendToAll(title, body, url, false);
+	}
+
+	/**
+	 * As {@link #sendToAll(String, String, String)}, but {@code requireInteraction} keeps the OS
+	 * notification on screen until the user acts on it — used for CRITICAL alerts (Story 8.2).
+	 */
+	@Transactional
+	public int sendToAll(String title, String body, String url, boolean requireInteraction) {
 		if (!props.isConfigured()) {
 			log.debug("Web push not configured (no VAPID keys) — skipping notification '{}'", title);
 			return 0;
 		}
-		String payload = payload(title, body, url);
+		String payload = payload(title, body, url, requireInteraction);
 		int sent = 0;
 		for (PushSubscription sub : subscriptions.findAll()) {
 			switch (sender.send(sub, payload)) {
@@ -84,10 +93,11 @@ public class PushService {
 		return sent;
 	}
 
-	private static String payload(String title, String body, String url) {
+	private static String payload(String title, String body, String url, boolean requireInteraction) {
 		return JSON.writeValueAsString(Map.of(
 				"title", title == null || title.isBlank() ? "Argus" : title,
 				"body", body == null ? "" : body,
-				"url", url == null || url.isBlank() ? "/" : url));
+				"url", url == null || url.isBlank() ? "/" : url,
+				"requireInteraction", requireInteraction));
 	}
 }

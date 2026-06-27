@@ -116,12 +116,12 @@ development_status:
   epic-7-retrospective: optional
 
   # Epic 8: Briefing, Notifications & Alert Discipline
-  epic-8: backlog
-  8-1-web-push-setup: backlog
-  8-2-alert-urgency-tiers: backlog
-  8-3-alert-fatigue-gate: backlog
-  8-4-alert-deduplication: backlog
-  8-5-morning-briefing: backlog
+  epic-8: in-progress
+  8-1-web-push-setup: done            # built on laptop; runtime validation -> mac-mini-validation.md §3
+  8-2-alert-urgency-tiers: in-progress
+  8-3-alert-fatigue-gate: in-progress
+  8-4-alert-deduplication: in-progress
+  8-5-morning-briefing: done          # built on laptop; runtime validation -> mac-mini-validation.md §3
   epic-8-retrospective: optional
 
   # Epic 9: Operations Dashboards
