@@ -177,7 +177,8 @@ frontend `tsc`/`eslint` green). Needs the running stack / real outage / external
 - [ ] **10.1 / 10.2 Automated backup + status (NOT built):** implement on the Mini where the external SSD
       exists — `pg_dump` every 6h + critical-table incremental every 15 min to the SSD, a 🔴 push on SSD
       disconnect, and a backup-status endpoint (last success/size/health) feeding the Ops "System health"
-      card (the 9.7 backup half lands here too).
+      card (the 9.7 backup half lands here too). **Paste-ready build steps:**
+      [`docs/backup-build-checklist.md`](backup-build-checklist.md).
 - [ ] **10.3 Recovery drill:** once backups exist, follow [`/RECOVERY.md`](../RECOVERY.md) end-to-end on a
       scratch volume and confirm the documented data-loss bounds hold.
 
