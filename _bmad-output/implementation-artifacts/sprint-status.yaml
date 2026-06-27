@@ -136,11 +136,11 @@ development_status:
   epic-9-retrospective: optional
 
   # Epic 10: Resilience, Backup & Budget
-  epic-10: backlog
-  10-1-automated-incremental-backup: backlog
-  10-2-backup-status-visibility: backlog
-  10-3-recovery-runbook: backlog
-  10-4-degraded-mode-coordinator-gap-3: backlog
-  10-5-real-time-budget-tracking: backlog
-  10-6-budget-alerts-auto-switch: backlog
+  epic-10: in-progress
+  10-1-automated-incremental-backup: backlog   # Mini-dependent (external SSD + pg_dump scheduling)
+  10-2-backup-status-visibility: backlog        # depends on 10.1; Mini
+  10-3-recovery-runbook: done                   # /RECOVERY.md
+  10-4-degraded-mode-coordinator-gap-3: done    # coordinator+probe+notify+catch-up+banner; PlatformModeServiceTest green. Per-agent pause gating is integration follow-up
+  10-5-real-time-budget-tracking: done          # CostRecorder/CostEvent per call/agent/model; monthly reset (CostGovernor)
+  10-6-budget-alerts-auto-switch: done          # 95% auto-switch (allowPaidCall) + BudgetWatcher 70/80/95 alerts via NotificationService
   epic-10-retrospective: optional

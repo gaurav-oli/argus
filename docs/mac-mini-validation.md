@@ -163,6 +163,24 @@ logic and need no Mini step. These need the running stack / real hardware:
       real agent cadences and tune thresholds if needed. **Backup status is NOT built** (needs the external
       backup SSD + disk-mount check) — belongs with Epic 10, Story 10.3.
 
+## 9. Epic 10 — Resilience & budget  ⏳ confirm on the Mini
+Built + statically verified on the laptop (`PlatformModeServiceTest` passes; backend `test-compile`,
+frontend `tsc`/`eslint` green). Needs the running stack / real outage / external SSD:
+- [ ] **10.4 Degraded Mode:** pull the Mini's network (or block `argus.resilience.probe-url`) and confirm
+      after 2 failed probes the platform flips to DEGRADED — a CRITICAL push fires, the dashboard shows the
+      "Offline — showing last-known data" banner (via `/topic/platform-mode`), and on reconnect it returns to
+      NORMAL with the "back online / catching up" push. *Not built:* actually pausing each net-dependent
+      ingestion agent (they should consult `PlatformModeService.isDegraded()` — integration follow-up).
+- [ ] **10.6 Budget alerts:** drive paid spend across 70/80/95% and confirm `BudgetWatcher` pushes the
+      NOTICE/WARNING/CRITICAL notifications once per escalation, and that ≥95% pauses cloud calls
+      (`CostGovernor.allowPaidCall()` false → gateway stays local).
+- [ ] **10.1 / 10.2 Automated backup + status (NOT built):** implement on the Mini where the external SSD
+      exists — `pg_dump` every 6h + critical-table incremental every 15 min to the SSD, a 🔴 push on SSD
+      disconnect, and a backup-status endpoint (last success/size/health) feeding the Ops "System health"
+      card (the 9.7 backup half lands here too).
+- [ ] **10.3 Recovery drill:** once backups exist, follow [`/RECOVERY.md`](../RECOVERY.md) end-to-end on a
+      scratch volume and confirm the documented data-loss bounds hold.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
-validation has its own runbook (Epic 10, Story 10.3)._
+validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

@@ -1,6 +1,8 @@
 package com.argus.ops;
 
 import com.argus.cost.CostRecorder;
+import com.argus.resilience.PlatformModeService;
+import com.argus.resilience.PlatformModeView;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,13 +24,15 @@ public class OpsController {
 	private final CostRecorder cost;
 	private final HardwareService hardware;
 	private final FreshnessService freshness;
+	private final PlatformModeService platformMode;
 
 	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
-			FreshnessService freshness) {
+			FreshnessService freshness, PlatformModeService platformMode) {
 		this.agents = agents;
 		this.cost = cost;
 		this.hardware = hardware;
 		this.freshness = freshness;
+		this.platformMode = platformMode;
 	}
 
 	@GetMapping("/summary")
@@ -48,5 +52,11 @@ public class OpsController {
 	@GetMapping("/freshness")
 	public FreshnessView freshness() {
 		return freshness.snapshot();
+	}
+
+	/** Story 10.4 — current platform mode (NORMAL/DEGRADED) for the dashboard banner. */
+	@GetMapping("/platform-mode")
+	public PlatformModeView platformMode() {
+		return platformMode.current();
 	}
 }

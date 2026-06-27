@@ -107,6 +107,18 @@ argus:
     data-dir: ${ARGUS_OPS_DATA_DIR:/}
     agent-broadcast-ms: ${ARGUS_OPS_AGENT_BROADCAST_MS:15000}
 
+  # Degraded Mode coordinator (Epic 10, Story 10.4 / GAP-3). probe-url is HEAD-checked every probe-ms
+  # to detect internet loss; two consecutive failures flip the platform into DEGRADED.
+  resilience:
+    probe-url: ${ARGUS_RESILIENCE_PROBE_URL:https://one.one.one.one}
+    probe-ms: ${ARGUS_RESILIENCE_PROBE_MS:30000}
+
+  # Cost Governor (Epic 10, Story 10.5/10.6). monthly-usd is the budget ceiling; watch-ms is how often
+  # BudgetWatcher checks the band to fire 70/80/95% alerts.
+  budget:
+    monthly-usd: ${ARGUS_BUDGET_MONTHLY_USD:20}
+    watch-ms: ${ARGUS_BUDGET_WATCH_MS:1800000}
+
 management:
   endpoints:
     web:

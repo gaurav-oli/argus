@@ -1,6 +1,7 @@
 import { AlertCards } from "@/components/dashboard/AlertCards";
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { BriefingCard } from "@/components/dashboard/BriefingCard";
+import { DegradedBanner } from "@/components/dashboard/DegradedBanner";
 import { HealthScoreRing } from "@/components/dashboard/HealthScoreRing";
 import { MoversBubbles } from "@/components/dashboard/MoversBubbles";
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
@@ -16,6 +17,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 export default function Home() {
   return (
     <div className="mx-auto max-w-6xl">
+      <DegradedBanner />
       <PageHeader
         eyebrow="Overview"
         title="Good morning, Gaurav"

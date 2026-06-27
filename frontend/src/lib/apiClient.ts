@@ -919,3 +919,15 @@ export interface FreshnessView {
 
 export const getFreshness = (): Promise<FreshnessView> =>
   apiGet<FreshnessView>("/api/ops/freshness");
+
+// ---- Degraded Mode coordinator (Epic 10, Story 10.4) ----
+
+/** Current platform mode. `since` is an ISO instant; `reason` is a short human explanation. */
+export interface PlatformModeView {
+  mode: "NORMAL" | "DEGRADED";
+  since: string;
+  reason: string;
+}
+
+export const getPlatformMode = (): Promise<PlatformModeView> =>
+  apiGet<PlatformModeView>("/api/ops/platform-mode");
