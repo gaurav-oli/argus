@@ -31,6 +31,8 @@ public class PortfolioImportService {
 
 	private static final TypeReference<List<ParsedHolding>> HOLDINGS_TYPE = new TypeReference<>() {
 	};
+	private static final TypeReference<List<ParsedCash>> CASH_TYPE = new TypeReference<>() {
+	};
 
 	private final StatementParser parser;
 	private final LlmStatementParser llmParser;
@@ -39,6 +41,7 @@ public class PortfolioImportService {
 	private final PositionLotRepository lots;
 	private final PositionAcbService acbService;
 	private final FxRateService fx;
+	private final CashService cashService;
 	private final org.springframework.context.ApplicationEventPublisher events;
 
 	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
@@ -47,7 +50,7 @@ public class PortfolioImportService {
 
 	public PortfolioImportService(StatementParser parser, LlmStatementParser llmParser,
 			PortfolioImportRepository imports, PositionRepository positions, PositionLotRepository lots,
-			PositionAcbService acbService, FxRateService fx,
+			PositionAcbService acbService, FxRateService fx, CashService cashService,
 			org.springframework.context.ApplicationEventPublisher events) {
 		this.parser = parser;
 		this.llmParser = llmParser;
@@ -56,6 +59,7 @@ public class PortfolioImportService {
 		this.lots = lots;
 		this.acbService = acbService;
 		this.fx = fx;
+		this.cashService = cashService;
 		this.events = events;
 	}
 
@@ -74,6 +78,7 @@ public class PortfolioImportService {
 	private ImportPreview stage(String filename, StatementParser.ParseResult result, String institution) {
 		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
 		batch.setInstitution(institution);
+		batch.setRawCash(json.writeValueAsString(result.cash()));
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
 				saved.getMessage(), result.holdings());
@@ -137,6 +142,11 @@ public class PortfolioImportService {
 				p.setNeedsReview(true);
 				positions.save(p);
 			}
+		}
+
+		// Cash balances parsed from the statement → folded into the live total (set 0 removes).
+		for (ParsedCash c : readCash(batch.getRawCash())) {
+			cashService.set(c.account(), c.currency(), c.amount());
 		}
 
 		batch.markConfirmed();
@@ -215,6 +225,10 @@ public class PortfolioImportService {
 
 	private String write(List<ParsedHolding> holdings) {
 		return json.writeValueAsString(holdings);
+	}
+
+	private List<ParsedCash> readCash(String rawCash) {
+		return rawCash == null || rawCash.isBlank() ? List.of() : json.readValue(rawCash, CASH_TYPE);
 	}
 
 	private List<ParsedHolding> read(String rawHoldings) {

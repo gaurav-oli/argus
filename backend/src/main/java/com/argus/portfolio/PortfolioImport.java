@@ -39,6 +39,10 @@ public class PortfolioImport {
 	@Column(name = "raw_holdings", nullable = false)
 	private String rawHoldings;
 
+	/** Parsed cash balances, serialized as a JSON array of {@link ParsedCash}; persisted on confirm. */
+	@Column(name = "raw_cash", nullable = false)
+	private String rawCash = "[]";
+
 	/** Top-level parse note surfaced to the user (e.g. "no holdings found"); null when clean. */
 	private String message;
 
@@ -68,6 +72,14 @@ public class PortfolioImport {
 
 	public void setInstitution(String institution) {
 		this.institution = institution;
+	}
+
+	public String getRawCash() {
+		return rawCash;
+	}
+
+	public void setRawCash(String rawCash) {
+		this.rawCash = rawCash == null ? "[]" : rawCash;
 	}
 
 	public void markConfirmed() {

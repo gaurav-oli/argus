@@ -34,22 +34,27 @@ public class LlmStatementParser {
 			You are a precise brokerage-statement parser. Below is the extracted text of a PDF that may
 			contain MULTIPLE accounts and MULTIPLE statement periods (dates).
 
-			Extract the CURRENT holdings as JSON. Rules:
+			Extract the CURRENT holdings AND the cash balances as JSON. Rules:
 			- If the same account appears for more than one statement date, use ONLY the most recent date.
-			- Include holdings from ALL accounts and account types (Cash, TFSA, RRSP, RESP, etc.).
-			- EXCLUDE cash balances, sweep/money-market cash, tax/GST lines, FX-rate lines, activity and
-			  transaction history, dividends, and any "Total" rows. Only real security positions.
+			- Include ALL accounts and account types (Cash, TFSA, RRSP, RESP, etc.).
+			- "holdings": real security positions only. EXCLUDE tax/GST lines, FX-rate lines, activity and
+			  transaction history, dividends, and any "Total" rows.
+			- "cash": the uninvested CASH / money-market / sweep balance for each account that holds cash
+			  (the account's cash, not invested in securities). One entry per account; skip $0 / no-cash
+			  accounts. Use the cash amount in that account's currency.
 			- "ticker" must be the exchange symbol (e.g. NVDA, TSLA, VFV, XQQ), NOT the company name. The
 			  symbol may be glued to the end of the company name in the text.
 			- "shares" is the quantity held.
 			- "bookValue" is the TOTAL book/cost value (the "Book Value" column), not the per-unit price.
 			- "currency" is the account's currency: "CAD" or "USD".
-			- "account" is a short label for the account the holding sits in, combining the account number
-			  and type when available, e.g. "687WK3-B USD Cash", "RRSP (USD)", "TFSA", "Family RESP".
-			- If the same security is held in more than one account, return it once per account (separate rows).
+			- "account" is a short label for the account, combining the account number and type when
+			  available, e.g. "687WK3-B USD Cash", "RRSP (USD)", "TFSA", "Family RESP". Use the SAME label
+			  for a holding and the cash in the same account.
+			- If the same security is held in more than one account, return it once per account.
 
-			Return ONLY a JSON array, no prose, no markdown fences:
-			[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD","account":"687WK3-B USD Cash"}]
+			Return ONLY a JSON object, no prose, no markdown fences:
+			{"holdings":[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD","account":"687WK3-B USD Cash"}],
+			 "cash":[{"account":"687WK3-B USD Cash","currency":"USD","amount":12345.67}]}
 
 			STATEMENT TEXT:
 			""";
@@ -61,17 +66,21 @@ public class LlmStatementParser {
 		this.model = model;
 	}
 
-	/** Parse holdings from a statement PDF via the model. Throws if the model returns no usable JSON. */
+	/** Parse holdings + cash from a statement PDF via the model. Throws if no usable JSON is returned. */
 	public StatementParser.ParseResult parse(byte[] pdfBytes) {
 		String text = extractText(pdfBytes);
 		String raw = model.escalate(PROMPT + text);
-		List<LlmHolding> parsed = readArray(raw);
-		List<ParsedHolding> holdings = parsed.stream()
+		LlmStatement parsed = readResponse(raw);
+		List<ParsedHolding> holdings = parsed.holdings().stream()
 				.filter(h -> h.ticker() != null && !h.ticker().isBlank() && h.shares() != null)
 				.map(LlmStatementParser::toHolding)
 				.toList();
-		log.info("LLM statement parse: {} holdings extracted", holdings.size());
-		return new StatementParser.ParseResult(holdings,
+		List<ParsedCash> cash = parsed.cash().stream()
+				.filter(c -> c.account() != null && c.amount() != null && c.amount().signum() > 0)
+				.map(LlmStatementParser::toCash)
+				.toList();
+		log.info("LLM statement parse: {} holdings, {} cash balance(s) extracted", holdings.size(), cash.size());
+		return new StatementParser.ParseResult(holdings, cash,
 				"Parsed with AI assistance — review the holdings below before confirming.");
 	}
 
@@ -85,16 +94,33 @@ public class LlmStatementParser {
 				h.account() == null ? null : h.account().trim(), false, List.of());
 	}
 
-	/** Slice the JSON array out of the response (tolerates fences/prose) and deserialize it. */
-	private List<LlmHolding> readArray(String response) {
+	private static ParsedCash toCash(LlmCash c) {
+		String ccy = c.currency() == null ? "CAD" : c.currency().trim().toUpperCase();
+		if (!ccy.equals("CAD") && !ccy.equals("USD")) {
+			ccy = "CAD";
+		}
+		return new ParsedCash(c.account().trim(), ccy, c.amount());
+	}
+
+	/**
+	 * Deserialize the model response. Prefers the {@code {"holdings":[...],"cash":[...]}} object, but
+	 * tolerates a bare holdings array (older behavior / a model that ignored the object instruction).
+	 */
+	private LlmStatement readResponse(String response) {
+		int objStart = response.indexOf('{');
+		int objEnd = response.lastIndexOf('}');
+		if (objStart >= 0 && objEnd > objStart && response.substring(objStart, objEnd + 1).contains("holdings")) {
+			return json.readValue(response.substring(objStart, objEnd + 1), LlmStatement.class);
+		}
 		int start = response.indexOf('[');
 		int end = response.lastIndexOf(']');
 		if (start < 0 || end <= start) {
-			throw new IllegalStateException("Model returned no JSON array");
+			throw new IllegalStateException("Model returned no usable JSON");
 		}
-		String array = response.substring(start, end + 1);
-		return json.readValue(array, new TypeReference<List<LlmHolding>>() {
-		});
+		List<LlmHolding> holdings = json.readValue(response.substring(start, end + 1),
+				new TypeReference<List<LlmHolding>>() {
+				});
+		return new LlmStatement(holdings, List.of());
 	}
 
 	private static String extractText(byte[] pdfBytes) {
@@ -106,8 +132,19 @@ public class LlmStatementParser {
 		}
 	}
 
+	/** Loose mirror of the model's response object. */
+	private record LlmStatement(List<LlmHolding> holdings, List<LlmCash> cash) {
+		LlmStatement {
+			holdings = holdings == null ? List.of() : holdings;
+			cash = cash == null ? List.of() : cash;
+		}
+	}
+
 	/** Loose mirror of the model's JSON objects. */
 	private record LlmHolding(String ticker, String companyName, BigDecimal shares, BigDecimal bookValue,
 			String currency, String account) {
+	}
+
+	private record LlmCash(String account, String currency, BigDecimal amount) {
 	}
 }

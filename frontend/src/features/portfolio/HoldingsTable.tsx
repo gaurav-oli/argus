@@ -55,11 +55,6 @@ export function HoldingsTable() {
   const [fxRate, setFxRate] = useState("");
   const [fxError, setFxError] = useState<string | null>(null);
 
-  // add-cash form
-  const [newAccount, setNewAccount] = useState("");
-  const [newCurrency, setNewCurrency] = useState("CAD");
-  const [newAmount, setNewAmount] = useState("");
-
   const applySnapshot = (s: PortfolioSnapshot) => {
     setPositions(s.positions);
     setTotalValueCad(s.totalValueCad ?? 0);
@@ -133,15 +128,6 @@ export function HoldingsTable() {
     await refetchCash();
   }
 
-  async function addCash() {
-    const amt = parseFloat(newAmount);
-    if (!newAccount.trim() || !Number.isFinite(amt) || amt <= 0) return;
-    await setCash(newAccount.trim(), newCurrency, amt);
-    setNewAccount("");
-    setNewAmount("");
-    await refetchCash();
-  }
-
   if (positions.length === 0 && cash.length === 0) {
     return (
       <div className="flex flex-col gap-2">
@@ -199,41 +185,6 @@ export function HoldingsTable() {
             cashRows={cashRows}
           />
         )}
-      </div>
-
-      {/* add cash inline */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 text-xs">
-        <span className="text-text-secondary">Add cash:</span>
-        <input
-          list="holdings-cash-accounts"
-          value={newAccount}
-          onChange={(e) => setNewAccount(e.target.value)}
-          placeholder="Account"
-          className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1.5 text-text-primary placeholder:text-text-secondary"
-        />
-        <datalist id="holdings-cash-accounts">
-          {uniq(positions.map((p) => p.account)).map((a) => (
-            <option key={a} value={a} />
-          ))}
-        </datalist>
-        <select
-          value={newCurrency}
-          onChange={(e) => setNewCurrency(e.target.value)}
-          className="rounded border border-border bg-background px-2 py-1.5 text-text-primary"
-        >
-          <option value="CAD">CAD</option>
-          <option value="USD">USD</option>
-        </select>
-        <input
-          type="number"
-          value={newAmount}
-          onChange={(e) => setNewAmount(e.target.value)}
-          placeholder="Amount"
-          className="w-28 rounded border border-border bg-background px-2 py-1.5 text-text-primary placeholder:text-text-secondary"
-        />
-        <button onClick={addCash} className="rounded bg-accent/15 px-3 py-1.5 font-medium text-accent hover:bg-accent/25">
-          Add
-        </button>
       </div>
     </div>
   );

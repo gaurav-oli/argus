@@ -165,7 +165,12 @@ public class StatementParser {
 		}
 	}
 
-	/** Outcome of parsing a statement: the holdings plus an optional user-facing note. */
-	public record ParseResult(List<ParsedHolding> holdings, String message) {
+	/** Outcome of parsing a statement: holdings, any cash balances, plus an optional user-facing note. */
+	public record ParseResult(List<ParsedHolding> holdings, List<ParsedCash> cash, String message) {
+
+		/** Convenience for parsers that don't extract cash. */
+		public ParseResult(List<ParsedHolding> holdings, String message) {
+			this(holdings, List.of(), message);
+		}
 	}
 }
