@@ -95,6 +95,11 @@ services:
       ARGUS_REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-Argus/1.0}
       # Agent 4 (SEC EDGAR). No key — just a descriptive User-Agent (SEC requires the header).
       ARGUS_SEC_USER_AGENT: ${SEC_EDGAR_USER_AGENT:-Argus/1.0 (argus@example.com)}
+      # Epic 8 Web Push (FR-17). Spring binds argus.push.vapid.{public-key,private-key,subject};
+      # bridge those from the shorter .env names. Empty keys = push disabled (app runs fine).
+      ARGUS_PUSH_VAPID_PUBLIC_KEY: ${ARGUS_PUSH_VAPID_PUBLIC:-}
+      ARGUS_PUSH_VAPID_PRIVATE_KEY: ${ARGUS_PUSH_VAPID_PRIVATE:-}
+      ARGUS_PUSH_VAPID_SUBJECT: ${ARGUS_PUSH_VAPID_SUBJECT:-mailto:argus@localhost}
       # Browser origins allowed to call the API (CORS). On the Mini = the tailnet host, since
       # tailscale serve makes same-origin POSTs look cross-origin to the backend (Story 2.1).
       ARGUS_WEB_ALLOWED_ORIGINS: ${ARGUS_WEB_ALLOWED_ORIGINS:-http://localhost:3000}
