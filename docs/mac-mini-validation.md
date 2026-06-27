@@ -56,9 +56,43 @@ on the laptop. Real Mini run executed 2026-06-21. Full procedure: **`docs/deploy
 - [x] Frontend image built with single-origin args (`NEXT_PUBLIC_API_BASE_URL=` empty → same-origin `/api`; `NEXT_PUBLIC_WS_URL=wss://leannas-mac-mini.taila43287.ts.net/ws`).
 [Source: 1-8-tailscale-access-deploy-to-mini-runbook.md AC#6]
 
-## 3. PWA / Web Push prerequisite (Epic 8, later)
-- [ ] Confirm the Tailscale HTTPS origin is valid so the service worker + Web Push
-      (FR-17, Epic 8) can register on the iPhone. (HTTPS is set up in step 2.)
+## 3. Epic 8 — Push notifications (FR-17) + Morning Briefing (FR-16)  ⏳ TODO on the Mini
+Built + statically verified on the laptop (backend `mvn compile` **and** `test-compile` green against the
+real `nl.martijndwars:web-push` API; frontend `tsc --noEmit` + `eslint` green). Everything below needs a
+real browser over HTTPS, a real VAPID private key, network egress to the push services, and the live model
+— none of which exist on the dev MacBook.
+
+**Prerequisite (carried over):**
+- [ ] Tailscale HTTPS origin valid so the service worker + Web Push can register on the iPhone (HTTPS set up in §2).
+
+**Dependency resolution (do first — could not be checked offline):**
+- [ ] `docker compose --profile deploy up -d --build` (or `mvn -DskipTests package`) resolves
+      `nl.martijndwars:web-push:5.1.1` + `bcpkix-jdk18on:1.81`. The pom **excludes** web-push's legacy
+      `bcprov/bcpkix-jdk15on` in favour of the `bcprov-jdk18on:1.81` already on the classpath (Argon2) —
+      confirm there's no duplicate-BouncyCastle classpath conflict and the context starts.
+
+**VAPID keys:**
+- [ ] Set `ARGUS_PUSH_VAPID_PRIVATE` in the Mini `.env` (the matching private key for the public key in
+      `.env.example`). With it blank, `PushService.isConfigured()` is false and `sendToAll` no-ops by design.
+
+**Web Push end-to-end (FR-17):**
+- [ ] iPhone: install Argus to the Home Screen (manifest already shipped), open it, Profile → Notifications →
+      **Enable notifications** → permission granted → `POST /api/push/subscribe` stores a row in `push_subscriptions`.
+- [ ] Service worker registers (`/sw.js`, via `instrumentation-client.ts`); `navigator.serviceWorker.ready` resolves.
+- [ ] Trigger a broadcast and confirm the OS notification appears and **clicking it opens/focuses the app**
+      at the payload URL (sw.js `notificationclick`). Easiest trigger: `POST /api/briefing/generate`.
+- [ ] **Stranger-Danger critical alert** fires a push: drive `StrangerDangerService.scan()` to a new detection
+      and confirm the "⚠️ Stranger danger" push arrives and deep-links to `/intelligence`.
+- [ ] Expired-subscription pruning: a 404/410 from the push service deletes the row (`WebPushSender` → `EXPIRED`).
+
+**Morning Briefing (FR-16):**
+- [ ] `POST /api/briefing/generate` produces a sensible **model** narrative (local Gemma, BIG tier) — headline +
+      2–4 sentence body grounded in portfolio value/health, overnight news count, recs, today's calendar.
+      NB: the broken `gemma4` build (§1 CORRECTION) may make output junky — the deterministic fallback should
+      still yield a clean briefing if the model/parse fails.
+- [ ] `GET /api/briefing/latest` returns it (200) and the dashboard **BriefingCard** renders it pinned at top;
+      before any run it returns **204** and the card shows the "arrives at 8am" empty state.
+- [ ] The **08:00 America/Toronto** `@Scheduled` cron actually fires once on the box and pushes the headline.
 
 ## 4. General hardware/ops to confirm on the Mini
 - [x] FileVault ON (secrets at rest — NFR-3) — confirmed on the Mini 2026-06-21.

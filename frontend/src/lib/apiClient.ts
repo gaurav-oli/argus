@@ -778,3 +778,44 @@ export interface GraduationSummary {
 
 export const getGraduation = (): Promise<GraduationSummary> =>
   apiGet<GraduationSummary>("/api/recommendations/graduation");
+
+// ---- Web Push (Epic 8, FR-17) ----
+
+/** The VAPID public key the browser passes as `applicationServerKey`. Empty when unconfigured. */
+export interface VapidKey {
+  publicKey: string;
+}
+
+export const getPushKey = (): Promise<VapidKey> => apiGet<VapidKey>("/api/push/key");
+
+/** Persist a browser subscription (its `toJSON()` shape: `{ endpoint, keys: { p256dh, auth } }`). */
+export const subscribePush = (subscription: PushSubscriptionJSON): Promise<void> =>
+  apiPost("/api/push/subscribe", subscription);
+
+export const unsubscribePush = (endpoint: string): Promise<void> =>
+  apiPost("/api/push/unsubscribe", { endpoint });
+
+// ---- Morning Briefing (Epic 8, FR-16) ----
+
+/** Mirrors the backend `BriefingController.BriefingView` record. */
+export interface Briefing {
+  id: number;
+  headline: string;
+  body: string;
+  generatedAt: string;
+}
+
+/** The latest briefing, or `null` when none exists yet — the backend returns 204 (not a JSON body). */
+export async function getLatestBriefing(): Promise<Briefing | null> {
+  const res = await fetch(`${BASE_URL}/api/briefing/latest`, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as Briefing;
+}
+
+/** Force a fresh briefing now (manual trigger; the scheduled one runs at 8am Toronto). */
+export const generateBriefing = (): Promise<Briefing> =>
+  apiPost<Briefing>("/api/briefing/generate");

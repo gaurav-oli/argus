@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import com.argus.agent.AgentEventPublisher;
 import com.argus.intelligence.MarketDataPort.MarketStats;
+import com.argus.push.PushService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -30,10 +31,11 @@ class StrangerDangerServiceTest {
 	@SuppressWarnings("unchecked")
 	private final ObjectProvider<MarketDataPort> marketData = mock(ObjectProvider.class);
 	private final AgentEventPublisher events = mock(AgentEventPublisher.class);
+	private final PushService push = mock(PushService.class);
 	private final StrangerDangerProperties props = new StrangerDangerProperties(60000, 360, 3, 6);
 
 	private final StrangerDangerService service = new StrangerDangerService(articles, new CashtagExtractor(),
-			knownUniverse, credibility, new StrangerRiskScorer(), alerts, marketData, events, props);
+			knownUniverse, credibility, new StrangerRiskScorer(), alerts, marketData, events, props, push);
 
 	private static NewsArticle article(String source, String id, String headline) {
 		return new NewsArticle(source, id, "http://x/" + id, headline, null, Instant.now(), new String[0]);

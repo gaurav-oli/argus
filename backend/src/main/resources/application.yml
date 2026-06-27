@@ -76,6 +76,23 @@ argus:
     max-tokens: 1024
     temperature: 0.7
 
+  # Web Push / VAPID (Epic 8, FR-17). Bound to PushProperties as argus.push.vapid.*. Empty defaults
+  # are deliberate — with no private key, push is disabled and the rest of Argus runs unaffected. The
+  # PUBLIC key is non-secret and the same one committed in .env.example; the PRIVATE key is set only
+  # in the real .env. The browser fetches the public key from GET /api/push/key.
+  push:
+    vapid:
+      public-key: ${ARGUS_PUSH_VAPID_PUBLIC:}
+      private-key: ${ARGUS_PUSH_VAPID_PRIVATE:}
+      subject: ${ARGUS_PUSH_VAPID_SUBJECT:mailto:argus@localhost}
+
+  # Morning Briefing (Epic 8, FR-16). Local-model narrative generated on a daily schedule
+  # (08:00 America/Toronto) and pushed to all devices. overnight-hours is the look-back window for
+  # the "news while you slept" count.
+  briefing:
+    cron: ${ARGUS_BRIEFING_CRON:0 0 8 * * *}
+    overnight-hours: ${ARGUS_BRIEFING_OVERNIGHT_HOURS:16}
+
 management:
   endpoints:
     web:

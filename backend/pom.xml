@@ -136,6 +136,33 @@
 		</dependency>
 
 		<dependency>
+			<!-- Web Push / VAPID (Epic 8, FR-17): RFC 8291 payload encryption + RFC 8292 VAPID auth.
+			     Ships a legacy BouncyCastle (jdk15on) that would duplicate the bcprov-jdk18on:1.81
+			     already on the classpath (Argon2) — excluded; we add the matching bcpkix-jdk18on so
+			     the single BC 1.81 satisfies it. Verify dependency resolution on the Mini (see
+			     docs/mac-mini-validation.md). -->
+			<groupId>nl.martijndwars</groupId>
+			<artifactId>web-push</artifactId>
+			<version>5.1.1</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.bouncycastle</groupId>
+					<artifactId>bcprov-jdk15on</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.bouncycastle</groupId>
+					<artifactId>bcpkix-jdk15on</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<!-- PKIX helpers the web-push library needs, matched to bcprov-jdk18on:1.81. -->
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<version>1.81</version>
+		</dependency>
+
+		<dependency>
 			<!-- Boot 4 Flyway autoconfiguration module (pulls flyway-core transitively).
 			     flyway-core alone does NOT enable autoconfig in Boot 4. -->
 			<groupId>org.springframework.boot</groupId>

@@ -5,6 +5,7 @@ import { LogoutButton } from "@/features/auth/LogoutButton";
 import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionManager } from "@/features/auth/SessionManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
+import { NotificationsSetting } from "@/features/notifications/NotificationsSetting";
 import { PanicSettings } from "@/features/panic/PanicSettings";
 
 export default function ProfilePage() {
@@ -51,6 +52,20 @@ export default function ProfilePage() {
 
         <SettingsCard
           index={2}
+          title="Notifications"
+          desc="Push alerts and your morning briefing."
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+            </svg>
+          }
+        >
+          <NotificationsSetting />
+        </SettingsCard>
+
+        <SettingsCard
+          index={3}
           title="Safety"
           desc="Panic mode and emergency controls."
           icon={
@@ -64,7 +79,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={3}
+          index={4}
           title="Active sessions"
           desc="Devices currently signed in to Argus."
           icon={

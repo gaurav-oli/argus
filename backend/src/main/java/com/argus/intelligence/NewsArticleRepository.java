@@ -15,6 +15,9 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
 	/** Articles published since {@code since}, newest first — the Stranger Danger scan window (Story 4.4). */
 	List<NewsArticle> findByPublishedAtAfterOrderByPublishedAtDesc(Instant since);
 
+	/** How many articles were published since {@code since} — the Morning Briefing's overnight count (Epic 8). */
+	long countByPublishedAtAfter(Instant since);
+
 	/** Most-recent articles for the Intelligence view feed. */
 	List<NewsArticle> findTop50ByOrderByPublishedAtDesc();
 
