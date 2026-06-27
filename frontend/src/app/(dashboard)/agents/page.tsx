@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AgentFleet } from "@/features/agents/AgentFleet";
 import { AgentPerformance } from "@/features/agents/AgentPerformance";
+import { OpsHealth } from "@/features/agents/OpsHealth";
 
 /**
  * Agents — the live AI fleet (Epic 9, Story 9.1) plus Agent 5's performance record (Stories 9.2–9.4):
@@ -20,6 +21,11 @@ export default function AgentsPage() {
       <div className="mt-8">
         <h2 className="mb-4 font-display text-lg font-semibold text-text-primary">Do they earn their keep?</h2>
         <AgentPerformance />
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-4 font-display text-lg font-semibold text-text-primary">System health</h2>
+        <OpsHealth />
       </div>
     </div>
   );

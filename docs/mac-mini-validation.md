@@ -147,6 +147,22 @@ escalation enabled"). `POST /api/recommendations/1/chat` with `deeper:true`:
       "deeper analysis" escalation (the main path) is confirmed. No-key → clean 503 was verified earlier.
 [Source: 7-3-haiku-escalation.md AC#4/#6; epics.md#Story 7.3]
 
+## 8. Epic 9 — Ops dashboards (9.1 live, 9.5 hardware, 9.7 freshness)  ⏳ confirm on the Mini
+Built + statically verified on the laptop (backend `test-compile` green; `FreshnessServiceTest` +
+`PerformanceServiceTest` pass; frontend `tsc` + `eslint` green). The analytics (9.2/9.3/9.4) are pure
+logic and need no Mini step. These need the running stack / real hardware:
+- [ ] **9.1 live agent status:** with the stack up, the Agents view updates over WebSocket — the backend
+      pushes the fleet snapshot to `/topic/agents` every `argus.ops.agent-broadcast-ms` (15s). Confirm the
+      cards refresh without a reload. (Richer ANALYZING/ERROR states + per-run duration/next-run are NOT
+      built — they need per-agent run instrumentation; tracked as a follow-up.)
+- [ ] **9.5 hardware:** `GET /api/ops/hardware` reports **real** values on the Mini — RAM vs 28GB, the data
+      SSD vs 256GB (set `ARGUS_OPS_DATA_DIR` to the real data volume), CPU load. Confirm they look right
+      under load. Still null/follow-up: per-component RAM (Postgres/Redis/model resident), SSD days-to-full
+      (needs growth history), Neural-Engine load (not exposed to the JVM).
+- [ ] **9.7 freshness:** `GET /api/ops/freshness` flags a source stale past its threshold — verify against
+      real agent cadences and tune thresholds if needed. **Backup status is NOT built** (needs the external
+      backup SSD + disk-mount check) — belongs with Epic 10, Story 10.3.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (Epic 10, Story 10.3)._

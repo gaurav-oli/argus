@@ -6,10 +6,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Small ops summary for the dashboard bottom strip (Epic 9) — the real numbers we have today:
- * how many agents are active, and cumulative paid (Haiku) spend this process. Session-gated.
- *
- * <p>RAM/SSD host telemetry is the Hardware Resource Monitor (Story 9.5) and isn't surfaced here.
+ * Operations endpoints (Epic 9), session-gated under {@code /api/ops}: the dashboard bottom-strip
+ * summary (active agents + paid Haiku spend), host hardware telemetry (Story 9.5), and data-source
+ * freshness (Story 9.7).
  */
 @RestController
 @RequestMapping("/api/ops")
@@ -21,10 +20,15 @@ public class OpsController {
 
 	private final AgentStatusService agents;
 	private final CostRecorder cost;
+	private final HardwareService hardware;
+	private final FreshnessService freshness;
 
-	public OpsController(AgentStatusService agents, CostRecorder cost) {
+	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
+			FreshnessService freshness) {
 		this.agents = agents;
 		this.cost = cost;
+		this.hardware = hardware;
+		this.freshness = freshness;
 	}
 
 	@GetMapping("/summary")
@@ -32,5 +36,17 @@ public class OpsController {
 		var fleet = agents.snapshot();
 		int active = (int) fleet.stream().filter(a -> "ACTIVE".equals(a.status())).count();
 		return new OpsSummary(active, fleet.size(), cost.totalUsd());
+	}
+
+	/** Story 9.5 — live host RAM / SSD / CPU telemetry. */
+	@GetMapping("/hardware")
+	public HardwareMetrics hardware() {
+		return hardware.snapshot();
+	}
+
+	/** Story 9.7 — per-source last-update times with stale flags. */
+	@GetMapping("/freshness")
+	public FreshnessView freshness() {
+		return freshness.snapshot();
 	}
 }

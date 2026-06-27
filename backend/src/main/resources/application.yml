@@ -100,6 +100,13 @@ argus:
     min-portfolio-impact: ${ARGUS_NOTIFICATION_MIN_PORTFOLIO_IMPACT:0.02}
     dedup-window-seconds: ${ARGUS_NOTIFICATION_DEDUP_WINDOW_SECONDS:1800}
 
+  # Operations dashboards (Epic 9). data-dir is the filesystem whose free/total space represents the
+  # data SSD (the Mini's 256GB volume; defaults to root). agent-broadcast-ms is how often the agent
+  # fleet snapshot is pushed to /topic/agents for the live Agents view.
+  ops:
+    data-dir: ${ARGUS_OPS_DATA_DIR:/}
+    agent-broadcast-ms: ${ARGUS_OPS_AGENT_BROADCAST_MS:15000}
+
 management:
   endpoints:
     web:

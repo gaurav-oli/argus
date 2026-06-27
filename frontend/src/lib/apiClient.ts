@@ -879,3 +879,43 @@ export interface CalibrationView {
 
 export const getCalibration = (): Promise<CalibrationView> =>
   apiGet<CalibrationView>("/api/recommendations/calibration");
+
+// ---- Ops: hardware monitor + data freshness (Epic 9, Stories 9.5/9.7) ----
+
+/** Host telemetry. Nullable fields aren't measurable from the JVM on the current host. */
+export interface HardwareMetrics {
+  ramTotalMb: number;
+  ramUsedMb: number;
+  ramFreeMb: number;
+  jvmHeapUsedMb: number;
+  jvmHeapMaxMb: number;
+  ssdTotalGb: number;
+  ssdUsedGb: number;
+  ssdFreeGb: number;
+  ssdDaysToFull: number | null;
+  cpuLoadPct: number | null;
+  processCpuLoadPct: number | null;
+  neuralEngineLoadPct: number | null;
+  asOf: string;
+}
+
+export const getHardware = (): Promise<HardwareMetrics> =>
+  apiGet<HardwareMetrics>("/api/ops/hardware");
+
+/** Freshness of one data source. `stale` is true when older than `thresholdMinutes` (or never). */
+export interface SourceFreshness {
+  source: string;
+  label: string;
+  lastUpdateAt: string | null;
+  ageMinutes: number | null;
+  stale: boolean;
+  thresholdMinutes: number;
+}
+
+export interface FreshnessView {
+  sources: SourceFreshness[];
+  anyStale: boolean;
+}
+
+export const getFreshness = (): Promise<FreshnessView> =>
+  apiGet<FreshnessView>("/api/ops/freshness");

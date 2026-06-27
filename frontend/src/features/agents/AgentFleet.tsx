@@ -6,6 +6,7 @@ import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { getAgentStatus, getBudgetStatus, type AgentStatus, type BudgetStatus } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
+import { subscribeToTopic } from "@/lib/wsClient";
 import { useEffect, useState } from "react";
 
 /**
@@ -25,8 +26,13 @@ export function AgentFleet() {
     getBudgetStatus()
       .then((v) => active && setBudget(v))
       .catch(() => {});
+
+    // Story 9.1 — live updates: the backend pushes the fleet snapshot to /topic/agents on an interval.
+    const sub = subscribeToTopic<AgentStatus[]>("/topic/agents", (v) => active && setAgents(v));
+
     return () => {
       active = false;
+      sub.disconnect();
     };
   }, []);
 
