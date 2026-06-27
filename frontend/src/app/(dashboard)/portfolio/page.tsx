@@ -1,6 +1,7 @@
 import { HoldingsTreemap } from "@/components/dashboard/HoldingsTreemap";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CashBalances } from "@/features/portfolio/CashBalances";
 import { CorporateActions } from "@/features/portfolio/CorporateActions";
 import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatement } from "@/features/portfolio/ImportStatement";
@@ -35,6 +36,9 @@ export default function PortfolioPage() {
           <HoldingsTable />
         </MotionCard>
         <MotionCard index={4} className="md:col-span-6" interactive={false}>
+          <CashBalances />
+        </MotionCard>
+        <MotionCard index={5} className="md:col-span-6" interactive={false}>
           <ManagePositions />
         </MotionCard>
         <MotionCard index={5} className="md:col-span-6">

@@ -31,8 +31,10 @@ class LivePortfolioServiceTest {
 	private final PositionRepository positions = mock(PositionRepository.class);
 	private final FxRateService fx = mock(FxRateService.class);
 	private final LivePushService livePush = mock(LivePushService.class);
+	// No cash in these valuation tests — a mock repo yields an empty list, so cash total is 0.
+	private final CashService cash = new CashService(mock(CashBalanceRepository.class));
 	private final LivePortfolioService service =
-			new LivePortfolioService(positions, fx, new MarketClock(), livePush);
+			new LivePortfolioService(positions, fx, new MarketClock(), livePush, cash);
 
 	private static final Instant REGULAR =
 			ZonedDateTime.of(LocalDate.of(2023, 6, 15), LocalTime.of(14, 0), ZoneId.of("America/New_York")).toInstant();

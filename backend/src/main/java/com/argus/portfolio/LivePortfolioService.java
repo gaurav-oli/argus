@@ -34,16 +34,18 @@ public class LivePortfolioService {
 	private final FxRateService fx;
 	private final MarketClock marketClock;
 	private final LivePushService livePush;
+	private final CashService cash;
 
 	private final Map<String, PricePoint> prices = new ConcurrentHashMap<>();
 	private final Map<String, BigDecimal> previousCloses = new ConcurrentHashMap<>();
 
 	public LivePortfolioService(PositionRepository positions, FxRateService fx, MarketClock marketClock,
-			LivePushService livePush) {
+			LivePushService livePush, CashService cash) {
 		this.positions = positions;
 		this.fx = fx;
 		this.marketClock = marketClock;
 		this.livePush = livePush;
+		this.cash = cash;
 	}
 
 	/** Record a price tick and push a fresh snapshot. Ticker is normalized to uppercase. */
@@ -122,6 +124,14 @@ public class LivePortfolioService {
 			if (cadAcb != null && cadMarketValue != null) {
 				totalCostCad = totalCostCad.add(cadAcb);
 			}
+		}
+
+		// Fold in uninvested cash (the brokerage's total includes it). Added to value AND cost equally
+		// so it doesn't distort P&L — cash is worth exactly its face value.
+		BigDecimal cashCad = cash.totalCad(usdCad);
+		if (cashCad != null && cashCad.signum() > 0) {
+			totalValueCad = totalValueCad.add(cashCad);
+			totalCostCad = totalCostCad.add(cashCad);
 		}
 
 		// Second pass: weight needs the portfolio total, known only after the first pass.

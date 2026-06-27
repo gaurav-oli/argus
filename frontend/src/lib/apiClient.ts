@@ -382,6 +382,20 @@ export interface PortfolioSnapshot {
 export const getPortfolioValue = (): Promise<PortfolioSnapshot> =>
   apiGet<PortfolioSnapshot>("/api/portfolio/value");
 
+/** Uninvested cash per account+currency, folded into the portfolio total. */
+export interface CashBalanceView {
+  id: number;
+  account: string;
+  currency: string;
+  amount: number;
+}
+
+export const getCash = (): Promise<CashBalanceView[]> => apiGet<CashBalanceView[]>("/api/portfolio/cash");
+
+/** Set the cash for an account+currency. Amount 0 removes it. */
+export const setCash = (account: string, currency: string, amount: number): Promise<void> =>
+  apiPut("/api/portfolio/cash", { account, currency, amount });
+
 /** One point in the portfolio value chart series (Story 3.6). `date` is an ISO date string. */
 export interface ValuePoint {
   date: string;
