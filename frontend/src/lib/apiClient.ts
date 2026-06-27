@@ -819,3 +819,63 @@ export async function getLatestBriefing(): Promise<Briefing | null> {
 /** Force a fresh briefing now (manual trigger; the scheduled one runs at 8am Toronto). */
 export const generateBriefing = (): Promise<Briefing> =>
   apiPost<Briefing>("/api/briefing/generate");
+
+// ---- Agent 5 performance / Ops dashboards (Epic 9, Stories 9.2–9.4) ----
+
+/** Win rate over one window. `winRatePct` is null when there are no resolved trades. */
+export interface WindowStat {
+  trades: number;
+  wins: number;
+  winRatePct: number | null;
+  statisticallyMeaningful: boolean;
+}
+
+/** Story 9.2 — Agent 5 accuracy. No avg-gains figure: outcomes carry no P&L (win/loss only). */
+export interface AccuracyView {
+  all: WindowStat;
+  last30d: WindowStat;
+  last10: WindowStat;
+  totalIssued: number;
+  taken: number;
+  declined: number;
+  graduationState: string;
+  graduationBadge: string | null;
+}
+
+export const getAccuracy = (): Promise<AccuracyView> =>
+  apiGet<AccuracyView>("/api/recommendations/accuracy");
+
+/** Story 9.3 — one agent's share of total signal weight across all recommendations. */
+export interface AgentContribution {
+  agent: string;
+  contributionPct: number;
+  signalCount: number;
+  underperformer: boolean;
+}
+
+export interface AttributionView {
+  agents: AgentContribution[];
+  agentCount: number;
+}
+
+export const getAttribution = (): Promise<AttributionView> =>
+  apiGet<AttributionView>("/api/recommendations/attribution");
+
+/** Story 9.4 — one probability bin [lowPct, highPct) and the actual hit rate observed in it. */
+export interface CalibrationBin {
+  lowPct: number;
+  highPct: number;
+  count: number;
+  wins: number;
+  actualHitRatePct: number | null;
+  sufficient: boolean;
+}
+
+export interface CalibrationView {
+  bins: CalibrationBin[];
+  resolvedCount: number;
+  minSampleSize: number;
+}
+
+export const getCalibration = (): Promise<CalibrationView> =>
+  apiGet<CalibrationView>("/api/recommendations/calibration");

@@ -125,14 +125,14 @@ development_status:
   epic-8-retrospective: optional
 
   # Epic 9: Operations Dashboards
-  epic-9: backlog
-  9-1-per-agent-status-panel: backlog
-  9-2-agent-5-accuracy-tracking: backlog
-  9-3-contribution-attribution: backlog
-  9-4-calibration-tracking: backlog
-  9-5-hardware-resource-monitor: backlog
-  9-6-api-budget-tracker: backlog
-  9-7-data-freshness-backup-status: backlog
+  epic-9: in-progress
+  9-1-per-agent-status-panel: partial      # backend snapshot + Agents view exist; live-WS/error/duration missing
+  9-2-agent-5-accuracy-tracking: done       # win-rate windows + taken/declined; avg-gains N/A (no P&L modeled)
+  9-3-contribution-attribution: done        # signal-weight aggregation; PerformanceServiceTest green
+  9-4-calibration-tracking: done            # probability-bin reliability; insufficient-sample labelling
+  9-5-hardware-resource-monitor: backlog    # Mini-dependent (real RAM/SSD/Neural Engine via Actuator)
+  9-6-api-budget-tracker: done              # built in Epic 10 (BudgetController); per-agent/model breakdown is follow-up
+  9-7-data-freshness-backup-status: backlog # Mini-dependent (external backup SSD, disk mount)
   epic-9-retrospective: optional
 
   # Epic 10: Resilience, Backup & Budget
