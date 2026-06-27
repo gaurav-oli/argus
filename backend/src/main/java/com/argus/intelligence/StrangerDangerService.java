@@ -147,10 +147,13 @@ public class StrangerDangerService {
 				"requiredConsensus", props.requiredAgentConsensus()));
 		log.warn("Stranger Danger: '{}' flagged (risk {}, {} articles, elevated consensus {}/7)",
 				ticker, risk, covering.size(), props.requiredAgentConsensus());
-		// CRITICAL alert → notification pipeline (Epic 8). CRITICAL bypasses the fatigue gate but still
-		// dedups by ticker so re-flags don't re-ping. Best-effort: a failure must never abort a scan.
+		// Notification pipeline (Epic 8). Tier by risk to match the in-app feed (≥70 = critical):
+		// high-risk strangers go CRITICAL (push immediately, bypassing the fatigue gate); lower-risk
+		// flags go IMPORTANT (still push-worthy, but routed through the gate so they're not alarm-loud).
+		// Either way, dedup by ticker means re-flags don't re-ping. Best-effort — never abort a scan.
+		UrgencyTier tier = risk >= 70 ? UrgencyTier.CRITICAL : UrgencyTier.IMPORTANT;
 		try {
-			notifications.notify(Notification.forTicker(UrgencyTier.CRITICAL, ticker, "STRANGER",
+			notifications.notify(Notification.forTicker(tier, ticker, "STRANGER",
 					risk / 100.0, 0.0,
 					"⚠️ Stranger danger: " + ticker,
 					ticker + " is under heavy unverified coverage (risk " + risk + "/100). Treat with caution.",
