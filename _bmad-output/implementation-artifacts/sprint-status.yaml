@@ -36,7 +36,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-17
-last_updated: 2026-06-23
+last_updated: 2026-07-06
 project: ProjectX
 project_key: NOKEY
 tracking_system: file-system
@@ -116,11 +116,11 @@ development_status:
   epic-7-retrospective: optional
 
   # Epic 8: Briefing, Notifications & Alert Discipline
-  epic-8: in-progress
+  epic-8: done
   8-1-web-push-setup: done            # built on laptop; runtime validation -> mac-mini-validation.md §3
-  8-2-alert-urgency-tiers: in-progress
-  8-3-alert-fatigue-gate: in-progress
-  8-4-alert-deduplication: in-progress
+  8-2-alert-urgency-tiers: done       # NotificationService tier routing; NotificationServiceTest 7/7 green (verified 2026-07-06). Follow-up: NORMAL/INFO deferral logs the outcome but doesn't yet enqueue into the actual briefing/digest payload
+  8-3-alert-fatigue-gate: done        # confidence(0.60)+impact(0.02) gate, CRITICAL bypass, suppressed logged
+  8-4-alert-deduplication: done       # Redis store, 30-min window, highest-confidence wins, dedupe count logged
   8-5-morning-briefing: done          # built on laptop; runtime validation -> mac-mini-validation.md §3
   epic-8-retrospective: optional
 
