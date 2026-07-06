@@ -114,6 +114,30 @@ npm run dev                   # starts on http://localhost:3000
 `config · common · model · agent · marketdata · portfolio · intelligence · calendar · recommendation ·
 persona · conversation · notification · cost · ops · security`
 
+## Analyst/Investor loop & validation knobs
+
+Agent 5 runs a self-improving loop with **no user input**: the *Analyst* produces a recommendation, the
+*Investor* opens a fixed-notional **paper trade** ($100, pretend money — never your real portfolio) at
+the live price, marks it to market at the horizon, and the realized win/loss feeds back as per-agent
+signal-weight multipliers and isotonic probability calibration (Phase B adaptive tuning). Everything is
+deterministic (no LLM numbers) and reversible; the pure scoring engine is never rewritten.
+
+Production defaults judge trades on a real investing timeframe and resist noise. For validation you can
+temporarily lower them from `.env` (no rebuild — recreate the backend with `docker compose --profile
+deploy up -d`), then **remove the overrides to return to production**:
+
+| `.env` override | Prod default | Validation | Effect |
+|---|---|---|---|
+| `PAPER_INVESTOR_HORIZON_DAYS` | 30 | e.g. 2 | how long a paper trade is held before it's marked to market (new trades only) |
+| `ADAPTIVE_TUNING_MIN_SAMPLE` | 10 | e.g. 2 | closed-trade floor below which an agent's weight multiplier stays 1.0 |
+| `ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT` | false | true | also run the tuning recompute at startup instead of only nightly (02:30) |
+
+Ops: `POST /api/recommendations/tuning/recompute` (session-gated) forces a recompute on demand and
+returns the resulting per-agent reliability. **Cleanup after validation:** remove the three overrides
+above and recreate the backend; if you seeded synthetic `simulated_trades` by hand, delete those rows
+plus the derived `paper_trades` / `agent_reliability` / `probability_calibration` and restart so the
+in-memory tuning cache resets (otherwise multipliers derived from test data linger).
+
 ## Planning & implementation docs
 
 See `_bmad-output/planning-artifacts/` (PRD, architecture, epics) and
