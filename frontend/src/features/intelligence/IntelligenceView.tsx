@@ -243,6 +243,44 @@ function Card({ title, count, children }: { title: string; count?: number; child
   );
 }
 
+/** A ticker (or "Broader market") with its articles and net mood, for the grouped News view. */
+interface NewsGroup {
+  ticker: string;
+  items: NewsItem[];
+  bullish: number;
+  bearish: number;
+}
+
+const UNTAGGED = "Broader market";
+const MAX_PER_GROUP = 4;
+
+/** Group articles under each ticker (an article appears under each of its tickers); untagged last. */
+function groupByTicker(items: NewsItem[]): NewsGroup[] {
+  const map = new Map<string, NewsGroup>();
+  for (const n of items) {
+    const keys = n.tickers.length > 0 ? n.tickers : [UNTAGGED];
+    for (const t of keys) {
+      const g = map.get(t) ?? { ticker: t, items: [], bullish: 0, bearish: 0 };
+      g.items.push(n);
+      if (n.sentimentLabel === "BULLISH") g.bullish += 1;
+      else if (n.sentimentLabel === "BEARISH") g.bearish += 1;
+      map.set(t, g);
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    // Tagged tickers before the untagged bucket, then by article volume.
+    if (a.ticker === UNTAGGED) return 1;
+    if (b.ticker === UNTAGGED) return -1;
+    return b.items.length - a.items.length;
+  });
+}
+
+function mood(g: NewsGroup): { symbol: string; label: string; color: string } {
+  if (g.bullish > g.bearish) return { symbol: "▲", label: "bullish", color: "var(--color-gains)" };
+  if (g.bearish > g.bullish) return { symbol: "▼", label: "bearish", color: "var(--color-losses)" };
+  return { symbol: "–", label: "neutral", color: "var(--color-text-secondary)" };
+}
+
 function NewsSection({ items }: { items: NewsItem[] | null }) {
   if (items === null) {
     return (
@@ -255,39 +293,83 @@ function NewsSection({ items }: { items: NewsItem[] | null }) {
       </Card>
     );
   }
+  if (items.length === 0) {
+    return (
+      <Card title="News & Signals">
+        <Empty>No articles ingested yet. Agent 1 populates this on its next cycle.</Empty>
+      </Card>
+    );
+  }
+
+  const groups = groupByTicker(items);
+  const movers = groups.filter((g) => g.ticker !== UNTAGGED && g.bullish !== g.bearish).length;
+
   return (
     <Card title="News & Signals" count={items.length}>
-      {items.length === 0 ? (
-        <Empty>No articles ingested yet. Agent 1 populates this on its next cycle.</Empty>
-      ) : (
-        <ul className="divide-y divide-border">
-          {items.map((n) => (
-            <li key={n.id} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium text-text-primary">{n.headline}</p>
-                <SentimentBadge label={n.sentimentLabel} score={n.sentimentScore} />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
-                <span>{n.source}</span>
-                <span aria-hidden>·</span>
-                <span>{timeAgo(n.publishedAt)}</span>
-                {n.tickers.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded bg-border/60 px-1.5 py-0.5 text-[11px] font-medium text-text-primary"
-                  >
-                    {t}
-                  </span>
-                ))}
-                {n.relevanceScore != null && (
-                  <span className="text-[11px]">{Math.round(n.relevanceScore * 100)}% relevant</span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-primary">
+        <span aria-hidden>⚡</span>
+        {movers > 0 ? (
+          <>
+            <span className="tabular-nums">{movers}</span> holding{movers === 1 ? "" : "s"} moving on news
+          </>
+        ) : (
+          "Nothing materially moving on news right now"
+        )}
+      </p>
+      <div className="flex flex-col gap-4">
+        {groups.map((g) => (
+          <NewsGroupRow key={g.ticker} group={g} />
+        ))}
+      </div>
     </Card>
+  );
+}
+
+function NewsGroupRow({ group }: { group: NewsGroup }) {
+  const m = mood(group);
+  const shown = group.items.slice(0, MAX_PER_GROUP);
+  const extra = group.items.length - shown.length;
+  const isTicker = group.ticker !== UNTAGGED;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-1.5">
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              isTicker
+                ? "font-mono text-sm font-semibold text-text-primary"
+                : "text-sm font-semibold text-text-secondary"
+            }
+          >
+            {group.ticker}
+          </span>
+          <span className="text-xs font-medium" style={{ color: m.color }}>
+            {m.symbol} {m.label}
+          </span>
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">
+          {group.items.length} item{group.items.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <ul className="mt-1.5 flex flex-col gap-1.5">
+        {shown.map((n) => (
+          <li key={`${group.ticker}-${n.id}`} className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm text-text-primary">{n.headline}</p>
+              <p className="text-[11px] text-text-secondary">
+                {n.source} · {timeAgo(n.publishedAt)}
+              </p>
+            </div>
+            <SentimentBadge label={n.sentimentLabel} score={n.sentimentScore} />
+          </li>
+        ))}
+      </ul>
+      {extra > 0 && (
+        <p className="mt-1 text-[11px] text-text-secondary/80">
+          +{extra} more {group.ticker === UNTAGGED ? "" : `on ${group.ticker}`}
+        </p>
+      )}
+    </div>
   );
 }
 
