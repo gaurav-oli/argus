@@ -1,3 +1,21 @@
+/**
+ * Absolute local date + time for an ISO instant, e.g. "Jul 6, 11:42 a.m." (same year) or
+ * "Jul 6, 2025, 11:42 a.m." (other years). Empty string for null. Used where an exact
+ * "last refreshed at" reads better than a relative "4h ago".
+ */
+export function absTime(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleString("en-CA", {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Relative "time ago" (past) / "in N" (future) for an ISO instant. Empty string for null. */
 export function relTime(iso: string | null): string {
   if (!iso) return "";

@@ -834,6 +834,30 @@ export async function getLatestBriefing(): Promise<Briefing | null> {
 export const generateBriefing = (): Promise<Briefing> =>
   apiPost<Briefing>("/api/briefing/generate");
 
+/** Mirrors the backend `BriefingController.MarketPulseView` record. */
+export interface MarketPulse {
+  summary: string;
+  articleCount: number;
+  generatedAt: string;
+  /** True only when a refresh actually re-summarized; false means "nothing major since last check". */
+  hasUpdates: boolean;
+}
+
+/** The latest market pulse, or `null` when none exists yet — the backend returns 204. */
+export async function getMarketPulse(): Promise<MarketPulse | null> {
+  const res = await fetch(`${BASE_URL}/api/briefing/market-pulse`, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as MarketPulse;
+}
+
+/** Re-scan recent market-impacting news and re-summarize; `hasUpdates=false` if nothing new arrived. */
+export const refreshMarketPulse = (): Promise<MarketPulse> =>
+  apiPost<MarketPulse>("/api/briefing/market-pulse/refresh");
+
 // ---- Agent 5 performance / Ops dashboards (Epic 9, Stories 9.2–9.4) ----
 
 /** Win rate over one window. `winRatePct` is null when there are no resolved trades. */
@@ -893,6 +917,36 @@ export interface CalibrationView {
 
 export const getCalibration = (): Promise<CalibrationView> =>
   apiGet<CalibrationView>("/api/recommendations/calibration");
+
+/** One closed simulated position in the Investor's book (FR-11 follow-up). */
+export interface ClosedTradeView {
+  ticker: string;
+  direction: string;
+  returnPct: number | null;
+  won: boolean;
+  closedAt: string;
+  /** The Analyst's post-mortem on a losing call; null for wins. */
+  review: string | null;
+}
+
+/**
+ * The Investor persona's autonomous paper-trading scoreboard: a fixed-notional book opened on Agent 5's
+ * calls and marked to market at the horizon — win rate + realized return built with no manual input.
+ */
+export interface PaperTradeScoreboard {
+  openTrades: number;
+  closedTrades: number;
+  wins: number;
+  winRatePct: number | null;
+  notionalPerTrade: number;
+  deployed: number;
+  realizedPnl: number;
+  bookReturnPct: number | null;
+  recent: ClosedTradeView[];
+}
+
+export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
+  apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");
 
 // ---- Ops: hardware monitor + data freshness (Epic 9, Stories 9.5/9.7) ----
 
