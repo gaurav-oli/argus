@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -290,11 +289,5 @@ public class AdaptiveTuningService {
 		double[] b = new double[BINS];
 		java.util.Arrays.fill(b, Double.NaN);
 		return b;
-	}
-
-	/** Test/ops hook: force a recompute now. */
-	public Optional<Void> recomputeNow() {
-		recompute();
-		return Optional.empty();
 	}
 }
