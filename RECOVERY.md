@@ -61,6 +61,50 @@ deploy procedure in [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 - [ ] Re-enable notifications on each device (subscriptions are per-device; only needed if the VAPID
       key changed or `push_subscriptions` was lost).
 
+## Restarting after a host reboot / Docker restart
+
+This is the common case (Mac Mini rebooted, Docker Desktop was quit) — **not** a data-loss event, so
+you don't touch Postgres. Two things break and must be brought back in order.
+
+1. **Restart the full stack with the `deploy` profile — always.** `backend` and `frontend` live under
+   `--profile deploy`. A bare `docker compose down` / `up` only touches `postgres` + `redis`, recreating
+   them with **new container IPs** while the still-running backend holds the **old** ones. The backend
+   then can't reach Redis (`Connection refused: redis/172.18.0.x:6379`), its `/actuator/health` goes
+   **DOWN**, and the frontend hangs on **"Loading"** forever. Always cycle everything together so they
+   share one network generation:
+   ```bash
+   docker compose --profile deploy down
+   docker compose --profile deploy up -d
+   ```
+   > If you already hit the stale-IP symptom (backend up but Loading), the quick fix is just
+   > `docker restart argus-backend` — it re-resolves Redis's current IP. But prefer the profile-scoped
+   > down/up above so it doesn't recur.
+
+   Confirm the app (not just the container) is healthy — the container healthcheck only tests that the
+   port is open, so it can read "healthy" while the app is DOWN:
+   ```bash
+   curl -s http://127.0.0.1:8080/actuator/health   # want {"status":"UP"}
+   ```
+
+2. **Restore Tailscale serve.** The `.ts.net` URL is fronted by `tailscale serve` (tailnet-only HTTPS →
+   loopback). Tailscale being stopped, *and* the serve config, do **not** survive a reboot. Symptoms:
+   the URL won't resolve at all (Tailscale down) or nothing listens on `:443` (`tailscale serve status`
+   → `No serve config`). Restore both:
+   ```bash
+   tailscale up                                                              # reconnect the tailnet
+   tailscale serve --bg --https=443 --set-path=/    http://127.0.0.1:3000    # / → frontend
+   tailscale serve --bg --https=443 --set-path=/api http://127.0.0.1:8080/api  # /api → backend
+   tailscale serve --bg --https=443 --set-path=/ws  http://127.0.0.1:8080/ws   # /ws → backend WS
+   tailscale serve status            # confirm the three mappings; must say "(tailnet only)"
+   tailscale funnel status           # must be OFF — never Funnel (NFR-3)
+   ```
+   > Serve CLI syntax varies by version (see `docs/deploy-runbook.md`). If `/api` 404s, point it at the
+   > bare origin (`http://127.0.0.1:8080`); if live pushes never arrive, the `/ws` upgrade is being
+   > dropped — serve `/ws` to the bare `:8080` origin.
+
+**Verify:** `https://<mini>.<tailnet>.ts.net/` → 200; `/api/system-info` reaching the backend (401 until
+you log in is expected — it means the proxy hit the app). Then log in with your PIN.
+
 ## Related
 
 - Deploy: `docs/deploy-runbook.md`
