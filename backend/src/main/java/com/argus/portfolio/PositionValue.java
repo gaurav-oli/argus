@@ -29,7 +29,7 @@ public record PositionValue(
 		Instant asOf,
 		String institution,
 		String account,
-		long id,
+		Long id,
 		BigDecimal usdMarketValue,
 		BigDecimal cadAcb,
 		boolean fxEstimated) {
