@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class PerformanceController {
 
 	private final PerformanceService performance;
+	private final PaperInvestorService investor;
 
-	public PerformanceController(PerformanceService performance) {
+	public PerformanceController(PerformanceService performance, PaperInvestorService investor) {
 		this.performance = performance;
+		this.investor = investor;
 	}
 
 	/** Story 9.2 — win rate over All/30d/last-10, issued, taken vs declined, graduation state. */
@@ -35,5 +37,11 @@ public class PerformanceController {
 	@GetMapping("/calibration")
 	public PerformanceService.CalibrationView calibration() {
 		return performance.calibration();
+	}
+
+	/** The Investor persona's autonomous paper-trading scoreboard: the $ book, its return, win rate. */
+	@GetMapping("/paper-trades")
+	public PaperInvestorService.Scoreboard paperTrades() {
+		return investor.scoreboard();
 	}
 }

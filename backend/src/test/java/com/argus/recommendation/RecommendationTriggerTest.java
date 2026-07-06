@@ -24,8 +24,9 @@ class RecommendationTriggerTest {
 	private final GraduationService graduation = mock(GraduationService.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
 	private final PositionRepository positions = mock(PositionRepository.class);
+	private final PaperInvestorService investor = mock(PaperInvestorService.class);
 	private final RecommendationTrigger trigger = new RecommendationTrigger(
-			gatherer, recommendations, graduation, quietPeriod, positions);
+			gatherer, recommendations, graduation, quietPeriod, positions, investor);
 
 	private final AgentSignal aSignal = new AgentSignal("agent-1-news", SignalDirection.BULLISH, 1, "x");
 

@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AgentFleet } from "@/features/agents/AgentFleet";
 import { AgentPerformance } from "@/features/agents/AgentPerformance";
+import { PaperInvestorScoreboard } from "@/features/agents/PaperInvestorScoreboard";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 
 /**
@@ -19,8 +20,15 @@ export default function AgentsPage() {
       <AgentFleet />
 
       <div className="mt-8">
-        <h2 className="mb-4 font-display text-lg font-semibold text-text-primary">Do they earn their keep?</h2>
-        <AgentPerformance />
+        <h2 className="mb-1 font-display text-lg font-semibold text-text-primary">Analyst &amp; Investor</h2>
+        <p className="mb-4 text-sm text-text-secondary">
+          The Analyst recommends; the Investor paper-trades every call and reports back. Losses feed the
+          Analyst’s post-mortems — the loop runs on its own.
+        </p>
+        <div className="flex flex-col gap-4">
+          <PaperInvestorScoreboard />
+          <AgentPerformance />
+        </div>
       </div>
 
       <div className="mt-8">

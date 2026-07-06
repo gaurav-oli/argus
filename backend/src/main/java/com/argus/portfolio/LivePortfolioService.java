@@ -64,6 +64,15 @@ public class LivePortfolioService {
 		livePush.publish(TOPIC, currentSnapshot());
 	}
 
+	/** Latest known price for a ticker, if the feed has delivered one (e.g. for the paper-investor book). */
+	public java.util.Optional<BigDecimal> latestPrice(String ticker) {
+		if (ticker == null) {
+			return java.util.Optional.empty();
+		}
+		PricePoint pp = prices.get(ticker.trim().toUpperCase());
+		return java.util.Optional.ofNullable(pp == null ? null : pp.price());
+	}
+
 	/** Held tickers with no live price yet — candidates for a supplemental (e.g. TSX) price source. */
 	@Transactional(readOnly = true)
 	public java.util.Set<String> unpricedHeldTickers() {

@@ -32,14 +32,17 @@ public class RecommendationTrigger implements Agent {
 	private final GraduationService graduation;
 	private final EarningsQuietPeriodService quietPeriod;
 	private final PositionRepository positions;
+	private final PaperInvestorService investor;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
-			GraduationService graduation, EarningsQuietPeriodService quietPeriod, PositionRepository positions) {
+			GraduationService graduation, EarningsQuietPeriodService quietPeriod, PositionRepository positions,
+			PaperInvestorService investor) {
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
 		this.graduation = graduation;
 		this.quietPeriod = quietPeriod;
 		this.positions = positions;
+		this.investor = investor;
 	}
 
 	@Override
@@ -95,6 +98,7 @@ public class RecommendationTrigger implements Agent {
 		}
 		Recommendation rec = recommendations.create(ticker, signals, null, "6h review");
 		log.info("Agent 5 produced recommendation for {} ({} signals)", ticker, signals.size());
+		investor.open(rec); // the Investor persona opens a simulated position to validate this call
 		return Optional.of(rec);
 	}
 }
