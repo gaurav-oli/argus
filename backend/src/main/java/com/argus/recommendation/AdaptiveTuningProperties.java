@@ -17,6 +17,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param weightMax        upper clamp on an agent's weight multiplier
  * @param confidenceMin    lower clamp on the calibrated directional probability multiplier effect
  * @param confidenceMax    upper clamp (kept ≤ ~1.2 so calibration humbles faster than it emboldens)
+ * @param recomputeOnBoot  also recompute once at startup (default off) — handy for validating the loop
+ *                         without waiting for the nightly job
  */
 @ConfigurationProperties("argus.adaptive-tuning")
 public record AdaptiveTuningProperties(
@@ -27,5 +29,6 @@ public record AdaptiveTuningProperties(
 		@DefaultValue("0.25") double weightMin,
 		@DefaultValue("2.0") double weightMax,
 		@DefaultValue("0.5") double confidenceMin,
-		@DefaultValue("1.2") double confidenceMax) {
+		@DefaultValue("1.2") double confidenceMax,
+		@DefaultValue("false") boolean recomputeOnBoot) {
 }

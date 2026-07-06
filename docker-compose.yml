@@ -79,6 +79,8 @@ services:
       # Adaptive-tuning cold-start floor (argus.adaptive-tuning.min-sample). Default 10; below this many
       # closed trades an agent's weight multiplier stays 1.0. Lower it to watch tuning move during validation.
       ARGUS_ADAPTIVE_TUNING_MIN_SAMPLE: ${ADAPTIVE_TUNING_MIN_SAMPLE:-10}
+      # Also recompute tuning once at startup (default off) — validate the loop without the nightly wait.
+      ARGUS_ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT: ${ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT:-false}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed

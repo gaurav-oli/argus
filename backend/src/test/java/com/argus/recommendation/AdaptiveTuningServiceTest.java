@@ -27,7 +27,7 @@ class AdaptiveTuningServiceTest {
 	// Test posture: no shrink (shrinkK=0), minSample=2, gain=1, wide clamps — clean, assertable math.
 	private AdaptiveTuningService service(boolean enabled) {
 		AdaptiveTuningProperties props = new AdaptiveTuningProperties(
-				enabled, 2, 0.0, 1.0, 0.25, 2.0, 0.5, 1.2);
+				enabled, 2, 0.0, 1.0, 0.25, 2.0, 0.5, 1.2, false);
 		return new AdaptiveTuningService(trades, recs, reliabilities, calibrations, props);
 	}
 
