@@ -38,15 +38,17 @@ public class PerformanceService {
 	private final RecommendationRepository recommendations;
 	private final RecommendationSignalRepository signals;
 	private final GraduationService graduation;
+	private final AdaptiveTuningService tuning;
 
 	public PerformanceService(PaperTradeRepository trades, TradeDecisionRepository decisions,
 			RecommendationRepository recommendations, RecommendationSignalRepository signals,
-			GraduationService graduation) {
+			GraduationService graduation, AdaptiveTuningService tuning) {
 		this.trades = trades;
 		this.decisions = decisions;
 		this.recommendations = recommendations;
 		this.signals = signals;
 		this.graduation = graduation;
+		this.tuning = tuning;
 	}
 
 	// ---- Story 9.2: accuracy ----
@@ -88,13 +90,20 @@ public class PerformanceService {
 		double totalWeight = agg.stream().mapToDouble(a -> weight(a.getTotalWeight())).sum();
 		int n = agg.size();
 		double equalShare = n == 0 ? 0 : 100.0 / n;
+		Map<String, AdaptiveTuningService.ReliabilityView> reliability = tuning.reliabilityByAgent();
 
 		List<AgentContribution> agents = agg.stream()
 				.map(a -> {
 					double pct = totalWeight <= 0 ? 0 : weight(a.getTotalWeight()) / totalWeight * 100;
 					// "dead weight": meaningfully below an even split (only flag once there's a panel of agents).
 					boolean underperformer = n > 2 && pct < equalShare * 0.5;
-					return new AgentContribution(a.getAgent(), round2(pct), a.getSignalCount(), underperformer);
+					AdaptiveTuningService.ReliabilityView r = reliability.get(a.getAgent());
+					Integer hitRatePct = r == null ? null : r.hitRatePct();
+					int samples = r == null ? 0 : r.sampleSize();
+					// Learned weight multiplier (Phase B); null when the agent has no reliability row yet.
+					Double learnedMultiplier = r == null ? null : round2(r.weightMultiplier());
+					return new AgentContribution(a.getAgent(), round2(pct), a.getSignalCount(), underperformer,
+							hitRatePct, samples, learnedMultiplier);
 				})
 				.sorted((x, y) -> Double.compare(y.contributionPct(), x.contributionPct()))
 				.toList();
@@ -168,7 +177,13 @@ public class PerformanceService {
 	public record AttributionView(List<AgentContribution> agents, int agentCount) {
 	}
 
-	public record AgentContribution(String agent, double contributionPct, long signalCount, boolean underperformer) {
+	/**
+	 * One agent's share of signal weight, plus its Phase B learned reliability: realized
+	 * {@code hitRatePct} over {@code reliabilitySamples} closed trades and the resulting
+	 * {@code learnedMultiplier} on its weight (null until it has a reliability row).
+	 */
+	public record AgentContribution(String agent, double contributionPct, long signalCount,
+			boolean underperformer, Integer hitRatePct, int reliabilitySamples, Double learnedMultiplier) {
 	}
 
 	/** Story 9.4 — a reliability diagram as bins. */

@@ -51,14 +51,17 @@ public class AgentSignalGatherer {
 	private final SecFilingRepository sec;
 	private final WebMentionRepository web;
 	private final EarningsQuietPeriodService quietPeriod;
+	private final AdaptiveTuningService tuning;
 
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
-			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod) {
+			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod,
+			AdaptiveTuningService tuning) {
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
 		this.web = web;
 		this.quietPeriod = quietPeriod;
+		this.tuning = tuning;
 	}
 
 	public List<AgentSignal> gather(String ticker) {
@@ -68,9 +71,20 @@ public class AgentSignalGatherer {
 		insiderSignal(ticker).ifPresent(signals::add);
 		internetSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
+		// Phase B: scale each agent's weight by its learned reliability (identity when tuning is disabled).
+		List<AgentSignal> tuned = signals.stream().map(this::applyReliability).toList();
 		log.info("gather({}) → [{}]", ticker,
-				signals.stream().map(AgentSignal::agent).reduce((a, b) -> a + "," + b).orElse("NONE"));
-		return signals;
+				tuned.stream().map(AgentSignal::agent).reduce((a, b) -> a + "," + b).orElse("NONE"));
+		return tuned;
+	}
+
+	/** Multiply a signal's weight by its agent's learned reliability multiplier. */
+	private AgentSignal applyReliability(AgentSignal s) {
+		double mult = tuning.weightMultiplier(s.agent());
+		if (mult == 1.0) {
+			return s;
+		}
+		return new AgentSignal(s.agent(), s.direction(), s.weight() * mult, s.rationale());
 	}
 
 	/**

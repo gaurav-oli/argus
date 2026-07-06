@@ -29,7 +29,14 @@ class AgentSignalGathererTest {
 	private final SecFilingRepository sec = mock(SecFilingRepository.class);
 	private final WebMentionRepository web = mock(WebMentionRepository.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
-	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod);
+	private final AdaptiveTuningService tuning = mock(AdaptiveTuningService.class);
+	private final AgentSignalGatherer gatherer =
+			new AgentSignalGatherer(news, social, sec, web, quietPeriod, tuning);
+
+	{
+		// Tuning off by default in these tests → identity weight multipliers.
+		when(tuning.weightMultiplier(anyString())).thenReturn(1.0);
+	}
 
 	private static NewsArticle analyzed(SentimentLabel label, double score, double relevance) {
 		NewsArticle a = new NewsArticle("Reuters", "id" + Math.random(), "u", "h", "s",

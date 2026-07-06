@@ -889,6 +889,11 @@ export interface AgentContribution {
   contributionPct: number;
   signalCount: number;
   underperformer: boolean;
+  /** Phase B — realized hit rate over closed paper trades this agent contributed to; null until any. */
+  hitRatePct: number | null;
+  reliabilitySamples: number;
+  /** Phase B — the learned multiplier applied to this agent's weight; null until it has a record. */
+  learnedMultiplier: number | null;
 }
 
 export interface AttributionView {

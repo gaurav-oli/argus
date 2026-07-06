@@ -46,7 +46,8 @@ class RecommendationServiceIntegrationTest {
 		Recommendation rec = service.diagnostic(saved.getId()).orElseThrow();
 		assertEquals("AAPL", rec.getTicker());
 		assertEquals(SignalDirection.BULLISH, rec.getDirection(), "bull weight 3 > bear 1");
-		assertEquals(0, rec.getBullProbability().compareTo(new BigDecimal("0.7500")));
+		// Neutral-prior shrinkage (no more raw 3/4=0.75): (3 + 1.0*0.5) / (4 + 1.0) = 0.70.
+		assertEquals(0, rec.getBullProbability().compareTo(new BigDecimal("0.7000")));
 		assertEquals(RecommendationStatus.PENDING, rec.getStatus());
 
 		// The diagnostic shows BOTH the bullish and the conflicting bearish signal.

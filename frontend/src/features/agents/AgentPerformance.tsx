@@ -110,9 +110,13 @@ function WindowTile({ label, w }: { label: string; w: WindowStat }) {
 
 function AttributionCard({ a }: { a: AttributionView }) {
   const max = Math.max(1, ...a.agents.map((x) => x.contributionPct));
+  const anyLearned = a.agents.some((x) => x.learnedMultiplier != null);
   return (
     <MotionCard index={1} interactive={false} className="flex flex-col gap-4">
-      <SectionHead title="Contribution" sub="Each agent's share of the signal weight." />
+      <SectionHead
+        title="Contribution & trust"
+        sub="Share of signal weight, and what the Analyst has learned to trust."
+      />
       {a.agents.length === 0 ? (
         <Empty>No signals recorded yet.</Empty>
       ) : (
@@ -128,8 +132,24 @@ function AttributionCard({ a }: { a: AttributionView }) {
                     </span>
                   )}
                 </span>
-                <span className="shrink-0 font-mono tabular-nums text-text-secondary">
-                  {x.contributionPct.toFixed(1)}%
+                <span className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
+                  {x.learnedMultiplier != null && x.learnedMultiplier !== 1 && (
+                    <span
+                      className="text-[10px]"
+                      style={{
+                        color:
+                          x.learnedMultiplier > 1 ? "var(--color-gains)" : "var(--color-losses)",
+                      }}
+                      title={
+                        x.hitRatePct != null
+                          ? `${x.hitRatePct}% hit rate over ${x.reliabilitySamples} closed trades`
+                          : "learned weight multiplier"
+                      }
+                    >
+                      ×{x.learnedMultiplier.toFixed(2)}
+                    </span>
+                  )}
+                  <span className="text-text-secondary">{x.contributionPct.toFixed(1)}%</span>
                 </span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--hairline)]">
@@ -144,6 +164,11 @@ function AttributionCard({ a }: { a: AttributionView }) {
             </li>
           ))}
         </ul>
+      )}
+      {anyLearned && (
+        <p className="text-[10px] text-text-secondary/80">
+          ×N = learned weight from realized paper-trade accuracy; hover for hit rate.
+        </p>
       )}
     </MotionCard>
   );

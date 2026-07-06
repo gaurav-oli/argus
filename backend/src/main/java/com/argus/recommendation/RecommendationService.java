@@ -17,18 +17,38 @@ public class RecommendationService {
 
 	private final ProbabilityScoringEngine engine;
 	private final RecommendationRepository repository;
+	private final AdaptiveTuningService tuning;
 
-	public RecommendationService(ProbabilityScoringEngine engine, RecommendationRepository repository) {
+	public RecommendationService(ProbabilityScoringEngine engine, RecommendationRepository repository,
+			AdaptiveTuningService tuning) {
 		this.engine = engine;
 		this.repository = repository;
+		this.tuning = tuning;
 	}
 
 	/** Score {@code signals} and persist a recommendation for {@code ticker} with its diagnostic. */
 	@Transactional
 	public Recommendation create(String ticker, List<AgentSignal> signals, BigDecimal priceTarget,
 			String horizon) {
-		ProbabilityScore score = engine.score(signals);
+		ProbabilityScore score = calibrate(engine.score(signals));
 		return repository.save(new Recommendation(ticker, score, signals, priceTarget, horizon));
+	}
+
+	/**
+	 * Phase B: nudge the stated directional probability toward the realized hit rate (isotonic
+	 * calibration). The engine stays pure — this adjusts only the reported probability, never the
+	 * audit-trail scores/contributions, and is the identity when tuning is disabled or uncalibrated.
+	 */
+	private ProbabilityScore calibrate(ProbabilityScore s) {
+		boolean bullish = s.bullProbability() >= 0.5;
+		double stated = bullish ? s.bullProbability() : s.bearProbability();
+		double calibrated = tuning.calibrateDirectionalProbability(stated);
+		if (calibrated == stated) {
+			return s;
+		}
+		double bull = bullish ? calibrated : 1.0 - calibrated;
+		return new ProbabilityScore(bull, 1.0 - bull, s.confidence(), s.bullScore(), s.bearScore(),
+				s.contributions());
 	}
 
 	@Transactional(readOnly = true)

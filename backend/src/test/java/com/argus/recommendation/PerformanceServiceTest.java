@@ -28,8 +28,9 @@ class PerformanceServiceTest {
 	private final RecommendationRepository recommendations = mock(RecommendationRepository.class);
 	private final RecommendationSignalRepository signals = mock(RecommendationSignalRepository.class);
 	private final GraduationService graduation = mock(GraduationService.class);
+	private final AdaptiveTuningService tuning = mock(AdaptiveTuningService.class);
 	private final PerformanceService service =
-			new PerformanceService(trades, decisions, recommendations, signals, graduation);
+			new PerformanceService(trades, decisions, recommendations, signals, graduation, tuning);
 
 	// ---- 9.2 accuracy ----
 
