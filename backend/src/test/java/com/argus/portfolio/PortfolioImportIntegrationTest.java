@@ -223,20 +223,21 @@ class PortfolioImportIntegrationTest {
 	@Test
 	void holdingWithoutPurchaseDateIsFlaggedFxEstimated() throws Exception {
 		Cookie session = login();
-		// No date → purchase FX can't be priced → flagged, CAD ACB null.
+		// No date → true purchase FX isn't derivable, so the CAD ACB is estimated at the latest stubbed
+		// rate (500 * 1.35 = 675) and flagged fxEstimated; the user can confirm the real rate later.
 		confirmAndGetFirstPositionId(session, List.of("NVDA 10 500.00 USD"));
 
 		mockMvc.perform(get("/api/portfolio/positions").cookie(session))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].ticker").value("NVDA"))
 				.andExpect(jsonPath("$[0].fxEstimated").value(true))
-				.andExpect(jsonPath("$[0].cadAcb").doesNotExist());
+				.andExpect(jsonPath("$[0].cadAcb").value(675.0));
 	}
 
 	@Test
 	void confirmingFxRateClearsTheEstimateAndRecomputesAcb() throws Exception {
 		Cookie session = login();
-		long id = confirmAndGetFirstPositionId(session, List.of("NVDA 10 500.00 USD")); // estimated, CAD ACB null
+		long id = confirmAndGetFirstPositionId(session, List.of("NVDA 10 500.00 USD")); // estimated at latest FX
 
 		// User supplies an explicit purchase rate → estimate clears, CAD ACB = 500.00 * 1.40 = 700.0000.
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
