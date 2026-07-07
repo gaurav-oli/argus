@@ -104,6 +104,8 @@ development_status:
   6-5-position-sizing-guidance: done
   6-6-graduation-state-machine: done
   6-7-trade-confirmation-rationale-snapshot: done
+  6-8-autonomous-investor-loop: done        # FR-11 follow-up (Phase A): Investor persona INSIDE Agent 5 (not a separate agent) — auto-opens $100 paper trades per rec, marks to market at horizon, feeds graduation autonomously; LLM post-mortem on losses; scoreboard UI. PaperInvestorServiceTest 7/7. Validated live 2026-07-06.
+  6-9-adaptive-tuning-phase-b: done         # FR-11 follow-up (Phase B): per-agent weight multipliers (realized hit rate) + isotonic probability calibration from closed paper trades; deterministic, reversible, flag-gated (argus.adaptive-tuning.*); attribution UI shows learned ×multiplier. AdaptiveTuningServiceTest 7/7. Validated live 2026-07-06.
   epic-6-retrospective: optional
 
   # Epic 7: Conversational AI & Personas
