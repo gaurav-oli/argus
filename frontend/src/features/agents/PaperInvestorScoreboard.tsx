@@ -73,10 +73,13 @@ export function PaperInvestorScoreboard() {
         />
       </div>
 
+      {board.openByTicker.length > 0 && <OpenBook board={board} />}
+
       {noneClosed ? (
         <p className="rounded-lg border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-4 text-center text-xs text-text-secondary">
-          No trades have reached their horizon yet. As calls mature, wins and losses land here
-          automatically and feed Agent 5’s graduation.
+          {board.openTrades > 0
+            ? `${board.openTrades} position${board.openTrades === 1 ? "" : "s"} open and being held — the first results land here as they reach their 30-day horizon.`
+            : "No trades yet — the Investor opens one on each new recommendation."}
         </p>
       ) : (
         <div className="flex flex-col gap-2 border-t border-[var(--hairline)] pt-3">
@@ -124,6 +127,61 @@ export function PaperInvestorScoreboard() {
         </div>
       )}
     </MotionCard>
+  );
+}
+
+function OpenBook({ board }: { board: PaperTradeScoreboard }) {
+  const u = board.openUnrealizedPct;
+  return (
+    <div className="flex flex-col gap-2 border-t border-[var(--hairline)] pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">
+          Open book · held until horizon
+        </p>
+        <p className="font-mono text-xs tabular-nums text-text-secondary">
+          {board.openTrades} pos · ${fmt(board.openDeployed, 0)} in
+          {u != null && (
+            <span
+              className="ml-2 font-semibold"
+              style={{ color: u > 0 ? "var(--color-gains)" : u < 0 ? "var(--color-losses)" : undefined }}
+            >
+              {signed(u)}% unreal.
+            </span>
+          )}
+        </p>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {board.openByTicker.map((p) => (
+          <li key={p.ticker} className="flex items-center gap-3 text-sm">
+            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
+            <span
+              className="w-14 shrink-0 text-[11px] font-semibold uppercase"
+              style={{ color: p.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
+            >
+              {p.direction === "BEARISH" ? "short" : "long"}
+            </span>
+            <span className="w-24 shrink-0 font-mono text-[11px] text-text-secondary">
+              {p.positions}× · ${fmt(p.notional, 0)}
+            </span>
+            <span
+              className="ml-auto shrink-0 font-mono tabular-nums"
+              style={{
+                color:
+                  p.unrealizedPct == null
+                    ? undefined
+                    : p.unrealizedPct > 0
+                      ? "var(--color-gains)"
+                      : p.unrealizedPct < 0
+                        ? "var(--color-losses)"
+                        : undefined,
+              }}
+            >
+              {p.unrealizedPct == null ? "—" : `${signed(p.unrealizedPct)}%`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -149,11 +149,9 @@ public class PaperInvestorService {
 	/** The Investor's track record: the $ book, its return, win rate, and recent activity. */
 	@Transactional(readOnly = true)
 	public Scoreboard scoreboard() {
-		List<SimulatedTrade> recent = trades.findTop100ByOrderByIdDesc();
-		List<SimulatedTrade> closed = recent.stream()
+		List<SimulatedTrade> closed = trades.findTop100ByOrderByIdDesc().stream()
 				.filter(t -> t.getStatus() == SimulatedTrade.Status.CLOSED)
 				.toList();
-		long open = trades.countByStatus(SimulatedTrade.Status.OPEN);
 
 		int wins = (int) closed.stream().filter(t -> Boolean.TRUE.equals(t.getWon())).count();
 		Integer winRatePct = closed.isEmpty() ? null : (int) Math.round(100.0 * wins / closed.size());
@@ -172,13 +170,82 @@ public class PaperInvestorService {
 				: pnl.multiply(BigDecimal.valueOf(100)).divide(deployed, 2, java.math.RoundingMode.HALF_UP);
 
 		List<ClosedTradeView> recentClosed = closed.stream().limit(15).map(ClosedTradeView::from).toList();
-		return new Scoreboard(open, closed.size(), wins, winRatePct, notional, deployed, pnl, bookReturnPct,
-				recentClosed);
+		OpenBook openBook = openBook();
+		return new Scoreboard(openBook.count(), closed.size(), wins, winRatePct, notional, deployed, pnl,
+				bookReturnPct, openBook.deployed(), openBook.unrealizedPct(), openBook.byTicker(), recentClosed);
+	}
+
+	/** The live open book: positions grouped by ticker, marked to market against current prices. */
+	private OpenBook openBook() {
+		List<SimulatedTrade> open = trades.findByStatus(SimulatedTrade.Status.OPEN);
+
+		java.util.Map<String, List<SimulatedTrade>> byTicker = new java.util.LinkedHashMap<>();
+		BigDecimal deployed = BigDecimal.ZERO;
+		for (SimulatedTrade t : open) {
+			deployed = deployed.add(t.getNotional());
+			byTicker.computeIfAbsent(t.getTicker(), k -> new java.util.ArrayList<>()).add(t);
+		}
+
+		List<OpenPositionView> rows = new java.util.ArrayList<>();
+		BigDecimal pricedNotional = BigDecimal.ZERO;
+		BigDecimal unrealDollars = BigDecimal.ZERO;
+		for (var e : byTicker.entrySet()) {
+			List<SimulatedTrade> lots = e.getValue();
+			BigDecimal current = prices.latestPrice(e.getKey()).orElse(null);
+			boolean priced = current != null && current.signum() > 0;
+
+			BigDecimal tickerNotional = BigDecimal.ZERO;
+			BigDecimal tickerUnreal = BigDecimal.ZERO; // dollars
+			for (SimulatedTrade t : lots) {
+				tickerNotional = tickerNotional.add(t.getNotional());
+				if (priced) {
+					tickerUnreal = tickerUnreal.add(t.getNotional().multiply(signedReturn(t, current))
+							.divide(BigDecimal.valueOf(100), 6, java.math.RoundingMode.HALF_UP));
+				}
+			}
+			BigDecimal tickerPct = priced && tickerNotional.signum() != 0
+					? tickerUnreal.multiply(BigDecimal.valueOf(100))
+							.divide(tickerNotional, 2, java.math.RoundingMode.HALF_UP)
+					: null;
+			rows.add(new OpenPositionView(e.getKey(), lots.get(0).getDirection().name(), lots.size(),
+					money(tickerNotional), current, tickerPct));
+			if (priced) {
+				pricedNotional = pricedNotional.add(tickerNotional);
+				unrealDollars = unrealDollars.add(tickerUnreal);
+			}
+		}
+		rows.sort(java.util.Comparator.comparing(OpenPositionView::notional).reversed());
+
+		BigDecimal unrealizedPct = pricedNotional.signum() == 0 ? null
+				: unrealDollars.multiply(BigDecimal.valueOf(100))
+						.divide(pricedNotional, 2, java.math.RoundingMode.HALF_UP);
+		return new OpenBook(open.size(), money(deployed), unrealizedPct, rows);
+	}
+
+	/** Direction-adjusted unrealized return %, mark-to-market at {@code current} (caller ensures priced). */
+	private static BigDecimal signedReturn(SimulatedTrade t, BigDecimal current) {
+		return current.subtract(t.getEntryPrice())
+				.divide(t.getEntryPrice(), 6, java.math.RoundingMode.HALF_UP)
+				.multiply(BigDecimal.valueOf(t.getDirection().sign() * 100L));
+	}
+
+	private static BigDecimal money(BigDecimal v) {
+		return v.setScale(2, java.math.RoundingMode.HALF_UP);
+	}
+
+	private record OpenBook(long count, BigDecimal deployed, BigDecimal unrealizedPct,
+			List<OpenPositionView> byTicker) {
 	}
 
 	public record Scoreboard(long openTrades, int closedTrades, int wins, Integer winRatePct,
 			BigDecimal notionalPerTrade, BigDecimal deployed, BigDecimal realizedPnl,
-			BigDecimal bookReturnPct, List<ClosedTradeView> recent) {
+			BigDecimal bookReturnPct, BigDecimal openDeployed, BigDecimal openUnrealizedPct,
+			List<OpenPositionView> openByTicker, List<ClosedTradeView> recent) {
+	}
+
+	/** An open position aggregated per ticker, marked to market ({@code unrealizedPct} null if unpriced). */
+	public record OpenPositionView(String ticker, String direction, int positions, BigDecimal notional,
+			BigDecimal currentPrice, BigDecimal unrealizedPct) {
 	}
 
 	public record ClosedTradeView(String ticker, String direction, BigDecimal returnPct, boolean won,

@@ -934,6 +934,16 @@ export interface ClosedTradeView {
   review: string | null;
 }
 
+/** Open positions aggregated per ticker, marked to market (unrealizedPct null if unpriced). */
+export interface OpenPositionView {
+  ticker: string;
+  direction: string;
+  positions: number;
+  notional: number;
+  currentPrice: number | null;
+  unrealizedPct: number | null;
+}
+
 /**
  * The Investor persona's autonomous paper-trading scoreboard: a fixed-notional book opened on Agent 5's
  * calls and marked to market at the horizon — win rate + realized return built with no manual input.
@@ -947,6 +957,10 @@ export interface PaperTradeScoreboard {
   deployed: number;
   realizedPnl: number;
   bookReturnPct: number | null;
+  /** Live open book: $ committed and its current unrealized return, plus positions per ticker. */
+  openDeployed: number;
+  openUnrealizedPct: number | null;
+  openByTicker: OpenPositionView[];
   recent: ClosedTradeView[];
 }
 
