@@ -12,17 +12,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.argus.calendar.CalendarSource.RawEvent;
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
+import com.argus.intelligence.KnownUniverse;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** Agent 7 ingestion: dedup (in-batch + stored), source-failure isolation, persistence (Story 5.1). */
 class Agent7CalendarServiceTest {
 
 	private final CalendarEventRepository events = mock(CalendarEventRepository.class);
-	private final PositionRepository positions = mock(PositionRepository.class);
+	private final KnownUniverse universe = mock(KnownUniverse.class);
 
 	private static RawEvent earnings(String ticker, String date) {
 		LocalDate d = LocalDate.parse(date);
@@ -31,13 +31,11 @@ class Agent7CalendarServiceTest {
 	}
 
 	private void heldAapl() {
-		Position p = mock(Position.class);
-		lenient().when(p.getTicker()).thenReturn("AAPL");
-		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(p));
+		when(universe.knownTickers()).thenReturn(Set.of("AAPL"));
 	}
 
 	private Agent7CalendarService service(List<CalendarSource> sources) {
-		return new Agent7CalendarService(sources, events, positions);
+		return new Agent7CalendarService(sources, events, universe);
 	}
 
 	@Test

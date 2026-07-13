@@ -49,6 +49,11 @@ export function UpcomingEvents() {
                 </p>
                 <p className="flex items-center gap-2 text-xs text-text-secondary">
                   <span className="uppercase tracking-wide">{label(e.type)}</span>
+                  {e.type === "IPO" && (
+                    <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                      new listing
+                    </span>
+                  )}
                   <QuietBadge status={e.quietPeriod} />
                 </p>
               </div>
@@ -88,6 +93,8 @@ function label(type: string): string {
       return "Ex-dividend";
     case "LOCKUP":
       return "Lock-up";
+    case "IPO":
+      return "IPO";
     default:
       return type;
   }

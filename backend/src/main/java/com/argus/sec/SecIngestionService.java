@@ -1,7 +1,6 @@
 package com.argus.sec;
 
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
+import com.argus.intelligence.KnownUniverse;
 import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
@@ -22,12 +21,12 @@ public class SecIngestionService {
 
 	private final EdgarClient edgar;
 	private final SecFilingRepository filings;
-	private final PositionRepository positions;
+	private final KnownUniverse universe;
 
-	public SecIngestionService(EdgarClient edgar, SecFilingRepository filings, PositionRepository positions) {
+	public SecIngestionService(EdgarClient edgar, SecFilingRepository filings, KnownUniverse universe) {
 		this.edgar = edgar;
 		this.filings = filings;
-		this.positions = positions;
+		this.universe = universe;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.sec.poll-ms:21600000}",
@@ -42,8 +41,7 @@ public class SecIngestionService {
 	}
 
 	void ingestOnce() {
-		List<String> heldTickers = positions.findAllByOrderByTickerAsc().stream()
-				.map(Position::getTicker).distinct().toList();
+		List<String> heldTickers = universe.knownTickers().stream().distinct().toList();
 		if (heldTickers.isEmpty()) {
 			return;
 		}

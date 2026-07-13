@@ -1,11 +1,9 @@
 package com.argus.calendar;
 
 import com.argus.calendar.CalendarSource.RawEvent;
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
+import com.argus.intelligence.KnownUniverse;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -26,13 +24,13 @@ public class Agent7CalendarService {
 
 	private final List<CalendarSource> sources;
 	private final CalendarEventRepository events;
-	private final PositionRepository positions;
+	private final KnownUniverse universe;
 
 	public Agent7CalendarService(List<CalendarSource> sources, CalendarEventRepository events,
-			PositionRepository positions) {
+			KnownUniverse universe) {
 		this.sources = sources;
 		this.events = events;
-		this.positions = positions;
+		this.universe = universe;
 	}
 
 	/** Daily run at 06:00 America/New_York. Never throws out of the scheduler. */
@@ -88,12 +86,6 @@ public class Agent7CalendarService {
 	}
 
 	private Set<String> heldTickers() {
-		Set<String> held = new LinkedHashSet<>();
-		for (Position p : positions.findAllByOrderByTickerAsc()) {
-			if (p.getTicker() != null) {
-				held.add(p.getTicker().trim().toUpperCase());
-			}
-		}
-		return held;
+		return universe.knownTickers(); // holdings + watchlist (CompositeKnownUniverse)
 	}
 }

@@ -19,6 +19,36 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/** Re-subscribe (and re-persist) if this device's subscription key differs from the server's now. */
+async function healStaleSubscription(
+  reg: ServiceWorkerRegistration,
+  sub: PushSubscription,
+): Promise<void> {
+  try {
+    const { publicKey } = await getPushKey();
+    if (!publicKey) return;
+    const expected = urlBase64ToUint8Array(publicKey);
+    const current = sub.options.applicationServerKey;
+    const matches =
+      current != null &&
+      (() => {
+        const a = new Uint8Array(current as ArrayBuffer);
+        if (a.length !== expected.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== expected[i]) return false;
+        return true;
+      })();
+    if (matches) return; // still valid — leave it (don't churn the endpoint each load)
+    await sub.unsubscribe();
+    const fresh = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: expected,
+    });
+    await subscribePush(fresh.toJSON());
+  } catch {
+    // best-effort — keep whatever exists
+  }
+}
+
 export type PushStatus =
   | "loading"
   | "unsupported"
@@ -61,9 +91,14 @@ export function useWebPush(): WebPush {
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
-        if (!active) return;
-        if (sub) setStatus("subscribed");
-        else setStatus(Notification.permission === "denied" ? "denied" : "default");
+        if (sub) {
+          // Auto-heal: if the server's VAPID key changed since this device subscribed, the old
+          // subscription is dead and every push silently 403s. Re-subscribe with the current key.
+          await healStaleSubscription(reg, sub);
+          if (active) setStatus("subscribed");
+          return;
+        }
+        if (active) setStatus(Notification.permission === "denied" ? "denied" : "default");
       } catch {
         if (active) setStatus(Notification.permission === "denied" ? "denied" : "default");
       }

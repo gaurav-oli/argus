@@ -809,6 +809,16 @@ export const subscribePush = (subscription: PushSubscriptionJSON): Promise<void>
 export const unsubscribePush = (endpoint: string): Promise<void> =>
   apiPost("/api/push/unsubscribe", { endpoint });
 
+/** Mirrors `PushController.TestResult`. `delivered` < `devices` means some subscriptions are failing. */
+export interface PushTestResult {
+  configured: boolean;
+  devices: number;
+  delivered: number;
+}
+
+/** Send a test notification to all subscribed devices — verifies delivery end-to-end. */
+export const testPush = (): Promise<PushTestResult> => apiPost<PushTestResult>("/api/push/test");
+
 // ---- Morning Briefing (Epic 8, FR-16) ----
 
 /** Mirrors the backend `BriefingController.BriefingView` record. */
@@ -855,8 +865,42 @@ export async function getMarketPulse(): Promise<MarketPulse | null> {
 }
 
 /** Re-scan recent market-impacting news and re-summarize; `hasUpdates=false` if nothing new arrived. */
-export const refreshMarketPulse = (): Promise<MarketPulse> =>
-  apiPost<MarketPulse>("/api/briefing/market-pulse/refresh");
+export const refreshMarketPulse = (signal?: AbortSignal): Promise<MarketPulse> =>
+  apiPost<MarketPulse>("/api/briefing/market-pulse/refresh", undefined, signal);
+
+// ---- Curated news queue (Dashboard news section) ----
+
+/** Mirrors the backend `NewsController.NewsCardView` record. */
+export interface NewsCardItem {
+  id: number;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string | null;
+  tickers: string[];
+  /** When the news happened. */
+  publishedAt: string;
+  /** When Argus fetched the article. */
+  fetchedAt: string;
+  generatedAt: string | null;
+}
+
+/** Mirrors the backend `NewsController.NewsFeed` record. */
+export interface NewsFeed {
+  /** The card to read now, or `null` when the queue is empty. */
+  card: NewsCardItem | null;
+  /** Ready-to-read cards, including the current one (the queue count). */
+  remaining: number;
+  /** Cards still being summarized in the background. */
+  pending: number;
+}
+
+/** The current news card plus queue counts. */
+export const getNextNews = (): Promise<NewsFeed> => apiGet<NewsFeed>("/api/news/next");
+
+/** Mark the current card read: delete it and get the next one plus updated counts. */
+export const markNewsDone = (id: number): Promise<NewsFeed> =>
+  apiPost<NewsFeed>(`/api/news/${id}/done`);
 
 // ---- Agent 5 performance / Ops dashboards (Epic 9, Stories 9.2–9.4) ----
 
@@ -1006,6 +1050,140 @@ export interface FreshnessView {
 
 export const getFreshness = (): Promise<FreshnessView> =>
   apiGet<FreshnessView>("/api/ops/freshness");
+
+// ---- Per-agent data storage (Ops) ----
+
+/** Mirrors `StorageService.TableStorage`. */
+export interface TableStorage {
+  table: string;
+  label: string;
+  stores: string;
+  rows: number;
+  bytes: number;
+}
+
+/** Mirrors `StorageService.AgentStorage`. */
+export interface AgentStorage {
+  key: string;
+  name: string;
+  description: string;
+  rows: number;
+  bytes: number;
+  tables: TableStorage[];
+}
+
+/** Mirrors `StorageService.StorageView` — how much data each agent has stored, and where. */
+export interface StorageView {
+  database: string;
+  totalRows: number;
+  totalBytes: number;
+  generatedAt: string;
+  agents: AgentStorage[];
+}
+
+export const getStorage = (): Promise<StorageView> => apiGet<StorageView>("/api/ops/storage");
+
+// ---- Smart Cleanup agent (Ops) ----
+
+/** Mirrors `CleanupService.SourceReport` — the plan for one firehose table. */
+export interface CleanupSourceReport {
+  table: string;
+  kind: string;
+  rowsTotal: number;
+  /** Rows that would be (dry-run) / were (live) deleted. */
+  affected: number;
+  keptRecent: number;
+  keptAnchored: number;
+  rollupDays: number;
+  freedBytes: number;
+}
+
+/** Mirrors `CleanupService.CleanupReport`. */
+export interface CleanupReport {
+  dryRun: boolean;
+  startedAt: string;
+  finishedAt: string;
+  deletedRows: number;
+  keptRows: number;
+  rolledUpDays: number;
+  freedBytes: number;
+  sources: CleanupSourceReport[];
+  summary: string;
+}
+
+/** Mirrors `CleanupController.LastRun`, or null if the agent has never run. */
+export interface CleanupLastRun {
+  startedAt: string;
+  dryRun: boolean;
+  deletedRows: number;
+  keptRows: number;
+  rolledUpDays: number;
+  freedBytes: number;
+  summary: string;
+}
+
+/** Dry-run: compute the keep/delete/roll-up plan, deleting nothing. */
+export const previewCleanup = (): Promise<CleanupReport> =>
+  apiPost<CleanupReport>("/api/ops/cleanup/preview");
+
+/** Live: roll up then delete the disposable firehose rows. */
+export const runCleanup = (): Promise<CleanupReport> => apiPost<CleanupReport>("/api/ops/cleanup/run");
+
+/** The most recent run, or null if never run. */
+export const getLastCleanup = (): Promise<CleanupLastRun | null> =>
+  apiGet<CleanupLastRun | null>("/api/ops/cleanup/last");
+
+// ---- Analyst Logic Review (LLM proposes, backtest decides) ----
+
+/** Mirrors `LogicReviewController.LastReview`, or null if never run. */
+export interface LogicReviewLast {
+  ranAt: string;
+  model: string | null;
+  sampleSize: number;
+  beforeBrier: number | null;
+  afterBrier: number | null;
+  beforeAccuracy: number | null;
+  afterAccuracy: number | null;
+  adopted: boolean;
+  reason: string;
+  /** Raw JSON array text: [{agent,factor,why}]. */
+  proposals: string;
+}
+
+export const getLastLogicReview = (): Promise<LogicReviewLast | null> =>
+  apiGet<LogicReviewLast | null>("/api/ops/logic-review/last");
+
+/** Trigger a review now (model proposes, backtest decides). May take ~1-2 min if there's data to review. */
+export const runLogicReview = (): Promise<unknown> => apiPost("/api/ops/logic-review/run");
+
+// ---- Watchlist (beyond-portfolio universe) ----
+
+/** Mirrors `WatchlistController.WatchlistView`. */
+export interface WatchlistEntry {
+  ticker: string;
+  source: string; // MANUAL | DISCOVERED
+  note: string | null;
+  active: boolean;
+  addedAt: string;
+  expiresAt: string | null;
+}
+
+export const getWatchlist = (): Promise<WatchlistEntry[]> => apiGet<WatchlistEntry[]>("/api/watchlist");
+
+export const addWatchlist = (ticker: string, note?: string): Promise<WatchlistEntry> =>
+  apiPost<WatchlistEntry>("/api/watchlist", { ticker, note });
+
+export async function removeWatchlist(ticker: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/watchlist/${encodeURIComponent(ticker)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw await toApiError(res);
+}
+
+/** Run auto-discovery now: promote trending non-portfolio tickers. Returns the updated list. */
+export const discoverWatchlist = (): Promise<WatchlistEntry[]> =>
+  apiPost<WatchlistEntry[]>("/api/watchlist/discover");
 
 // ---- Degraded Mode coordinator (Epic 10, Story 10.4) ----
 

@@ -23,10 +23,13 @@ public class NewsSentimentAgent implements Agent {
 
 	private final NewsArticleRepository articles;
 	private final SentimentAnalyzer analyzer;
+	private final BreakingNewsAlertService breakingNews;
 
-	public NewsSentimentAgent(NewsArticleRepository articles, SentimentAnalyzer analyzer) {
+	public NewsSentimentAgent(NewsArticleRepository articles, SentimentAnalyzer analyzer,
+			BreakingNewsAlertService breakingNews) {
 		this.articles = articles;
 		this.analyzer = analyzer;
+		this.breakingNews = breakingNews;
 	}
 
 	@Override
@@ -61,6 +64,13 @@ public class NewsSentimentAgent implements Agent {
 		articles.save(article);
 		log.debug("news sentiment: article {} -> {} (score={}, relevance={})",
 				articleId, analysis.label(), analysis.score(), analysis.relevance());
+		// Immediate market-moving news → push alert (best-effort; never breaks analysis).
+		try {
+			breakingNews.evaluate(article);
+		}
+		catch (RuntimeException ex) {
+			log.warn("Breaking-news evaluation failed for article {}: {}", articleId, ex.getMessage());
+		}
 	}
 
 	private static Long asLong(Object value) {

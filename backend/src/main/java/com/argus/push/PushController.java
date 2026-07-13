@@ -39,6 +39,22 @@ public class PushController {
 		push.subscribe(body.endpoint(), body.keys().p256dh(), body.keys().auth());
 	}
 
+	/**
+	 * Send a test notification to every subscribed device — used to verify delivery end-to-end from the
+	 * settings screen. {@code delivered} < {@code devices} means some subscriptions are failing (e.g. a
+	 * stale VAPID key); the server logs the HTTP status per failure.
+	 */
+	@PostMapping("/test")
+	public TestResult test() {
+		long devices = push.deviceCount();
+		int delivered = push.sendToAll("Argus test 🔔", "Alerts are working — you'll get market news here.", "/",
+				true);
+		return new TestResult(push.isConfigured(), devices, delivered);
+	}
+
+	public record TestResult(boolean configured, long devices, int delivered) {
+	}
+
 	@PostMapping("/unsubscribe")
 	public void unsubscribe(@RequestBody UnsubscribeBody body) {
 		if (body == null || body.endpoint() == null || body.endpoint().isBlank()) {

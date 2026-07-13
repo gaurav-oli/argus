@@ -3,6 +3,7 @@ import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { BriefingCard } from "@/components/dashboard/BriefingCard";
 import { DegradedBanner } from "@/components/dashboard/DegradedBanner";
 import { HealthScoreRing } from "@/components/dashboard/HealthScoreRing";
+import { MarketNews } from "@/components/dashboard/MarketNews";
 import { MoversBubbles } from "@/components/dashboard/MoversBubbles";
 import { PortfolioHero } from "@/components/dashboard/PortfolioHero";
 import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
@@ -30,32 +31,37 @@ export default function Home() {
           <BriefingCard />
         </MotionCard>
 
+        {/* Curated news — one important story at a time, with a Gemma summary */}
+        <MotionCard index={1} className="md:col-span-6" interactive={false}>
+          <MarketNews />
+        </MotionCard>
+
         {/* Hero spans wide; health ring beside it */}
-        <MotionCard index={1} className="min-h-[200px] md:col-span-4">
+        <MotionCard index={2} className="min-h-[200px] md:col-span-4">
           <PortfolioHero />
         </MotionCard>
-        <MotionCard index={2} className="min-h-[200px] md:col-span-2">
+        <MotionCard index={3} className="min-h-[200px] md:col-span-2">
           <HealthScoreRing />
         </MotionCard>
 
         {/* Trend + allocation */}
-        <MotionCard index={3} className="min-h-[240px] md:col-span-4">
+        <MotionCard index={4} className="min-h-[240px] md:col-span-4">
           <PortfolioTrendChart />
         </MotionCard>
-        <MotionCard index={4} className="min-h-[240px] md:col-span-2">
+        <MotionCard index={5} className="min-h-[240px] md:col-span-2">
           <AllocationChart />
         </MotionCard>
 
         {/* Movers + alerts */}
-        <MotionCard index={5} className="md:col-span-3" interactive={false}>
+        <MotionCard index={6} className="md:col-span-3" interactive={false}>
           <MoversBubbles />
         </MotionCard>
-        <MotionCard index={6} className="md:col-span-3" interactive={false}>
+        <MotionCard index={7} className="md:col-span-3" interactive={false}>
           <AlertCards />
         </MotionCard>
 
         {/* Upcoming economic calendar (Epic 5 — real data) */}
-        <MotionCard index={7} className="md:col-span-6" interactive={false}>
+        <MotionCard index={8} className="md:col-span-6" interactive={false}>
           <UpcomingEvents />
         </MotionCard>
       </div>

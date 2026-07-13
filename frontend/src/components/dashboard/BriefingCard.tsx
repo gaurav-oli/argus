@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getLatestBriefing,
@@ -14,35 +14,94 @@ import { absTime } from "@/lib/time";
 /**
  * Morning Briefing (Epic 8, FR-16) — the pinned card at the top of the dashboard. Shows the latest
  * local-model narrative over the portfolio, overnight news, recommendations, and today's calendar,
- * plus an on-demand "market pulse" that summarizes the market-impacting news captured so far. The
- * Refresh button re-scans the news and re-summarizes; if nothing new arrived it says so. Timestamps
- * are absolute (exact "as of" time) rather than relative. `undefined` = loading, `null` = none yet.
+ * plus an on-demand "market pulse" that summarizes the market-impacting news captured so far.
+ *
+ * The pulse summary is a full-length local-model (Ollama) call that runs ~1-2 minutes on the Mini, so
+ * the UI never leaves the user staring at a bare spinner: a progress bar fills over an adaptive ETA
+ * (seeded at {@link DEFAULT_ETA_MS}, then learned from each refresh's real duration via localStorage)
+ * and the button counts down the estimated time remaining. On load, a stale pulse ({@link STALE_MS})
+ * silently re-refreshes so it's current shortly after login. Timestamps are absolute ("as of" time).
+ * `undefined` = loading, `null` = none yet.
  */
+
+/** Re-refresh a pulse this old (or older) automatically on load. Market news is intraday, so 4h. */
+const STALE_MS = 4 * 60 * 60 * 1000;
+/** First-run estimate for the model call, before we've learned a real duration. */
+const DEFAULT_ETA_MS = 120_000;
+/** Hard ceiling so a stuck call fails gracefully instead of spinning forever. */
+const REFRESH_TIMEOUT_MS = 300_000;
+const ETA_KEY = "argus.marketPulse.etaMs";
+
+function readEta(): number {
+  if (typeof window === "undefined") return DEFAULT_ETA_MS;
+  const raw = Number(window.localStorage.getItem(ETA_KEY));
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_ETA_MS;
+}
+
+/** Blend the new duration into the stored estimate (smoothed, clamped to a sane 30s–4m band). */
+function writeEta(actualMs: number): void {
+  if (typeof window === "undefined") return;
+  const prev = readEta();
+  const blended = Math.round(0.5 * prev + 0.5 * actualMs);
+  const clamped = Math.min(240_000, Math.max(30_000, blended));
+  window.localStorage.setItem(ETA_KEY, String(clamped));
+}
+
+function isStale(iso: string): boolean {
+  return Date.now() - new Date(iso).getTime() >= STALE_MS;
+}
+
+/** "1:45 left" past a minute, "42s left" under it, or "Almost done…" once the estimate is spent. */
+function remainingLabel(remainingMs: number): string {
+  if (remainingMs <= 1000) return "Almost done…";
+  const secs = Math.ceil(remainingMs / 1000);
+  if (secs < 60) return `~${secs}s left`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `~${m}:${String(s).padStart(2, "0")} left`;
+}
+
 export function BriefingCard() {
   const [briefing, setBriefing] = useState<Briefing | null | undefined>(undefined);
   const [pulse, setPulse] = useState<MarketPulse | null | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
+  const [progress, setProgress] = useState(0); // 0..1 across the estimated duration
+  const [remainingMs, setRemainingMs] = useState(0);
   const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getLatestBriefing()
-      .then((b) => active && setBriefing(b))
-      .catch(() => active && setBriefing(null));
-    getMarketPulse()
-      .then((p) => active && setPulse(p))
-      .catch(() => active && setPulse(null));
-    return () => {
-      active = false;
-    };
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshingRef = useRef(false);
+
+  const stopTick = useCallback(() => {
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
   }, []);
 
-  async function onRefresh() {
-    if (refreshing) return;
+  const onRefresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
     setNote(null);
+    setProgress(0);
+
+    const started = Date.now();
+    const eta = readEta();
+    setRemainingMs(eta);
+    stopTick();
+    tickRef.current = setInterval(() => {
+      const elapsed = Date.now() - started;
+      setProgress(Math.min(elapsed / eta, 0.97)); // hold at 97% until the real response lands
+      setRemainingMs(Math.max(eta - elapsed, 0));
+    }, 200);
+
+    const ac = new AbortController();
+    const timeout = setTimeout(() => ac.abort(), REFRESH_TIMEOUT_MS);
     try {
-      const next = await refreshMarketPulse();
+      const next = await refreshMarketPulse(ac.signal);
+      writeEta(Date.now() - started);
+      setProgress(1);
       setPulse(next);
       if (!next.hasUpdates) {
         setNote("No major updates since we last checked.");
@@ -50,9 +109,35 @@ export function BriefingCard() {
     } catch {
       setNote("Couldn't refresh right now — try again in a moment.");
     } finally {
+      clearTimeout(timeout);
+      stopTick();
+      refreshingRef.current = false;
       setRefreshing(false);
     }
-  }
+  }, [stopTick]);
+
+  // onRefresh is a stable useCallback (its only dep, stopTick, never changes), so this mount effect
+  // runs once — referencing it directly won't re-trigger the load.
+  useEffect(() => {
+    let active = true;
+    getLatestBriefing()
+      .then((b) => active && setBriefing(b))
+      .catch(() => active && setBriefing(null));
+    getMarketPulse()
+      .then((p) => {
+        if (!active) return;
+        setPulse(p);
+        // Fresh-on-login: regenerate silently if we have nothing or it's gone stale.
+        if (p === null || isStale(p.generatedAt)) {
+          void onRefresh();
+        }
+      })
+      .catch(() => active && setPulse(null));
+    return () => {
+      active = false;
+      stopTick();
+    };
+  }, [onRefresh, stopTick]);
 
   return (
     <div>
@@ -85,7 +170,14 @@ export function BriefingCard() {
         </div>
       )}
 
-      <MarketPulseSection pulse={pulse} refreshing={refreshing} note={note} onRefresh={onRefresh} />
+      <MarketPulseSection
+        pulse={pulse}
+        refreshing={refreshing}
+        progress={progress}
+        remainingMs={remainingMs}
+        note={note}
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }
@@ -93,11 +185,15 @@ export function BriefingCard() {
 function MarketPulseSection({
   pulse,
   refreshing,
+  progress,
+  remainingMs,
   note,
   onRefresh,
 }: {
   pulse: MarketPulse | null | undefined;
   refreshing: boolean;
+  progress: number;
+  remainingMs: number;
   note: string | null;
   onRefresh: () => void;
 }) {
@@ -108,7 +204,7 @@ function MarketPulseSection({
           <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">
             Market Pulse
           </h4>
-          {pulse && (
+          {pulse && !refreshing && (
             <span className="font-mono text-[10px] text-text-secondary">as of {absTime(pulse.generatedAt)}</span>
           )}
         </div>
@@ -116,14 +212,28 @@ function MarketPulseSection({
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-accent transition hover:bg-accent/[0.08] disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-accent transition hover:bg-accent/[0.08] disabled:opacity-60"
         >
           <RefreshIcon spinning={refreshing} />
-          {refreshing ? "Checking…" : "Refresh"}
+          {refreshing ? remainingLabel(remainingMs) : "Refresh"}
         </button>
       </div>
 
-      {pulse === undefined ? (
+      {refreshing && (
+        <div className="mt-2" aria-hidden>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-border/40">
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-200 ease-linear"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-text-secondary/80">
+            Reading the market-impacting news and summarizing…
+          </p>
+        </div>
+      )}
+
+      {refreshing ? null : pulse === undefined ? (
         <div className="mt-2 space-y-2">
           <div className="h-3.5 w-full animate-pulse rounded bg-border/40" />
           <div className="h-3.5 w-4/5 animate-pulse rounded bg-border/40" />

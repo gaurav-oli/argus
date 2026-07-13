@@ -40,6 +40,11 @@ public class PushService {
 		return props.isConfigured();
 	}
 
+	/** How many devices are currently subscribed (for the test/diagnostic endpoint). */
+	public long deviceCount() {
+		return subscriptions.count();
+	}
+
 	/** Register (or refresh, if the endpoint already exists) a device's subscription. */
 	@Transactional
 	public void subscribe(String endpoint, String p256dh, String auth) {

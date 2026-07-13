@@ -30,6 +30,8 @@ public class AlertFeedService {
 
 	private static final ZoneId TORONTO = ZoneId.of("America/Toronto");
 	private static final int CALENDAR_WINDOW_DAYS = 7;
+	/** Stranger-Danger alerts older than this drop off the live feed — it stays dynamic, not stale. */
+	private static final int STRANGER_WINDOW_DAYS = 7;
 	private static final int MAX_RECENT_RECS = 3;
 	private static final int MAX_ALERTS = 8;
 	private static final Map<String, Integer> TIER_RANK = Map.of("critical", 0, "warning", 1, "info", 2);
@@ -50,7 +52,11 @@ public class AlertFeedService {
 		List<AlertView> out = new ArrayList<>();
 		LocalDate today = LocalDate.now(TORONTO);
 
+		Instant strangerCutoff = Instant.now().minus(STRANGER_WINDOW_DAYS, ChronoUnit.DAYS);
 		for (StrangerAlert s : stranger.findAllByOrderByRiskScoreDesc()) {
+			if (s.getWindowStart() == null || s.getWindowStart().isBefore(strangerCutoff)) {
+				continue; // stale — keep the live feed dynamic, don't surface week-old warnings
+			}
 			out.add(new AlertView("stranger-" + s.getTicker(), s.getRiskScore() >= 70 ? "critical" : "warning",
 					"Unusual coverage: " + s.getTicker(),
 					s.getCoverageCount() + " articles from " + s.getDistinctSources()

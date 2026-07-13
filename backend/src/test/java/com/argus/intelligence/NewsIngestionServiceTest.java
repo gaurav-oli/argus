@@ -14,8 +14,7 @@ import com.argus.agent.AgentEventPublisher;
 import com.argus.intelligence.NewsIngestionProperties.Gdelt;
 import com.argus.intelligence.NewsIngestionProperties.Rss;
 import com.argus.marketdata.MarketClock;
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
+import java.util.Set;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -24,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class NewsIngestionServiceTest {
 
 	private final NewsArticleRepository articles = mock(NewsArticleRepository.class);
-	private final PositionRepository positions = mock(PositionRepository.class);
+	private final KnownUniverse universe = mock(KnownUniverse.class);
 	private final MarketClock clock = mock(MarketClock.class);
 	private final AgentEventPublisher events = mock(AgentEventPublisher.class);
 	private final SourceCredibilityService credibility = mock(SourceCredibilityService.class);
@@ -38,13 +37,11 @@ class NewsIngestionServiceTest {
 	}
 
 	private void heldAapl() {
-		Position pos = mock(Position.class);
-		lenient().when(pos.getTicker()).thenReturn("AAPL");
-		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(pos));
+		when(universe.knownTickers()).thenReturn(Set.of("AAPL"));
 	}
 
 	private NewsIngestionService service(List<NewsSource> sources) {
-		return new NewsIngestionService(sources, articles, tagger, positions, clock, events,
+		return new NewsIngestionService(sources, articles, tagger, universe, clock, events,
 				credibility, props);
 	}
 

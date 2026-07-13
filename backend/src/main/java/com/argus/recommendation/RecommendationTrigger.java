@@ -4,9 +4,8 @@ import com.argus.agent.Agent;
 import com.argus.agent.EventEnvelope;
 import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
+import com.argus.intelligence.KnownUniverse;
 import com.argus.intelligence.StrangerDangerService;
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -31,17 +30,17 @@ public class RecommendationTrigger implements Agent {
 	private final RecommendationService recommendations;
 	private final GraduationService graduation;
 	private final EarningsQuietPeriodService quietPeriod;
-	private final PositionRepository positions;
+	private final KnownUniverse universe;
 	private final PaperInvestorService investor;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
-			GraduationService graduation, EarningsQuietPeriodService quietPeriod, PositionRepository positions,
+			GraduationService graduation, EarningsQuietPeriodService quietPeriod, KnownUniverse universe,
 			PaperInvestorService investor) {
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
 		this.graduation = graduation;
 		this.quietPeriod = quietPeriod;
-		this.positions = positions;
+		this.universe = universe;
 		this.investor = investor;
 	}
 
@@ -63,17 +62,13 @@ public class RecommendationTrigger implements Agent {
 		}
 	}
 
-	/** Six-hourly routine review of holdings, feeding the briefing (FR-14). */
+	/** Six-hourly routine review of the known universe (holdings + watchlist), feeding the briefing (FR-14). */
 	@Scheduled(cron = "0 0 */6 * * *")
 	public void scheduledReview() {
 		try {
-			// Distinct tickers, not lots — a holding split across accounts (e.g. TSLA in Cash/TFSA/RRSP)
-			// is one position to recommend on, not four.
-			positions.findAllByOrderByTickerAsc().stream()
-					.map(Position::getTicker)
-					.filter(java.util.Objects::nonNull)
-					.distinct()
-					.forEach(this::trigger);
+			// The known universe already dedups tickers (a holding split across accounts is one ticker)
+			// and, via CompositeKnownUniverse, now spans holdings + the watchlist.
+			universe.knownTickers().forEach(this::trigger);
 		} catch (RuntimeException ex) {
 			log.warn("Scheduled recommendation review failed: {}", ex.getMessage());
 		}

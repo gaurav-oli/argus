@@ -1,7 +1,10 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AgentFleet } from "@/features/agents/AgentFleet";
 import { AgentPerformance } from "@/features/agents/AgentPerformance";
+import { DataStorage } from "@/features/agents/DataStorage";
+import { LogicReview } from "@/features/agents/LogicReview";
 import { PaperInvestorScoreboard } from "@/features/agents/PaperInvestorScoreboard";
+import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 
 /**
@@ -28,6 +31,18 @@ export default function AgentsPage() {
         <div className="flex flex-col gap-4">
           <PaperInvestorScoreboard />
           <AgentPerformance />
+          <LogicReview />
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-1 font-display text-lg font-semibold text-text-primary">Data storage</h2>
+        <p className="mb-4 text-sm text-text-secondary">
+          How much each agent has stored, and exactly where it lives. Tap an agent to see its tables.
+        </p>
+        <div className="flex flex-col gap-4">
+          <DataStorage />
+          <SmartCleanup />
         </div>
       </div>
 

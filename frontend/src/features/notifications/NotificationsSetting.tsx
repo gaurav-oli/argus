@@ -1,10 +1,36 @@
 "use client";
 
+import { useState } from "react";
+
 import { useWebPush } from "@/hooks/useWebPush";
+import { testPush } from "@/lib/apiClient";
 
 /** Profile → Notifications: enable/disable Web Push on this device (Epic 8, FR-17). */
 export function NotificationsSetting() {
   const { status, busy, error, enable, disable } = useWebPush();
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+
+  async function onTest() {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const r = await testPush();
+      if (!r.configured) {
+        setTestMsg("Push isn't configured on the server.");
+      } else if (r.delivered > 0) {
+        setTestMsg(`Sent to ${r.delivered} of ${r.devices} device(s) — check your phone.`);
+      } else {
+        setTestMsg(
+          `Reached 0 of ${r.devices} device(s). Turn notifications off and on again to re-subscribe, then retry.`,
+        );
+      }
+    } catch {
+      setTestMsg("Couldn't send a test just now.");
+    } finally {
+      setTesting(false);
+    }
+  }
 
   if (status === "unsupported") {
     return (
@@ -45,7 +71,20 @@ export function NotificationsSetting() {
         )}
       </div>
 
-      {status === "subscribed" && <p className="text-xs text-gains">✓ Enabled on this device.</p>}
+      {status === "subscribed" && (
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gains">✓ Enabled on this device.</p>
+          <button
+            type="button"
+            onClick={onTest}
+            disabled={testing}
+            className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-text-primary transition hover:border-accent disabled:opacity-40"
+          >
+            {testing ? "Sending…" : "Send test"}
+          </button>
+        </div>
+      )}
+      {testMsg && <p className="text-xs text-text-secondary">{testMsg}</p>}
       {status === "denied" && (
         <p className="text-xs text-text-secondary">
           Notifications are blocked in your browser settings. Allow them for this site, then try again.

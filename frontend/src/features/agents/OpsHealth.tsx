@@ -55,8 +55,10 @@ function HardwareCard({ h }: { h: HardwareMetrics }) {
   return (
     <MotionCard index={0} interactive={false} className="flex flex-col gap-4">
       <div>
-        <h3 className="font-display text-base font-semibold text-text-primary">Host hardware</h3>
-        <p className="mt-0.5 text-xs text-text-secondary">Live RAM, SSD and CPU on the host.</p>
+        <h3 className="font-display text-base font-semibold text-text-primary">Runtime resources</h3>
+        <p className="mt-0.5 text-xs text-text-secondary">
+          RAM, SSD &amp; CPU of the app&apos;s Docker runtime — not the full Mac. Native Ollama isn&apos;t counted.
+        </p>
       </div>
 
       <Meter

@@ -23,7 +23,8 @@ class NewsSentimentAgentTest {
 
 	private final NewsArticleRepository articles = mock(NewsArticleRepository.class);
 	private final SentimentAnalyzer analyzer = mock(SentimentAnalyzer.class);
-	private final NewsSentimentAgent agent = new NewsSentimentAgent(articles, analyzer);
+	private final BreakingNewsAlertService breakingNews = mock(BreakingNewsAlertService.class);
+	private final NewsSentimentAgent agent = new NewsSentimentAgent(articles, analyzer, breakingNews);
 
 	private static EventEnvelope event(Object articleId) {
 		Map<String, Object> payload = articleId == null ? Map.of() : Map.of("articleId", articleId);

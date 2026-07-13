@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
-import com.argus.portfolio.PositionRepository;
+import com.argus.intelligence.KnownUniverse;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -23,10 +23,10 @@ class RecommendationTriggerTest {
 	private final RecommendationService recommendations = mock(RecommendationService.class);
 	private final GraduationService graduation = mock(GraduationService.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
-	private final PositionRepository positions = mock(PositionRepository.class);
+	private final KnownUniverse universe = mock(KnownUniverse.class);
 	private final PaperInvestorService investor = mock(PaperInvestorService.class);
 	private final RecommendationTrigger trigger = new RecommendationTrigger(
-			gatherer, recommendations, graduation, quietPeriod, positions, investor);
+			gatherer, recommendations, graduation, quietPeriod, universe, investor);
 
 	private final AgentSignal aSignal = new AgentSignal("agent-1-news", SignalDirection.BULLISH, 1, "x");
 

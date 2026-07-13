@@ -1,8 +1,7 @@
 package com.argus.social;
 
+import com.argus.intelligence.KnownUniverse;
 import com.argus.intelligence.SentimentLabel;
-import com.argus.portfolio.Position;
-import com.argus.portfolio.PositionRepository;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,13 +21,13 @@ public class SocialIngestionService {
 
 	private final List<SocialSource> sources;
 	private final SocialPostRepository posts;
-	private final PositionRepository positions;
+	private final KnownUniverse universe;
 
 	public SocialIngestionService(List<SocialSource> sources, SocialPostRepository posts,
-			PositionRepository positions) {
+			KnownUniverse universe) {
 		this.sources = sources;
 		this.posts = posts;
-		this.positions = positions;
+		this.universe = universe;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.social.poll-ms:600000}",
@@ -43,8 +42,7 @@ public class SocialIngestionService {
 	}
 
 	void ingestOnce() {
-		List<String> heldTickers = positions.findAllByOrderByTickerAsc().stream()
-				.map(Position::getTicker).distinct().toList();
+		List<String> heldTickers = universe.knownTickers().stream().distinct().toList();
 		if (heldTickers.isEmpty() || sources.isEmpty()) {
 			return;
 		}

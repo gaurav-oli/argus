@@ -25,14 +25,16 @@ public class OpsController {
 	private final HardwareService hardware;
 	private final FreshnessService freshness;
 	private final PlatformModeService platformMode;
+	private final StorageService storage;
 
 	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
-			FreshnessService freshness, PlatformModeService platformMode) {
+			FreshnessService freshness, PlatformModeService platformMode, StorageService storage) {
 		this.agents = agents;
 		this.cost = cost;
 		this.hardware = hardware;
 		this.freshness = freshness;
 		this.platformMode = platformMode;
+		this.storage = storage;
 	}
 
 	@GetMapping("/summary")
@@ -58,5 +60,11 @@ public class OpsController {
 	@GetMapping("/platform-mode")
 	public PlatformModeView platformMode() {
 		return platformMode.current();
+	}
+
+	/** Per-agent data-storage inventory: rows + on-disk size per agent and the tables it owns. */
+	@GetMapping("/storage")
+	public StorageService.StorageView storage() {
+		return storage.snapshot();
 	}
 }

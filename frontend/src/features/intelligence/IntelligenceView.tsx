@@ -16,6 +16,7 @@ import {
   type TickerSentiment,
 } from "@/lib/apiClient";
 import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
+import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
@@ -61,6 +62,7 @@ export function IntelligenceView() {
 
       <div className="flex flex-col gap-6">
       <RecommendationCards />
+      <Watchlist />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
       <SocialSection items={social} />
       <InsiderSection items={insider} />
