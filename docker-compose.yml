@@ -76,11 +76,17 @@ services:
       # Investor paper-trade horizon (argus.paper-investor.horizon-days). Default 30d; lower it to
       # validate the Analyst/Investor loop quickly (trades close sooner → nightly tuning has data).
       ARGUS_PAPER_INVESTOR_HORIZON_DAYS: ${PAPER_INVESTOR_HORIZON_DAYS:-30}
+      # How often the Investor marks due positions to market (argus.paper-investor.close-cron). Default
+      # hourly; set e.g. "0 * * * * *" (every minute) during validation so backdated trades close promptly.
+      ARGUS_PAPER_INVESTOR_CLOSE_CRON: ${PAPER_INVESTOR_CLOSE_CRON:-0 0 * * * *}
       # Adaptive-tuning cold-start floor (argus.adaptive-tuning.min-sample). Default 10; below this many
       # closed trades an agent's weight multiplier stays 1.0. Lower it to watch tuning move during validation.
       ARGUS_ADAPTIVE_TUNING_MIN_SAMPLE: ${ADAPTIVE_TUNING_MIN_SAMPLE:-10}
       # Also recompute tuning once at startup (default off) — validate the loop without the nightly wait.
       ARGUS_ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT: ${ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT:-false}
+      # Analyst Logic Review schedule (argus.logic-review.cron). Default 03:00; set e.g. "0 */2 * * * *"
+      # (every 2 min) during validation so the LLM-proposes/backtest-decides pass fires promptly.
+      ARGUS_LOGIC_REVIEW_CRON: ${LOGIC_REVIEW_CRON:-0 0 3 * * *}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed
