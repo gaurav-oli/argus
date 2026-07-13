@@ -571,6 +571,20 @@ export const getSourceCredibility = (): Promise<SourceCredibilityItem[]> =>
 export const getStrangerAlerts = (): Promise<StrangerAlertItem[]> =>
   apiGet<StrangerAlertItem[]>("/api/intelligence/strangers");
 
+/** Mirrors `IntelligenceController.BreakingItem` — a breaking-news alert that fired a push. */
+export interface BreakingAlertItem {
+  id: number;
+  headline: string;
+  url: string | null;
+  tickers: string[];
+  reason: string;
+  sentimentLabel: string | null;
+  createdAt: string;
+}
+
+export const getBreakingAlerts = (): Promise<BreakingAlertItem[]> =>
+  apiGet<BreakingAlertItem[]>("/api/intelligence/breaking");
+
 // ---- Economic calendar / Agent 7 (Epic 5) ----
 
 /** An upcoming calendar event; `quietPeriod` (CLEAR|NOTE|QUIET) is set only for earnings (Story 5.3). */

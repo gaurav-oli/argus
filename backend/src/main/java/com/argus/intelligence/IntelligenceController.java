@@ -21,12 +21,14 @@ public class IntelligenceController {
 	private final NewsArticleRepository articles;
 	private final SourceCredibilityRepository sources;
 	private final StrangerAlertRepository strangers;
+	private final BreakingAlertRepository breaking;
 
 	public IntelligenceController(NewsArticleRepository articles, SourceCredibilityRepository sources,
-			StrangerAlertRepository strangers) {
+			StrangerAlertRepository strangers, BreakingAlertRepository breaking) {
 		this.articles = articles;
 		this.sources = sources;
 		this.strangers = strangers;
+		this.breaking = breaking;
 	}
 
 	@GetMapping("/news")
@@ -42,6 +44,12 @@ public class IntelligenceController {
 	@GetMapping("/strangers")
 	public List<StrangerItem> strangers() {
 		return strangers.findAllByOrderByRiskScoreDesc().stream().map(StrangerItem::from).toList();
+	}
+
+	/** Recent breaking-news alerts (the ones that fired a push) — the in-app history of what mattered. */
+	@GetMapping("/breaking")
+	public List<BreakingItem> breaking() {
+		return breaking.findTop20ByOrderByCreatedAtDesc().stream().map(BreakingItem::from).toList();
 	}
 
 	/** A news article with its Agent-1 sentiment/relevance scoring (null scores = not yet analyzed). */
@@ -64,6 +72,17 @@ public class IntelligenceController {
 		static SourceItem from(SourceCredibility c) {
 			return new SourceItem(c.getSource(), c.getScore(), c.getTier().name(), c.isBlocked(),
 					c.getCorrectCount(), c.getIncorrectCount());
+		}
+	}
+
+	/** A breaking-news alert that was pushed: what fired, why, and when. */
+	public record BreakingItem(Long id, String headline, String url, List<String> tickers, String reason,
+			String sentimentLabel, Instant createdAt) {
+
+		static BreakingItem from(BreakingAlert a) {
+			return new BreakingItem(a.getId(), a.getHeadline(), a.getUrl(),
+					a.getTickers() == null ? List.of() : Arrays.asList(a.getTickers()),
+					a.getReason(), a.getSentimentLabel(), a.getCreatedAt());
 		}
 	}
 
