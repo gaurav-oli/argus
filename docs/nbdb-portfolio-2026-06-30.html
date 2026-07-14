@@ -1,0 +1,366 @@
+<title>Household Portfolio — National Bank Direct Brokerage</title>
+<style>
+  :root{
+    --bg:#eef1f4; --panel:#ffffff; --panel2:#f7f9fb;
+    --ink:#1a2331; --muted:#5d6a7a; --faint:#8b97a6;
+    --line:#e2e7ee; --line2:#eef2f6; --head:#eef2f7;
+    --accent:#0d7a6b; --accentink:#0a5f54; --accentbg:#e4f3f0;
+    --cad:#1a5fb4; --cadbg:#e7f0fb; --usd:#b5651d; --usdbg:#fbeede;
+    --joint:#6d47c9; --jointbg:#eee8fb; --solo:#0d7a6b; --solobg:#e4f3f0;
+    --pos:#137a44; --neg:#c0392b; --cash:#0d7a6b; --cashbg:#eefaf6;
+    --shadow:0 1px 2px rgba(20,35,55,.05),0 2px 8px rgba(20,35,55,.04);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0f141b; --panel:#171e27; --panel2:#1c242f;
+      --ink:#e7ecf3; --muted:#9aa7b7; --faint:#6f7d8e;
+      --line:#26313d; --line2:#212a35; --head:#1c242f;
+      --accent:#3fd0b8; --accentink:#8ff0e0; --accentbg:#123029;
+      --cad:#6ea8f0; --cadbg:#152538; --usd:#e0a267; --usdbg:#33260f;
+      --joint:#b39af0; --jointbg:#231b3a; --solo:#3fd0b8; --solobg:#123029;
+      --pos:#4cc47f; --neg:#e8776a; --cash:#3fd0b8; --cashbg:#122b26;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f4; --panel:#ffffff; --panel2:#f7f9fb; --ink:#1a2331; --muted:#5d6a7a; --faint:#8b97a6;
+    --line:#e2e7ee; --line2:#eef2f6; --head:#eef2f7;
+    --accent:#0d7a6b; --accentink:#0a5f54; --accentbg:#e4f3f0;
+    --cad:#1a5fb4; --cadbg:#e7f0fb; --usd:#b5651d; --usdbg:#fbeede;
+    --joint:#6d47c9; --jointbg:#eee8fb; --solo:#0d7a6b; --solobg:#e4f3f0;
+    --pos:#137a44; --neg:#c0392b; --cash:#0d7a6b; --cashbg:#eefaf6;
+    --shadow:0 1px 2px rgba(20,35,55,.05),0 2px 8px rgba(20,35,55,.04);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f141b; --panel:#171e27; --panel2:#1c242f; --ink:#e7ecf3; --muted:#9aa7b7; --faint:#6f7d8e;
+    --line:#26313d; --line2:#212a35; --head:#1c242f;
+    --accent:#3fd0b8; --accentink:#8ff0e0; --accentbg:#123029;
+    --cad:#6ea8f0; --cadbg:#152538; --usd:#e0a267; --usdbg:#33260f;
+    --joint:#b39af0; --jointbg:#231b3a; --solo:#3fd0b8; --solobg:#123029;
+    --pos:#4cc47f; --neg:#e8776a; --cash:#3fd0b8; --cashbg:#122b26;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;padding:26px 20px 60px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .num{font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;text-align:right;white-space:nowrap}
+  .na{color:var(--faint);font-size:11px;letter-spacing:.02em}
+
+  /* header */
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+  h1{font-size:23px;letter-spacing:-.01em;margin:0 0 3px;text-wrap:balance}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:13px}
+  .themebtn{border:1px solid var(--line);background:var(--panel);color:var(--muted);
+    border-radius:9px;padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600}
+  .themebtn:hover{color:var(--ink);border-color:var(--accent)}
+
+  /* control deck */
+  .deck{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:16px 18px;margin-bottom:22px}
+  .deck-top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;margin-bottom:14px}
+  .deck-title{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .fxwrap{display:flex;align-items:center;gap:10px;background:var(--accentbg);
+    border:1px solid transparent;border-radius:10px;padding:6px 8px 6px 14px}
+  .fxwrap label{font-size:12px;font-weight:700;color:var(--accentink)}
+  .live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accentbg)}
+  input.fld{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-variant-numeric:tabular-nums;
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:6px 8px;width:100%;text-align:right;transition:border-color .12s,box-shadow .12s}
+  input.fld:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accentbg)}
+  input.fx{width:118px;font-size:15px;font-weight:600}
+  .pxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .pxcell label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
+  .qtag{font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;letter-spacing:.03em}
+  .q-USD{background:var(--usdbg);color:var(--usd)} .q-CAD{background:var(--cadbg);color:var(--cad)}
+  .deck-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+  .hint{font-size:12px;color:var(--faint)}
+  .resetbtn{border:1px solid var(--line);background:var(--panel2);color:var(--muted);
+    border-radius:9px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer}
+  .resetbtn:hover{color:var(--ink);border-color:var(--accent)}
+
+  /* KPI cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:15px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .card .lbl{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+  .card .big{font-size:25px;font-weight:650;margin-top:5px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .card .fine{color:var(--faint);font-size:12px;margin-top:4px}
+  .card.hero{background:linear-gradient(135deg,var(--accentbg),var(--panel));border-color:var(--accent)}
+  .card.hero .big{color:var(--accentink)}
+  .delta.pos{color:var(--pos)} .delta.neg{color:var(--neg)}
+
+  /* reconciliation note */
+  .recon{display:flex;gap:12px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:12px;padding:13px 16px;margin:20px 0 6px;font-size:13px;color:var(--muted)}
+  .recon b{color:var(--ink);font-weight:650}
+
+  /* ledgers */
+  .ledger-head{display:flex;align-items:center;gap:11px;margin:30px 0 11px;flex-wrap:wrap}
+  .ledger-head h2{font-size:16px;margin:0;letter-spacing:-.01em}
+  .badge{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:999px;letter-spacing:.03em;white-space:nowrap}
+  .b-joint{background:var(--jointbg);color:var(--joint)} .b-solo{background:var(--solobg);color:var(--solo)}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);background:var(--panel)}
+  table{width:100%;border-collapse:collapse;min-width:640px}
+  thead th{background:var(--head);color:var(--muted);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.04em;font-weight:700;text-align:left;padding:9px 13px;border-bottom:1px solid var(--line)}
+  thead th.num{text-align:right}
+  td{padding:8px 13px;border-bottom:1px solid var(--line2)}
+  tbody tr:last-child td{border-bottom:none}
+
+  .acctrow td{background:var(--panel2);border-top:1px solid var(--line)}
+  .acctname{font-weight:650;font-size:13.5px}
+  .acctname .a4{color:var(--faint);font-weight:500}
+  .acctmeta{color:var(--muted);font-size:11.5px;margin-top:3px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .pill{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;letter-spacing:.02em}
+  .p-cad{background:var(--cadbg);color:var(--cad)} .p-usd{background:var(--usdbg);color:var(--usd)}
+  .p-owner{background:var(--line2);color:var(--muted)}
+
+  td.sym{font-weight:650;letter-spacing:.01em} td.desc{color:var(--muted);font-size:12.5px}
+  td.desc .qp{color:var(--faint);font-size:11px}
+  tr.cash td{background:var(--cashbg)} tr.cash td.sym{color:var(--cash);font-size:11px;letter-spacing:.05em}
+  tr.subtot td{background:var(--panel2);font-weight:650;border-top:1px solid var(--line)}
+  tr.subtot td.desc{font-weight:500;color:var(--muted)}
+  tfoot td{background:var(--accentbg);font-weight:700;font-size:13.5px;border-top:2px solid var(--accent);color:var(--accentink)}
+
+  caption{caption-side:top;text-align:left;font-size:15px;font-weight:650;padding:2px 0 12px}
+  .foot-note{color:var(--faint);font-size:12px;line-height:1.6;margin-top:20px;max-width:78ch}
+  .foot-note b{color:var(--muted)}
+  @media (max-width:640px){ body{padding:16px 12px 40px} .hide-sm{display:none} h1{font-size:20px} }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">National Bank Direct Brokerage · As of June 30 2026</div>
+      <h1>Household Portfolio</h1>
+      <div class="sub">Gaurav Oli &amp; Varsha Gupta · 3 account roots · 9 accounts</div>
+    </div>
+    <button class="themebtn" id="themeBtn" type="button">◐ Theme</button>
+  </header>
+
+  <!-- CONTROL DECK -->
+  <div class="deck">
+    <div class="deck-top">
+      <span class="deck-title">Live inputs — edit to re-price</span>
+      <div class="fxwrap">
+        <label for="fx">USD 1.00 = CAD</label>
+        <input class="fld fx num" id="fx" type="number" step="0.0001" value="1.421060" inputmode="decimal" aria-label="USD to CAD exchange rate">
+      </div>
+    </div>
+    <div class="pxgrid" id="pxgrid"></div>
+    <div class="deck-foot">
+      <span class="hint">Type today's FX &amp; prices — every value, subtotal and total below recomputes instantly. (Artifacts are sandboxed and can't fetch quotes automatically.)</span>
+      <button class="resetbtn" id="resetBtn" type="button">↺ Reset to Jun 30 statement</button>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="cards">
+    <div class="card hero"><div class="lbl">Total Portfolio · CAD</div><div class="big" id="kTotCad">—</div><div class="fine" id="kTotCadFine">across all 9 accounts</div></div>
+    <div class="card hero"><div class="lbl">Total Portfolio · USD</div><div class="big" id="kTotUsd">—</div><div class="fine" id="kTotUsdFine">at current FX</div></div>
+    <div class="card"><div class="lbl">Total Cash</div><div class="big" id="kCash">—</div><div class="fine" id="kCashFine">—</div></div>
+    <div class="card"><div class="lbl">vs. NB live figure</div><div class="big" id="kLive">$491,301.96</div><div class="fine"><span id="kDelta" class="delta">—</span> vs computed CAD</div></div>
+  </div>
+
+  <div class="recon">
+    <div><b>No doubled holdings.</b> Every position is taken once from the statement's per-account Asset Details — repeated tickers (NVDA in 6 accounts, TSLA in 4…) are genuinely separate lots. Each subtotal ties to National Bank's own account summaries. The gap to your $491,301.96 live balance is market drift since Jun 30, not a counting error.</div>
+  </div>
+
+  <div id="ledgers"></div>
+
+  <!-- CASH SUMMARY -->
+  <h2 style="font-size:16px;margin:34px 0 11px;letter-spacing:-.01em">Cash on hand — by account</h2>
+  <div class="tblwrap">
+    <table>
+      <thead><tr>
+        <th>Account</th><th>Owner</th><th class="num">Cur.</th>
+        <th class="num">Cash (native)</th><th class="num">≈ CAD</th><th class="num">≈ USD</th>
+      </tr></thead>
+      <tbody id="cashBody"></tbody>
+      <tfoot><tr>
+        <td colspan="3">Total cash</td>
+        <td class="num" id="cashNative">—</td><td class="num" id="cashCad">—</td><td class="num" id="cashUsd">—</td>
+      </tr></tfoot>
+    </table>
+  </div>
+
+  <div class="foot-note">
+    <b>Notes.</b> IDEXQ (Ideanomics) had no determinable market price on the statement — it defaults to N/A and contributes $0 until you enter a price.
+    Prices for TSX-listed ETFs (XQQ, VDY, VFV) are quoted in <b>CAD</b>; all other tickers quote in <b>USD</b> and are converted at the FX rate above — that's why USD-priced holdings inside CAD registered accounts still show a CAD market value.
+    “≈ CAD / ≈ USD” columns are convenience conversions and will drift slightly from your bank's live figures.
+  </div>
+</div>
+
+<script>
+"use strict";
+const DEFAULT_FX = 1.421060;
+const LIVE_CAD = 491301.96;
+
+const TICK = {
+  AMZN:{name:"Amazon.com Inc", q:"USD"}, NVDA:{name:"NVIDIA Corp", q:"USD"},
+  TSLA:{name:"Tesla Inc", q:"USD"}, NIO:{name:"NIO Inc ADR", q:"USD"},
+  QS:{name:"QuantumScape Corp Cl-A", q:"USD"}, RETO:{name:"ReTo Eco-Solutions Inc Cl-A", q:"USD"},
+  ARKK:{name:"ARK Innovation ETF", q:"USD"}, GOOG:{name:"Alphabet Inc Cl-C", q:"USD"},
+  IDEXQ:{name:"Ideanomics Inc-New", q:"USD"},
+  XQQ:{name:"iShares NASDAQ 100 Index ETF (CAD-Hedged)", q:"CAD"},
+  VDY:{name:"Vanguard FTSE CDN High Div Yield ETF", q:"CAD"},
+  VFV:{name:"Vanguard S&P 500 Index ETF", q:"CAD"},
+};
+const PX_ORDER = ["NVDA","TSLA","AMZN","GOOG","QS","NIO","ARKK","RETO","IDEXQ","XQQ","VDY","VFV"];
+const DEFAULT_PX = {NVDA:200.09,TSLA:420.60,AMZN:238.34,GOOG:353.33,QS:7.56,NIO:5.06,ARKK:80.78,RETO:2.515,IDEXQ:null,XQQ:73.75,VDY:76.00,VFV:188.37};
+
+const GROUPS = {
+  joint:{title:"Joint — Gaurav Oli & Varsha Gupta", badge:"JOINT · JTWROS · Root 687WK3", cls:"b-joint", owner:"Joint · Gaurav & Varsha"},
+  gaurav:{title:"Solo — Gaurav Oli", badge:"SOLO · Root 687WQD", cls:"b-solo", owner:"Solo · Gaurav Oli"},
+  varsha:{title:"Solo — Varsha Gupta", badge:"SOLO · Root 687WQS", cls:"b-solo", owner:"Solo · Varsha Gupta"},
+};
+// holds: [ticker, qty, bookValue]
+const ACCTS = [
+  {grp:"joint", name:"Cash Account", last4:"WK3A", cur:"CAD", cash:14.73, meta:"", holds:[["XQQ",3,141.13],["VDY",2,90.22],["VFV",1,125.38]]},
+  {grp:"joint", name:"Cash Account", last4:"WK3B", cur:"USD", cash:10458.98, meta:"", holds:[["AMZN",50,10934.89],["IDEXQ",39,7647.13],["NVDA",401,50100.46],["RETO",16,4134.54],["TSLA",200,67582.53]]},
+  {grp:"gaurav", name:"Cash Account", last4:"WQDA", cur:"CAD", cash:120.00, meta:"", holds:[]},
+  {grp:"gaurav", name:"RRSP", last4:"WQD7", cur:"USD", cash:0.59, meta:"Registered · Beneficiary: Estate", holds:[["TSLA",75,15725.95]]},
+  {grp:"gaurav", name:"TFSA", last4:"WQDW", cur:"CAD", cash:9608.23, meta:"Registered", holds:[["AMZN",68,17123.51],["NIO",98,6916.68],["NVDA",121,21317.64],["QS",227,14073.06],["VFV",14,2075.09]]},
+  {grp:"varsha", name:"RRSP", last4:"WQS7", cur:"USD", cash:35.80, meta:"Registered · Beneficiary: Estate", holds:[["ARKK",6,722.46],["NIO",2,54.53],["NVDA",1,134.60],["TSLA",117,24303.20]]},
+  {grp:"varsha", name:"Family RESP", last4:"WQSZ", cur:"CAD", cash:62.45, meta:"Registered · Beneficiary: Leanna Oli", holds:[["GOOG",1,219.30],["AMZN",3,773.03],["NVDA",13,2317.30]]},
+  {grp:"varsha", name:"TFSA", last4:"WQSW", cur:"CAD", cash:80.31, meta:"Registered", holds:[["NVDA",92,15439.71]]},
+  {grp:"varsha", name:"TFSA", last4:"WQS6", cur:"USD", cash:4717.04, meta:"Registered", holds:[["NIO",81,4086.02],["QS",345,10144.46],["TSLA",12,3934.39]]},
+];
+
+const $ = (id)=>document.getElementById(id);
+const money = (n)=> n==null ? '<span class="na">N/A</span>'
+  : n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0 = (n)=> "$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function getFX(){ const v=parseFloat($("fx").value); return (isFinite(v)&&v>0)?v:DEFAULT_FX; }
+function getPx(t){
+  const el=document.querySelector('input[data-tk="'+t+'"]');
+  if(!el) return DEFAULT_PX[t];
+  if(el.value.trim()==="") return null;
+  const v=parseFloat(el.value); return isFinite(v)?v:null;
+}
+function valUSD(t,q,FX){ const p=getPx(t); if(p==null) return null; return TICK[t].q==="USD" ? q*p : q*p/FX; }
+function valCAD(t,q,FX){ const p=getPx(t); if(p==null) return null; return TICK[t].q==="CAD" ? q*p : q*p*FX; }
+
+function buildPxGrid(){
+  $("pxgrid").innerHTML = PX_ORDER.map(t=>{
+    const q=TICK[t].q, dv=DEFAULT_PX[t];
+    return '<div class="pxcell"><label for="px_'+t+'"><span>'+t+'</span>'+
+      '<span class="qtag q-'+q+'">'+q+'</span></label>'+
+      '<input class="fld num" id="px_'+t+'" data-tk="'+t+'" type="number" step="0.001" inputmode="decimal" '+
+      (dv==null?'placeholder="N/A"':'value="'+dv+'"')+' aria-label="'+t+' price in '+q+'"></div>';
+  }).join("");
+}
+
+function holdRow(t,q,book,acctCur,FX){
+  const vU=valUSD(t,q,FX), vC=valCAD(t,q,FX);
+  const native = acctCur==="CAD" ? vC : vU;
+  const qp = TICK[t].q==="USD" && acctCur==="CAD"
+      ? ' <span class="qp">· US$'+(getPx(t)==null?"—":money(getPx(t)))+'</span>' : '';
+  return '<tr><td class="sym">'+t+'</td>'+
+    '<td class="desc hide-sm">'+TICK[t].name+qp+'</td>'+
+    '<td class="num">'+q+'</td>'+
+    '<td class="num hide-sm">'+money(book)+'</td>'+
+    '<td class="num">'+money(native)+'</td>'+
+    '<td class="num">'+money(vC)+'</td>'+
+    '<td class="num">'+money(vU)+'</td></tr>';
+}
+
+function render(){
+  const FX=getFX();
+  let grandCad=0, grandUsd=0, cashCadTot=0, cashUsdTot=0, cashNativeNote=[];
+  let html="";
+
+  for(const key of ["joint","gaurav","varsha"]){
+    const g=GROUPS[key];
+    const list=ACCTS.filter(a=>a.grp===key);
+    let gCad=0, gUsd=0, body="";
+    for(const a of list){
+      const cashCad = a.cur==="CAD" ? a.cash : a.cash*FX;
+      const cashUsd = a.cur==="USD" ? a.cash : a.cash/FX;
+      let subNative = a.cur==="CAD"?cashCad:cashUsd, subCad=cashCad, subUsd=cashUsd;
+      body += '<tr class="acctrow"><td colspan="7">'+
+        '<div class="acctname">'+a.name+' <span class="a4">('+a.cur+' · '+a.last4+')</span></div>'+
+        '<div class="acctmeta"><span class="pill p-'+a.cur.toLowerCase()+'">'+a.cur+'</span>'+
+        '<span class="pill p-owner">'+g.owner+'</span>'+(a.meta?'<span>'+a.meta+'</span>':'')+'</div></td></tr>';
+      body += '<tr class="cash"><td class="sym">CASH</td><td class="desc hide-sm">Cash balance</td>'+
+        '<td class="num">—</td><td class="num hide-sm">—</td>'+
+        '<td class="num">'+money(a.cur==="CAD"?cashCad:cashUsd)+'</td>'+
+        '<td class="num">'+money(cashCad)+'</td><td class="num">'+money(cashUsd)+'</td></tr>';
+      for(const [t,q,book] of a.holds){
+        const vU=valUSD(t,q,FX), vC=valCAD(t,q,FX);
+        subNative += (a.cur==="CAD"?(vC||0):(vU||0));
+        subCad += (vC||0); subUsd += (vU||0);
+        body += holdRow(t,q,book,a.cur,FX);
+      }
+      body += '<tr class="subtot"><td>Subtotal</td><td class="desc hide-sm">'+a.name+' ('+a.cur+')</td>'+
+        '<td class="num"></td><td class="num hide-sm"></td>'+
+        '<td class="num">'+money(subNative)+'</td><td class="num">'+money(subCad)+'</td>'+
+        '<td class="num">'+money(subUsd)+'</td></tr>';
+      gCad+=subCad; gUsd+=subUsd;
+      cashCadTot+=cashCad; cashUsdTot+=cashUsd;
+    }
+    grandCad+=gCad; grandUsd+=gUsd;
+    html += '<div class="ledger-head"><h2>'+g.title+'</h2><span class="badge '+g.cls+'">'+g.badge+'</span></div>'+
+      '<div class="tblwrap"><table><thead><tr>'+
+      '<th>Symbol</th><th class="hide-sm">Description</th><th class="num">Qty</th>'+
+      '<th class="num hide-sm">Book Value</th><th class="num">Market Value</th>'+
+      '<th class="num">≈ CAD</th><th class="num">≈ USD</th></tr></thead>'+
+      '<tbody>'+body+'</tbody>'+
+      '<tfoot><tr><td colspan="4">'+g.title.split("—")[1].trim()+' total</td>'+
+      '<td class="num"></td><td class="num">'+money(gCad)+'</td><td class="num">'+money(gUsd)+'</td></tr></tfoot>'+
+      '</table></div>';
+  }
+  $("ledgers").innerHTML=html;
+
+  // cash table
+  let cashHtml="";
+  for(const a of ACCTS){
+    const g=GROUPS[a.grp];
+    const cashCad=a.cur==="CAD"?a.cash:a.cash*FX, cashUsd=a.cur==="USD"?a.cash:a.cash/FX;
+    cashHtml += '<tr><td style="font-weight:600">'+a.name+' · '+a.last4+'</td>'+
+      '<td><span class="badge '+g.cls+'">'+g.owner+'</span></td>'+
+      '<td class="num"><span class="pill p-'+a.cur.toLowerCase()+'">'+a.cur+'</span></td>'+
+      '<td class="num">'+money(a.cash)+'</td><td class="num">'+money(cashCad)+'</td><td class="num">'+money(cashUsd)+'</td></tr>';
+  }
+  $("cashBody").innerHTML=cashHtml;
+  $("cashCad").innerHTML=money(cashCadTot);
+  $("cashUsd").innerHTML=money(cashUsdTot);
+  $("cashNative").innerHTML='<span class="na">mixed</span>';
+
+  // KPI cards
+  $("kTotCad").textContent=money0(grandCad);
+  $("kTotUsd").textContent=money0(grandUsd);
+  $("kCash").textContent=money0(cashCadTot);
+  $("kCashFine").innerHTML="CAD · ≈ US$"+money(cashUsdTot);
+  const d=grandCad-LIVE_CAD, pct=(d/LIVE_CAD*100);
+  const de=$("kDelta");
+  de.className="delta "+(d>=0?"pos":"neg");
+  de.textContent=(d>=0?"+":"−")+"$"+Math.abs(d).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})+" ("+(d>=0?"+":"−")+Math.abs(pct).toFixed(2)+"%)";
+}
+
+// wire up
+buildPxGrid();
+document.querySelectorAll("input.fld").forEach(el=>el.addEventListener("input",render));
+$("resetBtn").addEventListener("click",()=>{
+  $("fx").value=DEFAULT_FX.toFixed(6);
+  PX_ORDER.forEach(t=>{ const el=document.querySelector('input[data-tk="'+t+'"]'); if(el) el.value = DEFAULT_PX[t]==null?"":DEFAULT_PX[t]; });
+  render();
+});
+// theme toggle
+const root=document.documentElement;
+$("themeBtn").addEventListener("click",()=>{
+  const cur=root.getAttribute("data-theme");
+  const isDark = cur ? cur==="dark" : matchMedia("(prefers-color-scheme:dark)").matches;
+  root.setAttribute("data-theme", isDark?"light":"dark");
+});
+render();
+</script>
