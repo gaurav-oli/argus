@@ -21,13 +21,16 @@ class NotificationServiceTest {
 
 	private final NotificationDedupStore dedup = mock(NotificationDedupStore.class);
 	private final PushService push = mock(PushService.class);
+	private final NotificationPreferencesService prefs = mock(NotificationPreferencesService.class);
 	private final NotificationProperties props = new NotificationProperties(0.60, 0.02, 1800);
-	private final NotificationService service = new NotificationService(props, dedup, push);
+	private final NotificationService service = new NotificationService(props, dedup, push, prefs);
 
 	@BeforeEach
 	void passDedupByDefault() {
 		// Mockito's default for boolean is false (= deduped); make alerts pass dedup unless a test says otherwise.
 		when(dedup.accept(any(), any(), anyDouble(), any())).thenReturn(true);
+		// Preferences allow everything by default (these tests predate prefs and assert routing behaviour).
+		when(prefs.allow(any(), any(), anyBoolean())).thenReturn(true);
 	}
 
 	@Test

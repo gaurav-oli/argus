@@ -11,5 +11,7 @@ public enum NotificationOutcome {
 	/** Dropped by the fatigue gate — below confidence/impact thresholds (Story 8.3). */
 	SUPPRESSED_GATE,
 	/** Dropped as a duplicate within the dedup window (Story 8.4). */
-	SUPPRESSED_DEDUP
+	SUPPRESSED_DEDUP,
+	/** Dropped by the user's notification preferences (type off, muted ticker, or quiet hours). */
+	SUPPRESSED_PREFS
 }

@@ -2,6 +2,8 @@ package com.argus.intelligence;
 
 import com.argus.cost.CostGovernor;
 import com.argus.model.ModelGateway;
+import com.argus.notification.NotificationPreferencesService;
+import com.argus.notification.NotificationPreferencesService.Category;
 import com.argus.push.PushService;
 import java.time.Duration;
 import java.time.Instant;
@@ -36,14 +38,16 @@ public class BreakingNewsAlertService {
 	private final PushService push;
 	private final ModelGateway gateway;
 	private final CostGovernor costGovernor;
+	private final NotificationPreferencesService prefs;
 	private final BreakingNewsProperties props;
 
 	public BreakingNewsAlertService(BreakingAlertRepository alerts, PushService push, ModelGateway gateway,
-			CostGovernor costGovernor, BreakingNewsProperties props) {
+			CostGovernor costGovernor, NotificationPreferencesService prefs, BreakingNewsProperties props) {
 		this.alerts = alerts;
 		this.push = push;
 		this.gateway = gateway;
 		this.costGovernor = costGovernor;
+		this.prefs = prefs;
 		this.props = props;
 	}
 
@@ -92,9 +96,14 @@ public class BreakingNewsAlertService {
 		String reason = strongForHoldings
 				? "High impact for your holdings"
 				: "Breaking: " + topic;
+		// Always record it (the in-app Breaking feed keeps the full history); the push is what prefs gate.
 		alerts.save(new BreakingAlert(headline, article.getUrl(), article.getTickers(), reason, impact,
 				article.getSentimentLabel().name()));
 
+		if (!prefs.allow(Category.BREAKING, article.getTickers(), false)) {
+			log.info("Breaking-news recorded but push suppressed by preferences (off/muted/quiet): {}", headline);
+			return;
+		}
 		int delivered = push.sendToAll("⚠️ Market alert", headline, "/intelligence", true);
 		log.info("Breaking-news alert pushed to {} device(s) [{}]: {}", delivered, reason, headline);
 	}

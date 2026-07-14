@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { useWebPush } from "@/hooks/useWebPush";
 import { testPush } from "@/lib/apiClient";
+import { NotificationPreferences } from "@/features/notifications/NotificationPreferences";
 
 /** Profile → Notifications: enable/disable Web Push on this device (Epic 8, FR-17). */
 export function NotificationsSetting() {
@@ -100,6 +101,8 @@ export function NotificationsSetting() {
           {error}
         </p>
       )}
+
+      <NotificationPreferences />
     </div>
   );
 }

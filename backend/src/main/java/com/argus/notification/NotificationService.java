@@ -27,11 +27,14 @@ public class NotificationService {
 	private final NotificationProperties props;
 	private final NotificationDedupStore dedup;
 	private final PushService push;
+	private final NotificationPreferencesService prefs;
 
-	public NotificationService(NotificationProperties props, NotificationDedupStore dedup, PushService push) {
+	public NotificationService(NotificationProperties props, NotificationDedupStore dedup, PushService push,
+			NotificationPreferencesService prefs) {
 		this.props = props;
 		this.dedup = dedup;
 		this.push = push;
+		this.prefs = prefs;
 	}
 
 	/** Run a candidate notification through dedup → gate → tier routing. Returns what happened. */
@@ -52,15 +55,14 @@ public class NotificationService {
 			return NotificationOutcome.SUPPRESSED_GATE;
 		}
 
-		// 8.2 — tier routing
+		// 8.2 — tier routing (the pushing tiers first pass the user's notification preferences:
+		// type toggle, muted tickers, and quiet hours — CRITICAL bypasses quiet hours but not the rest).
 		return switch (n.tier()) {
 			case CRITICAL -> {
-				push.sendToAll(n.title(), n.body(), n.url(), true); // require ack
-				yield NotificationOutcome.PUSHED;
+				yield pushIfAllowed(n, true);
 			}
 			case IMPORTANT -> {
-				push.sendToAll(n.title(), n.body(), n.url(), false);
-				yield NotificationOutcome.PUSHED;
+				yield pushIfAllowed(n, false);
 			}
 			case NORMAL -> {
 				log.debug("Notification deferred to next briefing: '{}'", n.title());
@@ -71,6 +73,18 @@ public class NotificationService {
 				yield NotificationOutcome.DEFERRED_DIGEST;
 			}
 		};
+	}
+
+	/** Push a pushing-tier notification, unless the user's preferences suppress it. */
+	private NotificationOutcome pushIfAllowed(Notification n, boolean requireAck) {
+		String[] tickers = n.ticker() == null ? null : new String[] { n.ticker() };
+		if (!prefs.allow(NotificationPreferencesService.Category.ALERT, tickers,
+				n.tier() == UrgencyTier.CRITICAL)) {
+			log.info("Notification suppressed by preferences: '{}' ({})", n.title(), n.tier());
+			return NotificationOutcome.SUPPRESSED_PREFS;
+		}
+		push.sendToAll(n.title(), n.body(), n.url(), requireAck);
+		return NotificationOutcome.PUSHED;
 	}
 
 	private boolean passesGate(Notification n) {

@@ -49,12 +49,14 @@ public class BriefingService {
 	private final CalendarEventRepository calendar;
 	private final ModelGateway gateway;
 	private final PushService push;
+	private final com.argus.notification.NotificationPreferencesService prefs;
 	private final BriefingRepository briefings;
 	private final long overnightHours;
 
 	public BriefingService(LivePortfolioService livePortfolio, HealthScoreService healthScore,
 			NewsArticleRepository news, RecommendationService recommendations, CalendarEventRepository calendar,
-			ModelGateway gateway, PushService push, BriefingRepository briefings,
+			ModelGateway gateway, PushService push,
+			com.argus.notification.NotificationPreferencesService prefs, BriefingRepository briefings,
 			@Value("${argus.briefing.overnight-hours:16}") long overnightHours) {
 		this.livePortfolio = livePortfolio;
 		this.healthScore = healthScore;
@@ -63,6 +65,7 @@ public class BriefingService {
 		this.calendar = calendar;
 		this.gateway = gateway;
 		this.push = push;
+		this.prefs = prefs;
 		this.briefings = briefings;
 		this.overnightHours = overnightHours;
 	}
@@ -101,7 +104,9 @@ public class BriefingService {
 
 		Briefing saved = briefings.save(new Briefing(headline, body));
 		try {
-			push.sendToAll("Your morning briefing", headline, "/");
+			if (prefs.allow(com.argus.notification.NotificationPreferencesService.Category.BRIEFING)) {
+				push.sendToAll("Your morning briefing", headline, "/");
+			}
 		} catch (RuntimeException ex) {
 			log.warn("Briefing push failed: {}", ex.getMessage());
 		}

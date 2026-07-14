@@ -848,6 +848,23 @@ export interface PushTestResult {
 /** Send a test notification to all subscribed devices — verifies delivery end-to-end. */
 export const testPush = (): Promise<PushTestResult> => apiPost<PushTestResult>("/api/push/test");
 
+/** Mirrors `NotificationPreferencesService.View` — global push preferences. */
+export interface NotificationPrefs {
+  briefingEnabled: boolean;
+  breakingEnabled: boolean;
+  alertsEnabled: boolean;
+  /** 0–23 local; null = no quiet hours. */
+  quietStartHour: number | null;
+  quietEndHour: number | null;
+  mutedTickers: string[];
+}
+
+export const getNotificationPrefs = (): Promise<NotificationPrefs> =>
+  apiGet<NotificationPrefs>("/api/notifications/preferences");
+
+export const putNotificationPrefs = (prefs: NotificationPrefs): Promise<NotificationPrefs> =>
+  apiPut<NotificationPrefs>("/api/notifications/preferences", prefs);
+
 // ---- Morning Briefing (Epic 8, FR-16) ----
 
 /** Mirrors the backend `BriefingController.BriefingView` record. */
