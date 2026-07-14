@@ -50,6 +50,12 @@ public class PerformanceController {
 		return investor.scoreboard();
 	}
 
+	/** Regret analysis — how the user's Taken vs Declined calls actually played out (paper outcomes). */
+	@GetMapping("/regret")
+	public PerformanceService.RegretView regret() {
+		return performance.regret();
+	}
+
 	/**
 	 * Ops: force the Phase B adaptive-tuning recompute now (it otherwise runs nightly), and return the
 	 * resulting per-agent reliability so the effect is immediately visible. Session-gated like all

@@ -28,13 +28,15 @@ public class NotificationService {
 	private final NotificationDedupStore dedup;
 	private final PushService push;
 	private final NotificationPreferencesService prefs;
+	private final DeferredNotificationRepository deferred;
 
 	public NotificationService(NotificationProperties props, NotificationDedupStore dedup, PushService push,
-			NotificationPreferencesService prefs) {
+			NotificationPreferencesService prefs, DeferredNotificationRepository deferred) {
 		this.props = props;
 		this.dedup = dedup;
 		this.push = push;
 		this.prefs = prefs;
+		this.deferred = deferred;
 	}
 
 	/** Run a candidate notification through dedup → gate → tier routing. Returns what happened. */
@@ -65,14 +67,26 @@ public class NotificationService {
 				yield pushIfAllowed(n, false);
 			}
 			case NORMAL -> {
+				enqueue(n, DeferredNotification.Channel.BRIEFING);
 				log.debug("Notification deferred to next briefing: '{}'", n.title());
 				yield NotificationOutcome.DEFERRED_BRIEFING;
 			}
 			case INFO -> {
+				enqueue(n, DeferredNotification.Channel.DIGEST);
 				log.debug("Notification deferred to weekly digest: '{}'", n.title());
 				yield NotificationOutcome.DEFERRED_DIGEST;
 			}
 		};
+	}
+
+	/** Persist a deferred item so the briefing/digest can actually carry it (Story 8.2 follow-up). */
+	private void enqueue(Notification n, DeferredNotification.Channel channel) {
+		try {
+			deferred.save(new DeferredNotification(n.tier().name(), n.title(), n.body(), n.url(),
+					n.ticker(), channel));
+		} catch (RuntimeException ex) {
+			log.warn("Could not enqueue deferred notification '{}': {}", n.title(), ex.getMessage());
+		}
 	}
 
 	/** Push a pushing-tier notification, unless the user's preferences suppress it. */

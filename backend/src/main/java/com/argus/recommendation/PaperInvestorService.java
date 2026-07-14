@@ -35,12 +35,14 @@ public class PaperInvestorService {
 	private final LivePortfolioService prices;
 	private final BenchmarkPriceSource benchmark;
 	private final GraduationService graduation;
+	private final TradeConfirmationService confirmations;
 	private final ModelGateway gateway;
 	private final BigDecimal notional;
 	private final List<Integer> horizons;
 
 	public PaperInvestorService(SimulatedTradeRepository trades, LivePortfolioService prices,
-			BenchmarkPriceSource benchmark, GraduationService graduation, ModelGateway gateway,
+			BenchmarkPriceSource benchmark, GraduationService graduation,
+			TradeConfirmationService confirmations, ModelGateway gateway,
 			@Value("${argus.paper-investor.notional:100}") BigDecimal notional,
 			@Value("${argus.paper-investor.horizon-days-list:}") String horizonList,
 			@Value("${argus.paper-investor.horizon-days:0}") int legacySingleHorizon) {
@@ -48,6 +50,7 @@ public class PaperInvestorService {
 		this.prices = prices;
 		this.benchmark = benchmark;
 		this.graduation = graduation;
+		this.confirmations = confirmations;
 		this.gateway = gateway;
 		this.notional = notional;
 		this.horizons = resolveHorizons(horizonList, legacySingleHorizon);
@@ -165,6 +168,13 @@ public class PaperInvestorService {
 		}
 		trades.save(trade);
 		graduation.recordOutcome(won, trade.getRecommendationId());
+		// Mirror the realized outcome onto the user's Taken/Declined decision (regret analysis).
+		try {
+			confirmations.recordOutcomeFromPaperTrade(trade.getRecommendationId(), won);
+		} catch (RuntimeException ex) {
+			log.debug("Investor: decision-outcome mirror failed for rec {}: {}",
+					trade.getRecommendationId(), ex.getMessage());
+		}
 		log.info("Investor closed {} paper trade on {} ({}d): {}% abs, {} vs SPY ({}) @ {}",
 				trade.getDirection(), trade.getTicker(), trade.getHorizonDays(), trade.getReturnPct(),
 				trade.getExcessReturnPct() == null ? "unbenchmarked" : trade.getExcessReturnPct() + "%",

@@ -8,4 +8,7 @@ public interface TradeDecisionRepository extends JpaRepository<TradeDecision, Lo
 
 	/** Taken vs Declined tallies for the accuracy panel (Story 9.2). */
 	long countByDecision(Decision decision);
+
+	/** Decisions on one recommendation — outcome wiring from paper-trade closes (regret analysis). */
+	java.util.List<TradeDecision> findByRecommendationId(Long recommendationId);
 }

@@ -22,8 +22,9 @@ class NotificationServiceTest {
 	private final NotificationDedupStore dedup = mock(NotificationDedupStore.class);
 	private final PushService push = mock(PushService.class);
 	private final NotificationPreferencesService prefs = mock(NotificationPreferencesService.class);
+	private final DeferredNotificationRepository deferred = mock(DeferredNotificationRepository.class);
 	private final NotificationProperties props = new NotificationProperties(0.60, 0.02, 1800);
-	private final NotificationService service = new NotificationService(props, dedup, push, prefs);
+	private final NotificationService service = new NotificationService(props, dedup, push, prefs, deferred);
 
 	@BeforeEach
 	void passDedupByDefault() {
@@ -71,21 +72,31 @@ class NotificationServiceTest {
 	}
 
 	@Test
-	void normalDefersToBriefingNoPush() {
+	void normalDefersToBriefingPersistedNoPush() {
 		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.NORMAL, "AAPL", "BULLISH",
 				0.90, 0.20, "fyi", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.DEFERRED_BRIEFING, out);
 		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		// The follow-up: the deferred item is now actually persisted for the next briefing to carry.
+		org.mockito.ArgumentCaptor<DeferredNotification> saved =
+				org.mockito.ArgumentCaptor.forClass(DeferredNotification.class);
+		verify(deferred).save(saved.capture());
+		assertEquals(DeferredNotification.Channel.BRIEFING, saved.getValue().getChannel());
+		assertEquals("fyi", saved.getValue().getTitle());
 	}
 
 	@Test
-	void infoDefersToDigestNoPush() {
+	void infoDefersToDigestPersistedNoPush() {
 		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.INFO, "AAPL", "BULLISH",
 				0.90, 0.20, "fyi", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.DEFERRED_DIGEST, out);
 		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		org.mockito.ArgumentCaptor<DeferredNotification> saved =
+				org.mockito.ArgumentCaptor.forClass(DeferredNotification.class);
+		verify(deferred).save(saved.capture());
+		assertEquals(DeferredNotification.Channel.DIGEST, saved.getValue().getChannel());
 	}
 
 	@Test

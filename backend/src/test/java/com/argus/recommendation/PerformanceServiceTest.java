@@ -29,8 +29,9 @@ class PerformanceServiceTest {
 	private final RecommendationSignalRepository signals = mock(RecommendationSignalRepository.class);
 	private final GraduationService graduation = mock(GraduationService.class);
 	private final AdaptiveTuningService tuning = mock(AdaptiveTuningService.class);
-	private final PerformanceService service =
-			new PerformanceService(trades, decisions, recommendations, signals, graduation, tuning);
+	private final SimulatedTradeRepository simulatedTrades = mock(SimulatedTradeRepository.class);
+	private final PerformanceService service = new PerformanceService(
+			trades, decisions, recommendations, signals, graduation, tuning, simulatedTrades);
 
 	// ---- 9.2 accuracy ----
 
@@ -117,6 +118,51 @@ class PerformanceServiceTest {
 		when(trades.findAll()).thenReturn(List.of());
 		when(recommendations.findAllById(any())).thenReturn(List.of());
 		assertNull(service.calibration().brierScore());
+	}
+
+	// ---- regret analysis ----
+
+	@Test
+	void regretBucketsDecisionsByClosedPaperOutcomes() {
+		// Rec 1 TAKEN: two closed legs averaging +1% ((+4 − 2) / 2). Rec 2 DECLINED: one leg +6%.
+		when(decisions.findAll()).thenReturn(List.of(
+				decision(1L, Decision.TAKEN), decision(2L, Decision.DECLINED)));
+		when(simulatedTrades.findByStatus(SimulatedTrade.Status.CLOSED)).thenReturn(List.of(
+				closedLeg(1L, "4"), closedLeg(1L, "-2"), closedLeg(2L, "6")));
+
+		PerformanceService.RegretView v = service.regret();
+
+		assertEquals(1, v.taken().count());
+		assertEquals(1.0, v.taken().avgReturnPct(), 1e-9);
+		assertEquals(1, v.declined().count());
+		assertEquals(6.0, v.declined().avgReturnPct(), 1e-9);
+		assertEquals(5.0, v.regretGapPct(), 1e-9); // declined did 5pp better — the mirror
+	}
+
+	@Test
+	void regretIsHonestWhenNothingHasResolved() {
+		when(decisions.findAll()).thenReturn(List.of(decision(1L, Decision.DECLINED)));
+		when(simulatedTrades.findByStatus(SimulatedTrade.Status.CLOSED)).thenReturn(List.of());
+
+		PerformanceService.RegretView v = service.regret();
+
+		assertEquals(0, v.taken().count());
+		assertEquals(0, v.declined().count());
+		assertNull(v.regretGapPct());
+	}
+
+	private static TradeDecision decision(Long recId, Decision d) {
+		return new TradeDecision(recId, d, "why", "{}");
+	}
+
+	/** A closed leg with a vs-SPY excess return (the figure regret scoring prefers). */
+	private static SimulatedTrade closedLeg(Long recId, String excessPct) {
+		SimulatedTrade t = new SimulatedTrade(recId, "AAPL", SignalDirection.BULLISH,
+				new BigDecimal("100"), new BigDecimal("100"), 0, new BigDecimal("500"));
+		// exit/benchmark chosen so excess = requested: stock +x%, SPY flat.
+		BigDecimal exit = new BigDecimal("100").add(new BigDecimal(excessPct));
+		t.close(exit, new BigDecimal("500"));
+		return t;
 	}
 
 	// ---- helpers ----

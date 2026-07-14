@@ -5,28 +5,33 @@ import { useEffect, useState } from "react";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  getBackupStatus,
   getFreshness,
   getHardware,
+  type BackupKindStatus,
+  type BackupStatusView,
   type FreshnessView,
   type HardwareMetrics,
   type SourceFreshness,
 } from "@/lib/apiClient";
 
 /**
- * System health for the Operations view (Epic 9): host hardware (Story 9.5) and data-source freshness
- * (Story 9.7). Values the JVM can't measure on the host (Neural Engine, days-to-full) show as n/a.
+ * System health for the Operations view (Epic 9): host hardware (Story 9.5), data-source freshness
+ * (Story 9.7), and backup status (Story 10.2). Values the JVM can't measure show as n/a.
  */
 export function OpsHealth() {
   const [hw, setHw] = useState<HardwareMetrics | null>(null);
   const [fresh, setFresh] = useState<FreshnessView | null>(null);
+  const [backup, setBackup] = useState<BackupStatusView | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getHardware(), getFreshness()]).then((r) => {
+    Promise.allSettled([getHardware(), getFreshness(), getBackupStatus()]).then((r) => {
       if (!active) return;
       if (r[0].status === "fulfilled") setHw(r[0].value);
       if (r[1].status === "fulfilled") setFresh(r[1].value);
+      if (r[2].status === "fulfilled") setBackup(r[2].value);
       setLoaded(true);
     });
     return () => {
@@ -47,6 +52,7 @@ export function OpsHealth() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {hw && <HardwareCard h={hw} />}
       {fresh && <FreshnessCard f={fresh} />}
+      {backup?.enabled && <BackupCard b={backup} />}
     </div>
   );
 }
@@ -115,6 +121,68 @@ function FreshnessCard({ f }: { f: FreshnessView }) {
       </ul>
     </MotionCard>
   );
+}
+
+function BackupCard({ b }: { b: BackupStatusView }) {
+  const healthy = b.destinationConnected && b.full != null && !b.full.stale;
+  return (
+    <MotionCard index={2} interactive={false} className="flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-display text-base font-semibold text-text-primary">Backups</h3>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            Full dump every 6h (14-day retention) · critical tables every 15 min.
+          </p>
+        </div>
+        {!b.destinationConnected ? (
+          <span className="rounded-full bg-losses/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-losses">
+            drive disconnected
+          </span>
+        ) : healthy ? (
+          <span className="rounded-full bg-gains/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gains">
+            healthy
+          </span>
+        ) : (
+          <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+            stale
+          </span>
+        )}
+      </div>
+      <ul className="flex flex-col gap-2 text-xs">
+        <BackupRow label="Full backup" k={b.full} />
+        <BackupRow label="Critical tables" k={b.critical} />
+      </ul>
+    </MotionCard>
+  );
+}
+
+function BackupRow({ label, k }: { label: string; k: BackupKindStatus | null }) {
+  const stale = k == null || k.stale;
+  return (
+    <li className="flex items-center justify-between gap-2">
+      <span className="flex items-center gap-2">
+        <span className={cnDot(stale)} />
+        <span className="text-text-primary">{label}</span>
+      </span>
+      <span className={stale ? "font-mono text-warning" : "font-mono text-text-secondary"}>
+        {k?.lastSuccessAt == null
+          ? "never"
+          : `${sinceMinutes(k.lastSuccessAt)} · ${sizeKb(k.lastSizeBytes)}`}
+      </span>
+    </li>
+  );
+}
+
+function sinceMinutes(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.floor(mins / 60);
+  return h < 48 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+}
+
+function sizeKb(bytes: number | null): string {
+  if (bytes == null) return "—";
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 }
 
 function Meter({ label, usedLabel, pct }: { label: string; usedLabel: string; pct: number }) {

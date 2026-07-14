@@ -41,6 +41,7 @@ public class BriefingService {
 	private static final ZoneId TORONTO = ZoneId.of("America/Toronto");
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 	private static final int MAX_RECS_IN_PROMPT = 5;
+	private static final int MAX_DEFERRED_IN_PROMPT = 5;
 
 	private final LivePortfolioService livePortfolio;
 	private final HealthScoreService healthScore;
@@ -50,13 +51,15 @@ public class BriefingService {
 	private final ModelGateway gateway;
 	private final PushService push;
 	private final com.argus.notification.NotificationPreferencesService prefs;
+	private final com.argus.notification.DeferredNotificationRepository deferred;
 	private final BriefingRepository briefings;
 	private final long overnightHours;
 
 	public BriefingService(LivePortfolioService livePortfolio, HealthScoreService healthScore,
 			NewsArticleRepository news, RecommendationService recommendations, CalendarEventRepository calendar,
 			ModelGateway gateway, PushService push,
-			com.argus.notification.NotificationPreferencesService prefs, BriefingRepository briefings,
+			com.argus.notification.NotificationPreferencesService prefs,
+			com.argus.notification.DeferredNotificationRepository deferred, BriefingRepository briefings,
 			@Value("${argus.briefing.overnight-hours:16}") long overnightHours) {
 		this.livePortfolio = livePortfolio;
 		this.healthScore = healthScore;
@@ -66,6 +69,7 @@ public class BriefingService {
 		this.gateway = gateway;
 		this.push = push;
 		this.prefs = prefs;
+		this.deferred = deferred;
 		this.briefings = briefings;
 		this.overnightHours = overnightHours;
 	}
@@ -104,6 +108,11 @@ public class BriefingService {
 
 		Briefing saved = briefings.save(new Briefing(headline, body));
 		try {
+			markDeferredDelivered(facts); // the held NORMAL alerts have now been carried
+		} catch (RuntimeException ex) {
+			log.warn("Could not mark deferred items delivered: {}", ex.getMessage());
+		}
+		try {
 			if (prefs.allow(com.argus.notification.NotificationPreferencesService.Category.BRIEFING)) {
 				push.sendToAll("Your morning briefing", headline, "/");
 			}
@@ -121,7 +130,21 @@ public class BriefingService {
 		List<Recommendation> recs = recommendations.recent();
 		LocalDate today = LocalDate.now(TORONTO);
 		List<CalendarEvent> events = calendar.findByEventDateBetweenOrderByEventDateAsc(today, today);
-		return new Facts(snapshot, health, overnightNews, recs, events);
+		// NORMAL-tier alerts deferred "to the next briefing" (Story 8.2 follow-up) — this IS that briefing.
+		List<com.argus.notification.DeferredNotification> deferredItems = deferred
+				.findByChannelAndDeliveredAtIsNullOrderByCreatedAtDesc(
+						com.argus.notification.DeferredNotification.Channel.BRIEFING)
+				.stream().limit(MAX_DEFERRED_IN_PROMPT).toList();
+		return new Facts(snapshot, health, overnightNews, recs, events, deferredItems);
+	}
+
+	/** Mark the deferred items this briefing carried as delivered (after the briefing is saved). */
+	private void markDeferredDelivered(Facts f) {
+		if (f.deferredItems().isEmpty()) {
+			return;
+		}
+		f.deferredItems().forEach(com.argus.notification.DeferredNotification::markDelivered);
+		deferred.saveAll(f.deferredItems());
 	}
 
 	private String prompt(Facts f) {
@@ -137,6 +160,11 @@ public class BriefingService {
 		if (events.isEmpty()) {
 			events.append("- (nothing scheduled today)\n");
 		}
+		StringBuilder held = new StringBuilder();
+		f.deferredItems().forEach(d -> held.append("- ").append(d.getTitle()).append('\n'));
+		if (held.isEmpty()) {
+			held.append("- (none)\n");
+		}
 
 		return """
 				You are Argus, a calm and concise personal investing assistant writing the owner's morning \
@@ -151,13 +179,16 @@ public class BriefingService {
 				%s
 				Calendar today:
 				%s
+				Lower-priority alerts held for this briefing:
+				%s
 				Write a brief covering: how the portfolio stands, anything notable in the overnight news volume, \
-				the most relevant recommendation(s) if any, and what's on the calendar today. 2–4 sentences.
+				the most relevant recommendation(s) if any, what's on the calendar today, and (only if any) the \
+				held alerts in one clause. 2–4 sentences.
 
 				Respond with ONLY a JSON object, no prose, no markdown fences:
 				{"headline":"<=12 words, scannable","body":"<2-4 sentence narrative>"}
 				""".formatted(money(f.snapshot().totalValueCad()), money(f.snapshot().totalPnlCad()),
-				f.health(), f.overnightNews(), recs, events);
+				f.health(), f.overnightNews(), recs, events, held);
 	}
 
 	/** Pull {@code {"headline","body"}} out of a model response that may include prose/markdown fences. */
@@ -195,8 +226,13 @@ public class BriefingService {
 		String eventLine = f.events().isEmpty()
 				? "Nothing is on your calendar today."
 				: f.events().size() + " event(s) are on your calendar today.";
-		return "Your portfolio is worth %s CAD (unrealized P&L %s CAD) with a health score of %d/100. %d news article(s) came in overnight. %s %s"
-				.formatted(money(f.snapshot().totalValueCad()), pnl, f.health(), f.overnightNews(), recLine, eventLine);
+		String heldLine = f.deferredItems().isEmpty() ? ""
+				: " " + f.deferredItems().size() + " lower-priority alert(s) were held for this briefing: "
+						+ f.deferredItems().stream().map(com.argus.notification.DeferredNotification::getTitle)
+								.reduce((a, b) -> a + "; " + b).orElse("") + ".";
+		return "Your portfolio is worth %s CAD (unrealized P&L %s CAD) with a health score of %d/100. %d news article(s) came in overnight. %s %s%s"
+				.formatted(money(f.snapshot().totalValueCad()), pnl, f.health(), f.overnightNews(), recLine,
+						eventLine, heldLine);
 	}
 
 	private static String money(BigDecimal v) {
@@ -216,7 +252,8 @@ public class BriefingService {
 
 	/** The gathered inputs for one briefing. */
 	private record Facts(PortfolioSnapshot snapshot, int health, long overnightNews,
-			List<Recommendation> recommendations, List<CalendarEvent> events) {
+			List<Recommendation> recommendations, List<CalendarEvent> events,
+			List<com.argus.notification.DeferredNotification> deferredItems) {
 	}
 
 	private record Parsed(String headline, String body) {

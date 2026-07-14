@@ -39,16 +39,19 @@ public class PerformanceService {
 	private final RecommendationSignalRepository signals;
 	private final GraduationService graduation;
 	private final AdaptiveTuningService tuning;
+	private final SimulatedTradeRepository simulatedTrades;
 
 	public PerformanceService(PaperTradeRepository trades, TradeDecisionRepository decisions,
 			RecommendationRepository recommendations, RecommendationSignalRepository signals,
-			GraduationService graduation, AdaptiveTuningService tuning) {
+			GraduationService graduation, AdaptiveTuningService tuning,
+			SimulatedTradeRepository simulatedTrades) {
 		this.trades = trades;
 		this.decisions = decisions;
 		this.recommendations = recommendations;
 		this.signals = signals;
 		this.graduation = graduation;
 		this.tuning = tuning;
+		this.simulatedTrades = simulatedTrades;
 	}
 
 	// ---- Story 9.2: accuracy ----
@@ -149,6 +152,58 @@ public class PerformanceService {
 		return new CalibrationView(bins, resolved, CALIBRATION_MIN_SAMPLE, brier);
 	}
 
+	// ---- Regret analysis (Fable 5 follow-up: the behavioral mirror) ----
+
+	/**
+	 * How the user's Taken vs Declined calls actually played out, using the Investor's closed paper
+	 * trades as the outcome record. Per recommendation the closed legs' direction-adjusted returns are
+	 * averaged first (vs-SPY excess when benchmarked, absolute otherwise) so multi-horizon legs don't
+	 * overweight a thesis; then the recs are bucketed by the user's decision. {@code regretGapPct} is
+	 * declined-average minus taken-average — positive means "the calls you declined did better than
+	 * the ones you took."
+	 */
+	@Transactional(readOnly = true)
+	public RegretView regret() {
+		List<TradeDecision> all = decisions.findAll();
+		if (all.isEmpty()) {
+			return new RegretView(bucket(List.of()), bucket(List.of()), null);
+		}
+		// recommendation → average closed-leg return (vs SPY when available).
+		Map<Long, Double> avgReturnByRec = simulatedTrades.findByStatus(SimulatedTrade.Status.CLOSED).stream()
+				.filter(t -> t.getRecommendationId() != null)
+				.collect(Collectors.groupingBy(SimulatedTrade::getRecommendationId,
+						Collectors.averagingDouble(PerformanceService::tradeReturn)));
+
+		List<Double> taken = new ArrayList<>();
+		List<Double> declined = new ArrayList<>();
+		for (TradeDecision d : all) {
+			Double ret = avgReturnByRec.get(d.getRecommendationId());
+			if (ret == null) {
+				continue; // decided, but no closed paper legs yet — nothing to score
+			}
+			(d.getDecision() == Decision.TAKEN ? taken : declined).add(ret);
+		}
+		RegretBucket takenB = bucket(taken);
+		RegretBucket declinedB = bucket(declined);
+		Double gap = (takenB.avgReturnPct() == null || declinedB.avgReturnPct() == null) ? null
+				: round2(declinedB.avgReturnPct() - takenB.avgReturnPct());
+		return new RegretView(takenB, declinedB, gap);
+	}
+
+	private static double tradeReturn(SimulatedTrade t) {
+		BigDecimal r = t.getExcessReturnPct() != null ? t.getExcessReturnPct() : t.getReturnPct();
+		return r == null ? 0 : r.doubleValue();
+	}
+
+	private static RegretBucket bucket(List<Double> returns) {
+		if (returns.isEmpty()) {
+			return new RegretBucket(0, null, null);
+		}
+		long wins = returns.stream().filter(r -> r > 0).count();
+		double avg = returns.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+		return new RegretBucket(returns.size(), (int) Math.round(100.0 * wins / returns.size()), round2(avg));
+	}
+
 	/** The probability the recommendation stated for the direction it actually called. */
 	private static double statedProbability(Recommendation r) {
 		BigDecimal p = r.getDirection() == SignalDirection.BULLISH ? r.getBullProbability() : r.getBearProbability();
@@ -197,6 +252,14 @@ public class PerformanceService {
 	 * (0 = perfect, 0.25 = coin flip, higher = worse); null until an outcome has resolved.
 	 */
 	public record CalibrationView(List<Bin> bins, int resolvedCount, int minSampleSize, Double brierScore) {
+	}
+
+	/** One decision bucket: how many decided recs have closed paper legs, and how they went. */
+	public record RegretBucket(int count, Integer winRatePct, Double avgReturnPct) {
+	}
+
+	/** The behavioral mirror: taken vs declined outcomes and the gap between them. */
+	public record RegretView(RegretBucket taken, RegretBucket declined, Double regretGapPct) {
 	}
 
 	/** One probability bin {@code [lowPct, highPct)} with the actual hit rate seen. */

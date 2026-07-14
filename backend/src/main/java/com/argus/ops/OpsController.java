@@ -1,5 +1,6 @@
 package com.argus.ops;
 
+import com.argus.backup.BackupStatusService;
 import com.argus.cost.CostRecorder;
 import com.argus.resilience.PlatformModeService;
 import com.argus.resilience.PlatformModeView;
@@ -26,15 +27,18 @@ public class OpsController {
 	private final FreshnessService freshness;
 	private final PlatformModeService platformMode;
 	private final StorageService storage;
+	private final BackupStatusService backup;
 
 	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
-			FreshnessService freshness, PlatformModeService platformMode, StorageService storage) {
+			FreshnessService freshness, PlatformModeService platformMode, StorageService storage,
+			BackupStatusService backup) {
 		this.agents = agents;
 		this.cost = cost;
 		this.hardware = hardware;
 		this.freshness = freshness;
 		this.platformMode = platformMode;
 		this.storage = storage;
+		this.backup = backup;
 	}
 
 	@GetMapping("/summary")
@@ -66,5 +70,11 @@ public class OpsController {
 	@GetMapping("/storage")
 	public StorageService.StorageView storage() {
 		return storage.snapshot();
+	}
+
+	/** Story 10.2 — backup status: newest full/critical dump, size, staleness, destination presence. */
+	@GetMapping("/backup")
+	public BackupStatusService.BackupStatusView backup() {
+		return backup.status();
 	}
 }

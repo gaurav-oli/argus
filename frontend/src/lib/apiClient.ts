@@ -1015,6 +1015,25 @@ export interface CalibrationView {
 export const getCalibration = (): Promise<CalibrationView> =>
   apiGet<CalibrationView>("/api/recommendations/calibration");
 
+// ---- Regret analysis (the behavioral mirror) ----
+
+/** One decision bucket: decided recs with closed paper legs, and how they went. */
+export interface RegretBucket {
+  count: number;
+  winRatePct: number | null;
+  avgReturnPct: number | null;
+}
+
+/** Mirrors `PerformanceService.RegretView`; `regretGapPct` > 0 = the declined calls did better. */
+export interface RegretView {
+  taken: RegretBucket;
+  declined: RegretBucket;
+  regretGapPct: number | null;
+}
+
+export const getRegret = (): Promise<RegretView> =>
+  apiGet<RegretView>("/api/recommendations/regret");
+
 /** One closed simulated position in the Investor's book (FR-11 follow-up). */
 export interface ClosedTradeView {
   ticker: string;
@@ -1098,6 +1117,26 @@ export interface FreshnessView {
 
 export const getFreshness = (): Promise<FreshnessView> =>
   apiGet<FreshnessView>("/api/ops/freshness");
+
+// ---- Backup status (Story 10.2) ----
+
+/** One dump kind (full/critical): newest file's time + size, and whether it's overdue. */
+export interface BackupKindStatus {
+  lastSuccessAt: string | null;
+  lastSizeBytes: number | null;
+  stale: boolean;
+}
+
+/** Mirrors `BackupStatusService.BackupStatusView`. Disabled until ARGUS_BACKUP_DIR is configured. */
+export interface BackupStatusView {
+  enabled: boolean;
+  destinationConnected: boolean;
+  full: BackupKindStatus | null;
+  critical: BackupKindStatus | null;
+}
+
+export const getBackupStatus = (): Promise<BackupStatusView> =>
+  apiGet<BackupStatusView>("/api/ops/backup");
 
 // ---- Per-agent data storage (Ops) ----
 

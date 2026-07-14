@@ -8,31 +8,37 @@ import {
   getAccuracy,
   getAttribution,
   getCalibration,
+  getRegret,
   type AccuracyView,
   type AttributionView,
   type CalibrationView,
+  type RegretBucket,
+  type RegretView,
   type WindowStat,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
 /**
- * Agent 5 performance (Epic 9, Stories 9.2–9.4): accuracy over time windows, per-agent contribution
- * attribution, and probability calibration. Read-only; every figure comes from recorded outcomes,
- * and small samples are labelled honestly ("not yet meaningful" / "insufficient data").
+ * Agent 5 performance (Epic 9, Stories 9.2–9.4 + regret analysis): accuracy over time windows,
+ * per-agent contribution attribution, probability calibration, and the taken-vs-declined behavioral
+ * mirror. Read-only; every figure comes from recorded outcomes, and small samples are labelled
+ * honestly ("not yet meaningful" / "insufficient data").
  */
 export function AgentPerformance() {
   const [accuracy, setAccuracy] = useState<AccuracyView | null>(null);
   const [attribution, setAttribution] = useState<AttributionView | null>(null);
   const [calibration, setCalibration] = useState<CalibrationView | null>(null);
+  const [regret, setRegret] = useState<RegretView | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([getAccuracy(), getAttribution(), getCalibration()]).then((r) => {
+    Promise.allSettled([getAccuracy(), getAttribution(), getCalibration(), getRegret()]).then((r) => {
       if (!active) return;
       if (r[0].status === "fulfilled") setAccuracy(r[0].value);
       if (r[1].status === "fulfilled") setAttribution(r[1].value);
       if (r[2].status === "fulfilled") setCalibration(r[2].value);
+      if (r[3].status === "fulfilled") setRegret(r[3].value);
       setLoaded(true);
     });
     return () => {
@@ -55,6 +61,7 @@ export function AgentPerformance() {
       {accuracy && <AccuracyCard a={accuracy} />}
       {attribution && <AttributionCard a={attribution} />}
       {calibration && <CalibrationCard c={calibration} />}
+      {regret && <RegretCard r={regret} />}
     </div>
   );
 }
@@ -221,6 +228,65 @@ function CalibrationCard({ c }: { c: CalibrationView }) {
         Bins below {c.minSampleSize} samples are marked insufficient · {c.resolvedCount} resolved.
       </p>
     </MotionCard>
+  );
+}
+
+function RegretCard({ r }: { r: RegretView }) {
+  const hasData = r.taken.count > 0 || r.declined.count > 0;
+  const gap = r.regretGapPct;
+  return (
+    <MotionCard index={3} interactive={false} className="flex flex-col gap-4">
+      <SectionHead title="Regret analysis" sub="How your taken vs declined calls actually played out." />
+      {!hasData ? (
+        <Empty>
+          Needs decided recommendations with closed paper trades — decide on a few calls and check back
+          after their horizons resolve.
+        </Empty>
+      ) : (
+        <>
+          {gap != null && (
+            <p className="text-sm text-text-primary">
+              {gap > 0 ? (
+                <>
+                  The calls you <span className="font-semibold">declined</span> outperformed the ones you
+                  took by <span className="font-mono font-semibold text-warning">{gap.toFixed(1)}pp</span> vs
+                  the market.
+                </>
+              ) : gap < 0 ? (
+                <>
+                  Your judgment added value: taken calls beat declined ones by{" "}
+                  <span className="font-mono font-semibold text-gains">{Math.abs(gap).toFixed(1)}pp</span> vs
+                  the market.
+                </>
+              ) : (
+                <>Taken and declined calls performed the same so far.</>
+              )}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <RegretTile label="Taken" b={r.taken} />
+            <RegretTile label="Declined" b={r.declined} />
+          </div>
+        </>
+      )}
+      <p className="text-[10px] text-text-secondary/80">
+        Returns are the Investor&apos;s paper-trade outcomes vs SPY, averaged per recommendation.
+      </p>
+    </MotionCard>
+  );
+}
+
+function RegretTile({ label, b }: { label: string; b: RegretBucket }) {
+  return (
+    <div className="rounded-xl border border-border/60 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">{label}</p>
+      <p className="mt-1 font-mono text-lg tabular-nums text-text-primary">
+        {b.avgReturnPct == null ? "—" : `${b.avgReturnPct > 0 ? "+" : ""}${b.avgReturnPct.toFixed(1)}%`}
+      </p>
+      <p className="text-[11px] text-text-secondary">
+        {b.count === 0 ? "no resolved calls" : `${b.count} call${b.count === 1 ? "" : "s"} · ${b.winRatePct ?? "—"}% won`}
+      </p>
+    </div>
   );
 }
 

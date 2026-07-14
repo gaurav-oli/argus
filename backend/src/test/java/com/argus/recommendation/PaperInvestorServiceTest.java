@@ -33,15 +33,16 @@ class PaperInvestorServiceTest {
 	private final LivePortfolioService prices = mock(LivePortfolioService.class);
 	private final BenchmarkPriceSource benchmark = mock(BenchmarkPriceSource.class);
 	private final GraduationService graduation = mock(GraduationService.class);
+	private final TradeConfirmationService confirmations = mock(TradeConfirmationService.class);
 	private final ModelGateway gateway = mock(ModelGateway.class);
 
 	// Default horizons (7/30/90); the close tests construct their own horizon-0 trades so they are
 	// immediately due. Benchmark is absent unless a test sets it.
 	private final PaperInvestorService investor = new PaperInvestorService(
-			trades, prices, benchmark, graduation, gateway, new BigDecimal("100"), "", 0);
+			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0);
 
 	private PaperInvestorService staggeredInvestor() {
-		return new PaperInvestorService(trades, prices, benchmark, graduation, gateway,
+		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
 				new BigDecimal("100"), "7,30,90", 0);
 	}
 
@@ -179,6 +180,8 @@ class PaperInvestorServiceTest {
 
 		assertEquals(SimulatedTrade.Status.CLOSED, open.getStatus());
 		verify(graduation).recordOutcome(eq(true), eq(9L));
+		// The user's Taken/Declined decision (if any) gets the realized outcome — regret analysis.
+		verify(confirmations).recordOutcomeFromPaperTrade(eq(9L), eq(true));
 	}
 
 	@Test

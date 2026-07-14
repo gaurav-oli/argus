@@ -96,6 +96,9 @@ services:
       # Smart Cleanup schedule (argus.cleanup.cron). Default monthly (04:00 on the 1st, Toronto);
       # set "-" to disable and go back to the manual Agents-page button.
       ARGUS_CLEANUP_CRON: ${ARGUS_CLEANUP_CRON:-0 0 4 1 * *}
+      # Weekly digest of INFO-tier deferred alerts (argus.digest.cron). Default Sunday 17:00 Toronto;
+      # "-" disables. Empty weeks send nothing.
+      ARGUS_DIGEST_CRON: ${ARGUS_DIGEST_CRON:-0 0 17 * * SUN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed
@@ -130,6 +133,14 @@ services:
       # origin = https://<host>). Defaults suit local dev.
       ARGUS_SECURITY_WEBAUTHN_RP_ID: ${ARGUS_SECURITY_WEBAUTHN_RP_ID:-localhost}
       ARGUS_SECURITY_WEBAUTHN_ORIGINS: ${ARGUS_SECURITY_WEBAUTHN_ORIGINS:-http://localhost:3000}
+      # Backup status (Story 10.2): the container path of the read-only backup mount below. The
+      # dumps themselves run on the HOST via launchd (scripts/install-backup-schedule.sh).
+      ARGUS_BACKUP_DIR: /backups
+    volumes:
+      # Host backup dir (written by launchd + scripts/backup.sh), read-only for status derivation.
+      # Move to the external SSD later by setting ARGUS_BACKUP_HOST_DIR=/Volumes/<SSD>/argus-backups
+      # in .env and re-running scripts/install-backup-schedule.sh with the same path.
+      - ${ARGUS_BACKUP_HOST_DIR:-/Users/leanna/argus-backups}:/backups:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets the container reach native Ollama
     ports:

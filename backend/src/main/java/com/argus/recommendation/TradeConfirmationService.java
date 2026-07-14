@@ -57,6 +57,24 @@ public class TradeConfirmationService {
 		}
 	}
 
+	/**
+	 * Record the outcome the Investor's paper trade realized onto any decision the user made on that
+	 * recommendation (regret analysis — the behavioral mirror). Idempotent per decision (the entity
+	 * keeps the first outcome) and deliberately does NOT feed graduation:
+	 * {@code PaperInvestorService.closeOne} already records the trade outcome there, so routing
+	 * through {@link #recordOutcome} would double-count.
+	 */
+	@Transactional
+	public void recordOutcomeFromPaperTrade(Long recommendationId, boolean won) {
+		if (recommendationId == null) {
+			return;
+		}
+		for (TradeDecision d : decisions.findByRecommendationId(recommendationId)) {
+			d.recordOutcome(won ? Outcome.WIN : Outcome.LOSS);
+			decisions.save(d);
+		}
+	}
+
 	private static String snapshot(Recommendation rec, Decision decision, String reasoning) {
 		Map<String, Object> snap = new LinkedHashMap<>();
 		snap.put("ticker", rec.getTicker());

@@ -183,15 +183,53 @@ public class AgentSignalGatherer {
 		if (articles.isEmpty()) {
 			return Optional.empty();
 		}
-		double avgSentiment = average(articles, NewsArticle::getSentimentScore);
-		double avgRelevance = average(articles, NewsArticle::getRelevanceScore);
+		// The same story arrives via Finnhub, GDELT AND RSS — counting raw articles inflates both the
+		// coverage weight and the sentiment average with duplicates. Cluster by normalized headline and
+		// score over one representative per distinct story (Fable 5 follow-up).
+		List<NewsArticle> stories = clusterByHeadline(articles);
+		double avgSentiment = average(stories, NewsArticle::getSentimentScore);
+		double avgRelevance = average(stories, NewsArticle::getRelevanceScore);
 		SignalDirection dir = avgSentiment > 0.1 ? SignalDirection.BULLISH
 				: avgSentiment < -0.1 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
-		double coverage = Math.min(1.0, (double) articles.size() / FULL_COVERAGE_ARTICLES);
+		double coverage = Math.min(1.0, (double) stories.size() / FULL_COVERAGE_ARTICLES);
 		double weight = coverage * (0.5 + 0.5 * avgRelevance);
-		String rationale = String.format("Avg news sentiment %.2f across %d article(s), relevance %.0f%%",
-				avgSentiment, articles.size(), avgRelevance * 100);
+		String rationale = String.format(
+				"Avg news sentiment %.2f across %d distinct stor%s (%d article%s), relevance %.0f%%",
+				avgSentiment, stories.size(), stories.size() == 1 ? "y" : "ies",
+				articles.size(), articles.size() == 1 ? "" : "s", avgRelevance * 100);
 		return Optional.of(new AgentSignal("agent-1-news", dir, weight, rationale));
+	}
+
+	/**
+	 * Collapse duplicate coverage of the same story into one representative article per cluster.
+	 * Clustering key: the headline lowercased, stripped of everything non-alphanumeric, truncated to
+	 * {@value #HEADLINE_KEY_LENGTH} chars — so case/punctuation/source-suffix variants of one story
+	 * match, while genuinely different stories don't. The highest-relevance article represents its
+	 * cluster (it carries the best analysis of that story).
+	 */
+	static List<NewsArticle> clusterByHeadline(List<NewsArticle> articles) {
+		java.util.Map<String, NewsArticle> byKey = new java.util.LinkedHashMap<>();
+		for (NewsArticle a : articles) {
+			String key = headlineKey(a.getHeadline());
+			NewsArticle current = byKey.get(key);
+			if (current == null || relevance(a) > relevance(current)) {
+				byKey.put(key, a);
+			}
+		}
+		return List.copyOf(byKey.values());
+	}
+
+	private static final int HEADLINE_KEY_LENGTH = 60;
+
+	private static String headlineKey(String headline) {
+		String norm = (headline == null ? "" : headline)
+				.toLowerCase(java.util.Locale.ROOT)
+				.replaceAll("[^a-z0-9]", "");
+		return norm.length() <= HEADLINE_KEY_LENGTH ? norm : norm.substring(0, HEADLINE_KEY_LENGTH);
+	}
+
+	private static double relevance(NewsArticle a) {
+		return a.getRelevanceScore() == null ? 0 : a.getRelevanceScore().doubleValue();
 	}
 
 	private Optional<AgentSignal> calendarSignal(String ticker) {
