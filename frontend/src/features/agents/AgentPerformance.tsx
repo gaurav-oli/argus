@@ -179,7 +179,16 @@ function CalibrationCard({ c }: { c: CalibrationView }) {
   const rows = c.bins.filter((b) => b.count > 0);
   return (
     <MotionCard index={2} interactive={false} className="flex flex-col gap-4">
-      <SectionHead title="Calibration" sub="Stated probability vs actual hit rate." />
+      <SectionHead title="Calibration" sub="Stated probability vs actual hit rate.">
+        {c.brierScore != null && (
+          <span
+            className="rounded-full bg-elevated px-2 py-0.5 font-mono text-[10px] tabular-nums text-text-secondary"
+            title="Brier score — mean squared error of stated probabilities. 0 = perfect, 0.25 = coin flip, higher = worse."
+          >
+            Brier {c.brierScore.toFixed(3)}
+          </span>
+        )}
+      </SectionHead>
       {c.resolvedCount === 0 ? (
         <Empty>No resolved recommendations yet — calibration needs outcomes.</Empty>
       ) : (

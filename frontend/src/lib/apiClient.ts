@@ -1004,7 +1004,9 @@ export interface CalibrationBin {
   sufficient: boolean;
 }
 
+/** `brierScore`: 0 = perfect, 0.25 = coin flip, higher = worse; null until outcomes resolve. */
 export interface CalibrationView {
+  brierScore: number | null;
   bins: CalibrationBin[];
   resolvedCount: number;
   minSampleSize: number;

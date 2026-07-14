@@ -1,11 +1,11 @@
 package com.argus.recommendation;
 
+import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.LivePortfolioService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,76 +15,125 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The Investor persona (FR-11 follow-up). It closes the loop on Agent 5's recommendations without any
- * human input: when the Analyst makes a directional call, the Investor {@link #open opens} a simulated
- * fixed-notional position at the current price. A scheduled pass {@link #closeDueTrades marks due
- * positions to market}, decides win/loss by the direction-adjusted return, and feeds that outcome into
- * the existing {@link GraduationService} — so the accuracy/graduation record is built autonomously.
- * On a loss it asks the model for a short post-mortem (the Analyst reflecting on what to watch next
- * time), stored on the trade. Prices come from the live feed via {@link LivePortfolioService}; an
- * unpriced ticker simply isn't traded (or its close is retried next pass).
+ * human input: when the Analyst makes a directional call, the Investor {@link #open opens} one
+ * fixed-notional simulated leg per horizon (default 7/30/90 days) — but only when that
+ * (ticker, direction, horizon) thesis isn't already open; a repeat recommendation re-affirms the open
+ * legs instead of duplicating them (Fable 5 review: pseudo-replication would let correlated duplicates
+ * satisfy the learning gates). A scheduled pass {@link #closeDueTrades marks due positions to market},
+ * decides win/loss by the direction-adjusted return <em>in excess of SPY</em> (so the loop measures
+ * signal, not market beta; absolute return when no benchmark was captured), and feeds the outcome into
+ * the existing {@link GraduationService}. On a loss it asks the model for a short post-mortem. Prices
+ * come from the live feed via {@link LivePortfolioService}; SPY via {@link BenchmarkPriceSource}.
  */
 @Service
 public class PaperInvestorService {
 
 	private static final Logger log = LoggerFactory.getLogger(PaperInvestorService.class);
+	private static final List<Integer> DEFAULT_HORIZONS = List.of(7, 30, 90);
 
 	private final SimulatedTradeRepository trades;
 	private final LivePortfolioService prices;
+	private final BenchmarkPriceSource benchmark;
 	private final GraduationService graduation;
 	private final ModelGateway gateway;
 	private final BigDecimal notional;
-	private final int horizonDays;
+	private final List<Integer> horizons;
 
 	public PaperInvestorService(SimulatedTradeRepository trades, LivePortfolioService prices,
-			GraduationService graduation, ModelGateway gateway,
+			BenchmarkPriceSource benchmark, GraduationService graduation, ModelGateway gateway,
 			@Value("${argus.paper-investor.notional:100}") BigDecimal notional,
-			@Value("${argus.paper-investor.horizon-days:30}") int horizonDays) {
+			@Value("${argus.paper-investor.horizon-days-list:}") String horizonList,
+			@Value("${argus.paper-investor.horizon-days:0}") int legacySingleHorizon) {
 		this.trades = trades;
 		this.prices = prices;
+		this.benchmark = benchmark;
 		this.graduation = graduation;
 		this.gateway = gateway;
 		this.notional = notional;
-		this.horizonDays = horizonDays;
+		this.horizons = resolveHorizons(horizonList, legacySingleHorizon);
+	}
+
+	/** Staggered horizons from the list prop; the legacy single-horizon knob (validation) wins when set. */
+	private static List<Integer> resolveHorizons(String list, int legacySingle) {
+		if (legacySingle > 0) {
+			return List.of(legacySingle);
+		}
+		if (list != null && !list.isBlank()) {
+			List<Integer> parsed = java.util.Arrays.stream(list.split(","))
+					.map(String::trim).filter(s -> !s.isEmpty())
+					.map(Integer::parseInt).filter(h -> h > 0)
+					.distinct().sorted().toList();
+			if (!parsed.isEmpty()) {
+				return parsed;
+			}
+		}
+		return DEFAULT_HORIZONS;
 	}
 
 	/**
-	 * Open a simulated position for a fresh recommendation. No-op for a NEUTRAL call, an unpriced ticker,
-	 * or a recommendation already traded. Best-effort — never lets a paper trade break the trigger.
+	 * Open one simulated leg per horizon for a fresh recommendation — skipping any horizon whose
+	 * (ticker, direction, horizon) thesis is already open. When every horizon is already open the
+	 * recommendation instead re-affirms the open legs (the restatement is itself signal, and counting
+	 * it avoids the duplicate-trade pseudo-replication the learning loop would mistake for evidence).
+	 * No-op for a NEUTRAL call or an unpriced ticker. Best-effort — never breaks the trigger.
 	 */
 	@Transactional
-	public Optional<SimulatedTrade> open(Recommendation rec) {
+	public List<SimulatedTrade> open(Recommendation rec) {
 		try {
 			if (rec == null || rec.getDirection() == SignalDirection.NEUTRAL || rec.getId() == null) {
-				return Optional.empty();
+				return List.of();
 			}
 			if (trades.existsByRecommendationId(rec.getId())) {
-				return Optional.empty();
+				return List.of();
 			}
 			BigDecimal entry = prices.latestPrice(rec.getTicker()).orElse(null);
 			if (entry == null || entry.signum() <= 0) {
 				log.debug("Investor: no live price for {} — not opening a paper trade", rec.getTicker());
-				return Optional.empty();
+				return List.of();
 			}
-			SimulatedTrade trade = trades.save(new SimulatedTrade(
-					rec.getId(), rec.getTicker(), rec.getDirection(), notional, entry, horizonDays));
-			log.info("Investor opened ${} {} paper trade on {} @ {} (horizon {}d)",
-					notional, rec.getDirection(), rec.getTicker(), entry, horizonDays);
-			return Optional.of(trade);
+			BigDecimal spy = benchmark.latest().orElse(null);
+
+			List<SimulatedTrade> opened = new java.util.ArrayList<>();
+			for (int horizon : horizons) {
+				if (trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
+						rec.getTicker(), rec.getDirection(), horizon, SimulatedTrade.Status.OPEN)) {
+					continue; // this leg of the thesis is already on the book
+				}
+				opened.add(trades.save(new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
+						notional, entry, horizon, spy)));
+			}
+			if (opened.isEmpty()) {
+				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatus(
+						rec.getTicker(), rec.getDirection(), SimulatedTrade.Status.OPEN);
+				existing.forEach(SimulatedTrade::reaffirm);
+				trades.saveAll(existing);
+				log.info("Investor: {} {} thesis already open ({} legs) — re-affirmed",
+						rec.getDirection(), rec.getTicker(), existing.size());
+			}
+			else {
+				log.info("Investor opened {} × ${} {} leg(s) on {} @ {} (horizons {}, SPY {})",
+						opened.size(), notional, rec.getDirection(), rec.getTicker(), entry,
+						opened.stream().map(t -> String.valueOf(t.getHorizonDays()))
+								.reduce((a, b) -> a + "/" + b).orElse("-"),
+						spy == null ? "n/a" : spy);
+			}
+			return opened;
 		} catch (RuntimeException ex) {
 			log.warn("Investor: failed to open paper trade for {}: {}",
 					rec == null ? "?" : rec.getTicker(), ex.getMessage());
-			return Optional.empty();
+			return List.of();
 		}
 	}
 
 	/**
-	 * Hourly: mark every due position to market. Each close records win/loss into the graduation
-	 * machinery and, on a loss, captures the Analyst's post-mortem. A ticker with no live price yet is
-	 * left open and retried next pass.
+	 * Hourly: mark every due position to market. Each close records win/loss (benchmark-relative when
+	 * a SPY bracket exists) into the graduation machinery and, on a loss, captures the Analyst's
+	 * post-mortem. A ticker with no live price yet is left open and retried next pass.
 	 */
 	@Scheduled(cron = "${argus.paper-investor.close-cron:0 0 * * * *}")
 	public void closeDueTrades() {
 		Instant now = Instant.now();
+		BigDecimal spy = benchmark.latest().orElse(null); // one benchmark quote per pass
 		for (SimulatedTrade trade : trades.findByStatus(SimulatedTrade.Status.OPEN)) {
 			if (!trade.isDue(now)) {
 				continue;
@@ -95,7 +144,7 @@ public class PaperInvestorService {
 				continue;
 			}
 			try {
-				closeOne(trade, exit);
+				closeOne(trade, exit, spy);
 			} catch (RuntimeException ex) {
 				log.warn("Investor: failed to close paper trade {} ({}): {}",
 						trade.getId(), trade.getTicker(), ex.getMessage());
@@ -108,31 +157,37 @@ public class PaperInvestorService {
 	 * its win/loss) and {@link GraduationService#recordOutcome} each persist in their own transaction;
 	 * the row is saved first so the scoreboard stays correct even if the graduation feed hiccups.
 	 */
-	private void closeOne(SimulatedTrade trade, BigDecimal exit) {
-		trade.close(exit);
+	private void closeOne(SimulatedTrade trade, BigDecimal exit, BigDecimal benchmarkExit) {
+		trade.close(exit, benchmarkExit);
 		boolean won = Boolean.TRUE.equals(trade.getWon());
 		if (!won) {
 			trade.recordReview(postMortem(trade));
 		}
 		trades.save(trade);
 		graduation.recordOutcome(won, trade.getRecommendationId());
-		log.info("Investor closed {} paper trade on {}: {}% ({}) @ {}",
-				trade.getDirection(), trade.getTicker(), trade.getReturnPct(), won ? "WON" : "LOST", exit);
+		log.info("Investor closed {} paper trade on {} ({}d): {}% abs, {} vs SPY ({}) @ {}",
+				trade.getDirection(), trade.getTicker(), trade.getHorizonDays(), trade.getReturnPct(),
+				trade.getExcessReturnPct() == null ? "unbenchmarked" : trade.getExcessReturnPct() + "%",
+				won ? "WON" : "LOST", exit);
 	}
 
 	/** Ask the model why a losing call likely went wrong — the Analyst learning from the Investor. */
 	private String postMortem(SimulatedTrade t) {
 		try {
+			String vsMarket = t.getExcessReturnPct() == null ? ""
+					: " (%s%% vs the S&P 500 over the same window — the call %s the market)"
+							.formatted(t.getExcessReturnPct(),
+									t.getExcessReturnPct().signum() > 0 ? "beat" : "lagged");
 			String prompt = """
 					You are Argus, an investing analyst reviewing your own recommendation that lost money in a \
 					paper trade. Be honest and specific, 1-2 sentences, no disclaimers.
 
 					Call: %s on %s
-					Entry price: %s, exit after %d days: %s (direction-adjusted return %s%%)
+					Entry price: %s, exit after %d days: %s (direction-adjusted return %s%%%s)
 					In 1-2 sentences: what most likely went wrong, and what signal you'd weight differently next time?
 					Respond with ONLY the reflection text.
 					""".formatted(t.getDirection(), t.getTicker(), t.getEntryPrice(), t.getHorizonDays(),
-					t.getExitPrice(), t.getReturnPct());
+					t.getExitPrice(), t.getReturnPct(), vsMarket);
 			String out = gateway.generate(prompt);
 			if (out != null && !out.isBlank()) {
 				String clean = out.replace("```", "").strip();
@@ -248,12 +303,14 @@ public class PaperInvestorService {
 			BigDecimal currentPrice, BigDecimal unrealizedPct) {
 	}
 
-	public record ClosedTradeView(String ticker, String direction, BigDecimal returnPct, boolean won,
-			Instant closedAt, String review) {
+	/** {@code excessReturnPct} is the vs-SPY figure that decided the win; null when unbenchmarked. */
+	public record ClosedTradeView(String ticker, String direction, BigDecimal returnPct,
+			BigDecimal excessReturnPct, int horizonDays, boolean won, Instant closedAt, String review) {
 
 		static ClosedTradeView from(SimulatedTrade t) {
 			return new ClosedTradeView(t.getTicker(), t.getDirection().name(), t.getReturnPct(),
-					Boolean.TRUE.equals(t.getWon()), t.getClosedAt(), t.getReview());
+					t.getExcessReturnPct(), t.getHorizonDays(), Boolean.TRUE.equals(t.getWon()),
+					t.getClosedAt(), t.getReview());
 		}
 	}
 }

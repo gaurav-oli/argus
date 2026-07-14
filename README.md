@@ -117,10 +117,15 @@ persona · conversation · notification · cost · ops · security`
 ## Analyst/Investor loop & validation knobs
 
 Agent 5 runs a self-improving loop with **no user input**: the *Analyst* produces a recommendation, the
-*Investor* opens a fixed-notional **paper trade** ($100, pretend money — never your real portfolio) at
-the live price, marks it to market at the horizon, and the realized win/loss feeds back as per-agent
-signal-weight multipliers and isotonic probability calibration (Phase B adaptive tuning). Everything is
-deterministic (no LLM numbers) and reversible; the pure scoring engine is never rewritten.
+*Investor* opens one fixed-notional **paper trade** ($100, pretend money — never your real portfolio)
+per horizon (7/30/90 days) at the live price — but only when that (ticker, direction, horizon) thesis
+isn't already open; a repeat recommendation **re-affirms** the open legs instead of duplicating them.
+At each horizon the leg is marked to market and wins on its **direction-adjusted return in excess of
+SPY** (captured at entry/exit; absolute return when unbenchmarked) — so the loop measures signal
+quality, not market beta. Realized outcomes feed back as per-agent signal-weight multipliers (hit rate
+weighted by each signal's weight) and isotonic probability calibration (Phase B adaptive tuning), with
+a Brier score surfaced on the Agents page. Everything is deterministic (no LLM numbers) and reversible;
+the pure scoring engine is never rewritten.
 
 Production defaults judge trades on a real investing timeframe and resist noise. For validation you can
 temporarily lower them from `.env` (no rebuild — recreate the backend with `docker compose --profile
@@ -128,7 +133,8 @@ deploy up -d`), then **remove the overrides to return to production**:
 
 | `.env` override | Prod default | Validation | Effect |
 |---|---|---|---|
-| `PAPER_INVESTOR_HORIZON_DAYS` | 30 | e.g. 2 | how long a paper trade is held before it's marked to market (new trades only) |
+| `PAPER_INVESTOR_HORIZON_DAYS_LIST` | 7,30,90 | e.g. 1,30,90 | the staggered horizons; one leg per horizon per thesis |
+| `PAPER_INVESTOR_HORIZON_DAYS` | 0 (off) | e.g. 2 | legacy single-horizon knob — when >0 it replaces the list entirely |
 | `ADAPTIVE_TUNING_MIN_SAMPLE` | 10 | e.g. 2 | closed-trade floor below which an agent's weight multiplier stays 1.0 |
 | `ADAPTIVE_TUNING_RECOMPUTE_ON_BOOT` | false | true | also run the tuning recompute at startup instead of only nightly (02:30) |
 

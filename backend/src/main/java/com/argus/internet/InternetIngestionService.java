@@ -15,6 +15,11 @@ import org.springframework.stereotype.Service;
  * Agent 3's internet-ingestion pipeline. On a cadence ({@code argus.internet.poll-ms}, default 6h)
  * it pulls web attention on held companies from every {@link InternetSource} (Hacker News stories,
  * Wikipedia pageviews), dedups against what's stored, and persists each mention.
+ *
+ * <p>Freezable via {@code argus.internet.enabled} (Fable 5 review item 9): internet buzz is the
+ * noisiest, hard-capped-at-0.35 signal, so ingestion can be paused (the deploy sets it off) until a
+ * full tuning cycle on clean trade data proves or disproves its value. Existing mentions age out of
+ * the 14-day signal window naturally; re-enabling resumes polling without a rebuild.
  */
 @Service
 public class InternetIngestionService {
@@ -24,17 +29,24 @@ public class InternetIngestionService {
 	private final List<InternetSource> sources;
 	private final WebMentionRepository mentions;
 	private final PositionRepository positions;
+	private final boolean enabled;
 
 	public InternetIngestionService(List<InternetSource> sources, WebMentionRepository mentions,
-			PositionRepository positions) {
+			PositionRepository positions,
+			@org.springframework.beans.factory.annotation.Value("${argus.internet.enabled:true}") boolean enabled) {
 		this.sources = sources;
 		this.mentions = mentions;
 		this.positions = positions;
+		this.enabled = enabled;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.internet.poll-ms:21600000}",
 			initialDelayString = "${argus.internet.initial-delay-ms:70000}")
 	public void scheduledTick() {
+		if (!enabled) {
+			log.debug("Internet ingestion frozen (argus.internet.enabled=false) — skipping poll");
+			return;
+		}
 		try {
 			ingestOnce();
 		}

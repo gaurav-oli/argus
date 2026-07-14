@@ -140,7 +140,45 @@ public class LogicReviewService {
 		Result result = new Result(true, adopt, evals.size(), baseline.brier(), proposed.brier(),
 				baseline.accuracy(), proposed.accuracy(), reason, proposals);
 		log.info("Analyst logic review: {}", reason);
-		return persist(result, "gemma");
+		return persist(result, "gemma", dissentStats(evals));
+	}
+
+	// ---- dissent record (Fable 5 review item 8: agents auditing each other through outcomes) ----
+
+	/**
+	 * Per-agent dissent record over the closed-trade set: how often an agent's non-neutral signal
+	 * pointed <em>against</em> the direction the Analyst ultimately called, and how often that dissent
+	 * turned out to be right (the trade lost). A consistently-right dissenter is under-weighted; a
+	 * consistently-wrong one is noise — either way the LLM reviewer should see it, and the backtest
+	 * still decides. Returns agent → [dissents, dissentsRight].
+	 */
+	static Map<String, int[]> dissentStats(List<Eval> evals) {
+		Map<String, int[]> out = new LinkedHashMap<>();
+		for (Eval e : evals) {
+			SignalDirection called = e.rec().getDirection();
+			for (RecommendationSignal s : e.rec().getSignals()) {
+				if (s.getDirection() == SignalDirection.NEUTRAL || s.getDirection() == called) {
+					continue;
+				}
+				int[] c = out.computeIfAbsent(s.getAgent(), k -> new int[2]);
+				c[0]++;
+				if (s.getDirection() == e.actual()) {
+					c[1]++; // the call went the dissenter's way — the fleet missed what it saw
+				}
+			}
+		}
+		return out;
+	}
+
+	private static String dissentSection(Map<String, int[]> dissent) {
+		if (dissent.isEmpty()) {
+			return "";
+		}
+		StringBuilder sb = new StringBuilder("\nDISSENT RECORD (times an agent disagreed with the final call, and how often the dissenter was right):\n");
+		dissent.forEach((agent, c) -> sb.append("- ").append(agent)
+				.append(": dissented ").append(c[0]).append(" time(s), right ").append(c[1])
+				.append(" time(s) (").append(Math.round(100.0 * c[1] / c[0])).append("%)\n"));
+		return sb.toString();
 	}
 
 	// ---- LLM proposal ----
@@ -170,13 +208,16 @@ public class LogicReviewService {
 				You are the Analyst's self-tuning reviewer. Below is each signal agent's historical \
 				agreement with what trades actually did. Propose a weight-multiplier FACTOR per agent to \
 				improve future calls: >1 to trust an agent more, <1 to trust it less, near 1 to leave it. \
-				Only suggest a change where the record justifies it. Factors must be between %.2f and %.2f.
+				Only suggest a change where the record justifies it. A dissenter that was repeatedly RIGHT \
+				against the final call is under-weighted; one repeatedly wrong is noise. Factors must be \
+				between %.2f and %.2f.
 
 				AGENT PERFORMANCE (%d closed trades, current Brier %.4f):
-				%s
+				%s%s
 				Respond with ONLY a JSON array, no prose: [{"agent":"agent-2-social","factor":0.85,"why":"short reason"}]
 				"""
-				.formatted(props.factorMin(), props.factorMax(), evals.size(), baseline.brier(), stats);
+				.formatted(props.factorMin(), props.factorMax(), evals.size(), baseline.brier(), stats,
+						dissentSection(dissentStats(evals)));
 
 		try {
 			return parse(gateway.generate(prompt));
@@ -264,6 +305,10 @@ public class LogicReviewService {
 	// ---- persistence + helpers ----
 
 	private Result persist(Result r, String model) {
+		return persist(r, model, Map.of());
+	}
+
+	private Result persist(Result r, String model, Map<String, int[]> dissent) {
 		List<Map<String, Object>> proposalsJson = new ArrayList<>();
 		for (Proposal p : r.proposals()) {
 			Map<String, Object> m = new LinkedHashMap<>();
@@ -272,12 +317,15 @@ public class LogicReviewService {
 			m.put("why", p.why());
 			proposalsJson.add(m);
 		}
+		Map<String, Object> dissentJson = new LinkedHashMap<>();
+		dissent.forEach((agent, c) -> dissentJson.put(agent,
+				Map.of("dissents", c[0], "right", c[1])));
 		jdbc.update("insert into logic_review (ran_at, model, sample_size, before_brier, after_brier,"
-				+ " before_accuracy, after_accuracy, adopted, reason, proposals)"
-				+ " values (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb))",
+				+ " before_accuracy, after_accuracy, adopted, reason, proposals, dissent)"
+				+ " values (?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb))",
 				Timestamp.from(java.time.Instant.now()), model, r.sampleSize(), r.beforeBrier(), r.afterBrier(),
 				r.beforeAccuracy(), r.afterAccuracy(), r.adopted(), r.reason(),
-				JSON.writeValueAsString(proposalsJson));
+				JSON.writeValueAsString(proposalsJson), JSON.writeValueAsString(dissentJson));
 		return r;
 	}
 
@@ -296,7 +344,8 @@ public class LogicReviewService {
 		return Math.round(v * 100.0) / 100.0;
 	}
 
-	private record Eval(Recommendation rec, SignalDirection actual) {
+	/** A closed trade's recommendation plus the direction the market actually went (package-visible for tests). */
+	record Eval(Recommendation rec, SignalDirection actual) {
 	}
 
 	private record Score(double accuracy, double brier) {

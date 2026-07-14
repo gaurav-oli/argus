@@ -73,9 +73,12 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma4:26b}   # validated by Story 1.3 (2026-06-21)
       ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-5m}   # unload-when-idle (frees ~17GB)
-      # Investor paper-trade horizon (argus.paper-investor.horizon-days). Default 30d; lower it to
-      # validate the Analyst/Investor loop quickly (trades close sooner → nightly tuning has data).
-      ARGUS_PAPER_INVESTOR_HORIZON_DAYS: ${PAPER_INVESTOR_HORIZON_DAYS:-30}
+      # Investor staggered paper-trade horizons (argus.paper-investor.horizon-days-list). One leg per
+      # horizon per thesis (7d legs give feedback within a week; 30/90 measure the longer timeframes).
+      ARGUS_PAPER_INVESTOR_HORIZON_DAYS_LIST: ${PAPER_INVESTOR_HORIZON_DAYS_LIST:-7,30,90}
+      # Legacy single-horizon validation knob (argus.paper-investor.horizon-days). When set (>0) it
+      # replaces the list — e.g. 2 to watch trades close quickly during validation. Leave 0 for prod.
+      ARGUS_PAPER_INVESTOR_HORIZON_DAYS: ${PAPER_INVESTOR_HORIZON_DAYS:-0}
       # How often the Investor marks due positions to market (argus.paper-investor.close-cron). Default
       # hourly; set e.g. "0 * * * * *" (every minute) during validation so backdated trades close promptly.
       ARGUS_PAPER_INVESTOR_CLOSE_CRON: ${PAPER_INVESTOR_CLOSE_CRON:-0 0 * * * *}
@@ -87,6 +90,12 @@ services:
       # Analyst Logic Review schedule (argus.logic-review.cron). Default 03:00; set e.g. "0 */2 * * * *"
       # (every 2 min) during validation so the LLM-proposes/backtest-decides pass fires promptly.
       ARGUS_LOGIC_REVIEW_CRON: ${LOGIC_REVIEW_CRON:-0 0 3 * * *}
+      # Internet-buzz agent frozen (Fable 5 review): noisiest, hard-capped signal — paused until one
+      # full tuning cycle on clean trade data proves/disproves it. Set true to resume polling.
+      ARGUS_INTERNET_ENABLED: ${ARGUS_INTERNET_ENABLED:-false}
+      # Smart Cleanup schedule (argus.cleanup.cron). Default monthly (04:00 on the 1st, Toronto);
+      # set "-" to disable and go back to the manual Agents-page button.
+      ARGUS_CLEANUP_CRON: ${ARGUS_CLEANUP_CRON:-0 0 4 1 * *}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed

@@ -145,7 +145,11 @@ public class AdaptiveTuningService {
 	}
 
 	private void recomputeAgentWeights(List<SimulatedTrade> closed, Map<Long, Recommendation> recById) {
-		Map<String, int[]> tally = new HashMap<>(); // agent → [contributed, correct]
+		// agent → [sampleCount, weightContributed, weightCorrect]. The hit rate is weighted by each
+		// signal's weight (Fable 5 review item 5): a high-conviction signal that called it right earns
+		// proportionally more credit than a barely-weighted one, sharpening reliability from the same
+		// data. The min-sample gate stays count-based (shrinkAndClamp) so cold-start safety is unchanged.
+		Map<String, double[]> tally = new HashMap<>();
 		for (SimulatedTrade t : closed) {
 			Recommendation r = recById.get(t.getRecommendationId());
 			if (r == null) {
@@ -157,16 +161,21 @@ public class AdaptiveTuningService {
 				if (s.getDirection() == SignalDirection.NEUTRAL) {
 					continue;
 				}
-				int[] c = tally.computeIfAbsent(s.getAgent(), k -> new int[2]);
+				double w = s.getWeight() == null ? 0.0 : s.getWeight().doubleValue();
+				if (w <= 0) {
+					continue; // weightless signals carry no evidence either way
+				}
+				double[] c = tally.computeIfAbsent(s.getAgent(), k -> new double[3]);
 				c[0]++;
+				c[1] += w;
 				if (s.getDirection() == winning) {
-					c[1]++;
+					c[2] += w;
 				}
 			}
 		}
 		tally.forEach((agent, c) -> {
-			int n = c[0];
-			double hitRate = (double) c[1] / n;
+			int n = (int) c[0];
+			double hitRate = c[2] / c[1];
 			double raw = 1.0 + props.weightGain() * (hitRate - 0.5);
 			double mult = shrinkAndClamp(raw, n, props.weightMin(), props.weightMax());
 			AgentReliability row = reliabilities.findById(agent).orElseGet(() -> new AgentReliability(agent));

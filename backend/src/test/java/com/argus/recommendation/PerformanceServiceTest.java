@@ -107,6 +107,16 @@ class PerformanceServiceTest {
 		assertEquals(50, bin80.actualHitRatePct()); // 1/2
 		assertFalse(bin80.sufficient());            // 2 < 5
 		assertEquals(10, v.bins().size());
+		// Brier: ((0.85−1)² + (0.85−0)²) / 2 = (0.0225 + 0.7225) / 2 = 0.3725 — worse than a coin flip,
+		// exactly what an over-confident 85% call with a 50% hit rate deserves.
+		assertEquals(0.3725, v.brierScore(), 1e-9);
+	}
+
+	@Test
+	void calibrationBrierIsNullWithNoResolvedOutcomes() {
+		when(trades.findAll()).thenReturn(List.of());
+		when(recommendations.findAllById(any())).thenReturn(List.of());
+		assertNull(service.calibration().brierScore());
 	}
 
 	// ---- helpers ----

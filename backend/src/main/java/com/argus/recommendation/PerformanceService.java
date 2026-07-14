@@ -122,16 +122,19 @@ public class PerformanceService {
 		long[] count = new long[CALIBRATION_BINS];
 		long[] wins = new long[CALIBRATION_BINS];
 		int resolved = 0;
+		double brierSum = 0;
 		for (PaperTrade t : all) {
 			Recommendation r = t.getRecommendationId() == null ? null : recById.get(t.getRecommendationId());
 			if (r == null) {
 				continue; // can't bin an outcome with no stated probability
 			}
-			int bin = binFor(statedProbability(r));
+			double stated = statedProbability(r);
+			int bin = binFor(stated);
 			count[bin]++;
 			if (t.isWon()) {
 				wins[bin]++;
 			}
+			brierSum += Math.pow(stated - (t.isWon() ? 1.0 : 0.0), 2);
 			resolved++;
 		}
 
@@ -140,7 +143,10 @@ public class PerformanceService {
 			Integer hit = count[i] == 0 ? null : (int) Math.round(100.0 * wins[i] / count[i]);
 			bins.add(new Bin(i * 10, (i + 1) * 10, count[i], wins[i], hit, count[i] >= CALIBRATION_MIN_SAMPLE));
 		}
-		return new CalibrationView(bins, resolved, CALIBRATION_MIN_SAMPLE);
+		// Brier score: mean squared error of the stated probabilities against what happened.
+		// 0 = perfectly calibrated & confident; 0.25 = always saying 50/50 (a coin flip); higher = worse.
+		Double brier = resolved == 0 ? null : Math.round(brierSum / resolved * 10000.0) / 10000.0;
+		return new CalibrationView(bins, resolved, CALIBRATION_MIN_SAMPLE, brier);
 	}
 
 	/** The probability the recommendation stated for the direction it actually called. */
@@ -186,8 +192,11 @@ public class PerformanceService {
 			boolean underperformer, Integer hitRatePct, int reliabilitySamples, Double learnedMultiplier) {
 	}
 
-	/** Story 9.4 — a reliability diagram as bins. */
-	public record CalibrationView(List<Bin> bins, int resolvedCount, int minSampleSize) {
+	/**
+	 * Story 9.4 — a reliability diagram as bins, plus the Brier score of the stated probabilities
+	 * (0 = perfect, 0.25 = coin flip, higher = worse); null until an outcome has resolved.
+	 */
+	public record CalibrationView(List<Bin> bins, int resolvedCount, int minSampleSize, Double brierScore) {
 	}
 
 	/** One probability bin {@code [lowPct, highPct)} with the actual hit rate seen. */

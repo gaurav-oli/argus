@@ -109,6 +109,35 @@ class AdaptiveTuningServiceTest {
 	}
 
 	@Test
+	void recomputeWeighsHitRateBySignalWeight() {
+		// One agent, two closed trades on different recs: a heavy (w=0.9) correct call and a light
+		// (w=0.1) wrong call. Count-based hit rate would be 0.5 (multiplier 1.0); weight-proportional
+		// is 0.9/(0.9+0.1)=0.9 → multiplier 1 + (0.9−0.5) = 1.4.
+		Recommendation heavyRight = mock(Recommendation.class);
+		when(heavyRight.getDirection()).thenReturn(SignalDirection.BULLISH);
+		when(heavyRight.getBullProbability()).thenReturn(BigDecimal.valueOf(0.75));
+		when(heavyRight.getSignals()).thenReturn(List.of(
+				new RecommendationSignal(new AgentSignal("agent-x", SignalDirection.BULLISH, 0.9, "r"))));
+		Recommendation lightWrong = mock(Recommendation.class);
+		when(lightWrong.getDirection()).thenReturn(SignalDirection.BULLISH);
+		when(lightWrong.getBullProbability()).thenReturn(BigDecimal.valueOf(0.75));
+		when(lightWrong.getSignals()).thenReturn(List.of(
+				new RecommendationSignal(new AgentSignal("agent-x", SignalDirection.BEARISH, 0.1, "r"))));
+		when(recs.findWithSignalsById(1L)).thenReturn(Optional.of(heavyRight));
+		when(recs.findWithSignalsById(2L)).thenReturn(Optional.of(lightWrong));
+		when(trades.findByStatus(SimulatedTrade.Status.CLOSED)).thenReturn(List.of(wonTrade(1L), wonTrade(2L)));
+
+		service(true).recompute();
+
+		ArgumentCaptor<AgentReliability> saved = ArgumentCaptor.forClass(AgentReliability.class);
+		verify(reliabilities, org.mockito.Mockito.atLeastOnce()).save(saved.capture());
+		AgentReliability x = saved.getAllValues().stream().filter(a -> a.getAgent().equals("agent-x"))
+				.findFirst().orElseThrow();
+		assertEquals(0.9, x.getHitRate().doubleValue(), 1e-6);
+		assertEquals(1.4, x.getWeightMultiplier().doubleValue(), 1e-6);
+	}
+
+	@Test
 	void recomputeColdStartLeavesMultiplierAtOne() {
 		Recommendation r = bullishRecWithSignals();
 		when(recs.findWithSignalsById(1L)).thenReturn(Optional.of(r));
@@ -136,8 +165,8 @@ class AdaptiveTuningServiceTest {
 
 	private static SimulatedTrade wonTrade(long recId) {
 		SimulatedTrade t = new SimulatedTrade(recId, "AAPL", SignalDirection.BULLISH,
-				BigDecimal.valueOf(100), BigDecimal.valueOf(50), 0);
-		t.close(BigDecimal.valueOf(60)); // +20% → won
+				BigDecimal.valueOf(100), BigDecimal.valueOf(50), 0, null);
+		t.close(BigDecimal.valueOf(60), null); // +20% (unbenchmarked) → won
 		return t;
 	}
 
