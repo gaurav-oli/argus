@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 
 const cad = (n: number) =>
   n.toLocaleString("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 2 });
+const usd = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 /**
  * Live portfolio value (Story 3.4, FR-2). Fetches the initial snapshot, then subscribes to
@@ -32,6 +34,7 @@ export function PortfolioValue() {
   }, []);
 
   const value = snap?.totalValueCad ?? null;
+  const valueUsd = snap?.totalValueUsd ?? null;
   const pnl = snap?.totalPnlCad ?? null;
   const gain = (pnl ?? 0) >= 0;
 
@@ -49,11 +52,16 @@ export function PortfolioValue() {
       {value == null ? (
         <p className="text-3xl font-bold tracking-tight text-text-secondary tabular-nums">—</p>
       ) : (
-        <AnimatedNumber
-          value={value}
-          format={cad}
-          className="text-3xl font-bold tracking-tight text-text-primary tabular-nums"
-        />
+        <>
+          <AnimatedNumber
+            value={value}
+            format={cad}
+            className="text-3xl font-bold tracking-tight text-text-primary tabular-nums"
+          />
+          {valueUsd != null && (
+            <span className="text-sm text-text-secondary tabular-nums">≈ {usd(valueUsd)} USD</span>
+          )}
+        </>
       )}
 
       {pnl != null && (

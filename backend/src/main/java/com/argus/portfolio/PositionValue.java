@@ -32,12 +32,17 @@ public record PositionValue(
 		Long id,
 		BigDecimal usdMarketValue,
 		BigDecimal cadAcb,
-		boolean fxEstimated) {
+		boolean fxEstimated,
+		String accountName,
+		String accountCurrency,
+		String ownerType,
+		String ownerName) {
 
 	/** Return a copy with {@code weightPercent} set (computed once portfolio totals are known). */
 	PositionValue withWeight(BigDecimal weightPercent) {
 		return new PositionValue(ticker, companyName, shares, price, marketValue, costBasis, totalPnl,
 				totalPnlPercent, previousClose, dayPnl, dayPnlPercent, currency, cadMarketValue, cadPnl,
-				weightPercent, afterHours, asOf, institution, account, id, usdMarketValue, cadAcb, fxEstimated);
+				weightPercent, afterHours, asOf, institution, account, id, usdMarketValue, cadAcb, fxEstimated,
+				accountName, accountCurrency, ownerType, ownerName);
 	}
 }

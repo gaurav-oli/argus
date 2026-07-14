@@ -13,6 +13,7 @@ public record PortfolioSnapshot(
 		BigDecimal totalValueCad,
 		BigDecimal totalCostCad,
 		BigDecimal totalPnlCad,
+		BigDecimal totalValueUsd,
 		boolean anyAfterHours,
 		Instant asOf,
 		List<PositionValue> positions) {

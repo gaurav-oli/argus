@@ -32,9 +32,10 @@ class RecommendationContextAssemblerTest {
 		PositionValue aapl = new PositionValue("AAPL", "Apple Inc.", new BigDecimal("10"),
 				new BigDecimal("190"), new BigDecimal("1900"), new BigDecimal("1500"), new BigDecimal("400"),
 				new BigDecimal("26.67"), null, null, null, "USD", new BigDecimal("2600"), new BigDecimal("550"),
-				new BigDecimal("40"), false, Instant.now(), "National Bank", "Cash USD", 1L, null, null, false);
+				new BigDecimal("40"), false, Instant.now(), "National Bank", "Cash USD", 1L, null, null, false,
+				"Cash Account (USD: WK3B)", "USD", "Joint", "Gaurav Oli & Varsha Gupta");
 		return new PortfolioSnapshot(new BigDecimal("6500"), new BigDecimal("5000"), new BigDecimal("1500"),
-				false, Instant.now(), List.of(aapl));
+				new BigDecimal("4577"), false, Instant.now(), List.of(aapl));
 	}
 
 	private static HealthScoreResult health() {

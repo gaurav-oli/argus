@@ -17,21 +17,31 @@ public class CashController {
 	public record CashEntry(String account, String currency, BigDecimal amount) {
 	}
 
-	public record CashView(Long id, String account, String currency, BigDecimal amount) {
+	public record CashView(Long id, String account, String currency, BigDecimal amount,
+			String accountName, String ownerType, String ownerName) {
 	}
 
 	private final CashService cash;
 	private final LivePortfolioService live;
+	private final AccountMetaRepository accountMeta;
 
-	public CashController(CashService cash, LivePortfolioService live) {
+	public CashController(CashService cash, LivePortfolioService live, AccountMetaRepository accountMeta) {
 		this.cash = cash;
 		this.live = live;
+		this.accountMeta = accountMeta;
 	}
 
 	@GetMapping
 	public List<CashView> list() {
-		return cash.list().stream()
-				.map(c -> new CashView(c.getId(), c.getAccount(), c.getCurrency(), c.getAmount())).toList();
+		return cash.list().stream().map(this::toView).toList();
+	}
+
+	private CashView toView(CashBalance c) {
+		AccountLabels.Parsed label = AccountLabels.parse(c.getAccount());
+		AccountMeta meta = accountMeta.findByAccount(c.getAccount()).stream().findFirst().orElse(null);
+		return new CashView(c.getId(), c.getAccount(), c.getCurrency(), c.getAmount(),
+				label.displayName(), meta == null ? null : meta.getOwnerType(),
+				meta == null ? null : meta.getOwnerName());
 	}
 
 	@PutMapping

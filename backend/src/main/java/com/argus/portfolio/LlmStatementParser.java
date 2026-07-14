@@ -51,10 +51,16 @@ public class LlmStatementParser {
 			  available, e.g. "687WK3-B USD Cash", "RRSP (USD)", "TFSA", "Family RESP". Use the SAME label
 			  for a holding and the cash in the same account.
 			- If the same security is held in more than one account, return it once per account.
+			- "accounts": one entry per DISTINCT account, describing who owns it (from the account holder
+			  name(s) in that account's statement header). "ownerType" is "Joint" when the header lists two
+			  holders (e.g. two names, "OR", "JTWROS", "joint"), otherwise "Solo". "ownerName" is the
+			  holder name(s), title-cased, e.g. "Gaurav Oli & Varsha Gupta" for joint or "Gaurav Oli" for
+			  solo. Use the SAME "account" label as the holdings/cash for that account.
 
 			Return ONLY a JSON object, no prose, no markdown fences:
 			{"holdings":[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD","account":"687WK3-B USD Cash"}],
-			 "cash":[{"account":"687WK3-B USD Cash","currency":"USD","amount":12345.67}]}
+			 "cash":[{"account":"687WK3-B USD Cash","currency":"USD","amount":12345.67}],
+			 "accounts":[{"account":"687WK3-B USD Cash","ownerType":"Joint","ownerName":"Gaurav Oli & Varsha Gupta"}]}
 
 			STATEMENT TEXT:
 			""";
@@ -79,9 +85,26 @@ public class LlmStatementParser {
 				.filter(c -> c.account() != null && c.amount() != null && c.amount().signum() > 0)
 				.map(LlmStatementParser::toCash)
 				.toList();
-		log.info("LLM statement parse: {} holdings, {} cash balance(s) extracted", holdings.size(), cash.size());
-		return new StatementParser.ParseResult(holdings, cash,
+		List<ParsedAccount> accounts = parsed.accounts().stream()
+				.filter(a -> a.account() != null && !a.account().isBlank())
+				.map(LlmStatementParser::toAccount)
+				.toList();
+		log.info("LLM statement parse: {} holdings, {} cash balance(s), {} account(s) extracted",
+				holdings.size(), cash.size(), accounts.size());
+		return new StatementParser.ParseResult(holdings, cash, accounts,
 				"Parsed with AI assistance — review the holdings below before confirming.");
+	}
+
+	private static ParsedAccount toAccount(LlmAccount a) {
+		String type = a.ownerType() == null ? null : a.ownerType().trim();
+		if (type != null && !type.equalsIgnoreCase("Joint") && !type.equalsIgnoreCase("Solo")) {
+			type = null; // unrecognized → leave unset rather than storing noise
+		}
+		else if (type != null) {
+			type = type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase();
+		}
+		String name = a.ownerName() == null || a.ownerName().isBlank() ? null : a.ownerName().trim();
+		return new ParsedAccount(a.account().trim(), type, name);
 	}
 
 	private static ParsedHolding toHolding(LlmHolding h) {
@@ -120,7 +143,7 @@ public class LlmStatementParser {
 		List<LlmHolding> holdings = json.readValue(response.substring(start, end + 1),
 				new TypeReference<List<LlmHolding>>() {
 				});
-		return new LlmStatement(holdings, List.of());
+		return new LlmStatement(holdings, List.of(), List.of());
 	}
 
 	private static String extractText(byte[] pdfBytes) {
@@ -133,10 +156,11 @@ public class LlmStatementParser {
 	}
 
 	/** Loose mirror of the model's response object. */
-	private record LlmStatement(List<LlmHolding> holdings, List<LlmCash> cash) {
+	private record LlmStatement(List<LlmHolding> holdings, List<LlmCash> cash, List<LlmAccount> accounts) {
 		LlmStatement {
 			holdings = holdings == null ? List.of() : holdings;
 			cash = cash == null ? List.of() : cash;
+			accounts = accounts == null ? List.of() : accounts;
 		}
 	}
 
@@ -146,5 +170,8 @@ public class LlmStatementParser {
 	}
 
 	private record LlmCash(String account, String currency, BigDecimal amount) {
+	}
+
+	private record LlmAccount(String account, String ownerType, String ownerName) {
 	}
 }

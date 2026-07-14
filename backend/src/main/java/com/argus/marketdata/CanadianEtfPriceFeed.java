@@ -80,7 +80,7 @@ public class CanadianEtfPriceFeed {
 		if (prevClose != null) {
 			live.recordPreviousClose(ticker, prevClose);
 		}
-		live.onPriceTick(ticker, price, Instant.now()); // also re-pushes the live snapshot
+		live.onPriceTick(ticker, price, Instant.now(), "CAD"); // CAD quote; also re-pushes the snapshot
 		log.info("TSX price: {} = {} CAD (Yahoo)", ticker, price);
 	}
 

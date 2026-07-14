@@ -35,27 +35,43 @@ public class LivePortfolioService {
 	private final MarketClock marketClock;
 	private final LivePushService livePush;
 	private final CashService cash;
+	private final AccountMetaRepository accountMeta;
 
 	private final Map<String, PricePoint> prices = new ConcurrentHashMap<>();
 	private final Map<String, BigDecimal> previousCloses = new ConcurrentHashMap<>();
 
 	public LivePortfolioService(PositionRepository positions, FxRateService fx, MarketClock marketClock,
-			LivePushService livePush, CashService cash) {
+			LivePushService livePush, CashService cash, AccountMetaRepository accountMeta) {
 		this.positions = positions;
 		this.fx = fx;
 		this.marketClock = marketClock;
 		this.livePush = livePush;
 		this.cash = cash;
+		this.accountMeta = accountMeta;
 	}
 
-	/** Record a price tick and push a fresh snapshot. Ticker is normalized to uppercase. */
+	/**
+	 * Record a price tick (assumed USD — the Finnhub path) and push a fresh snapshot. Ticker is
+	 * normalized to uppercase. Matches {@link com.argus.marketdata.PriceFeed.PriceTick}.
+	 */
 	@Transactional(readOnly = true)
 	public void onPriceTick(String ticker, BigDecimal price, Instant when) {
+		onPriceTick(ticker, price, when, "USD");
+	}
+
+	/**
+	 * Record a price tick in an explicit currency and push a fresh snapshot. The price's currency
+	 * (USD from Finnhub, CAD from the TSX feed) — NOT the position's cost-basis currency — drives the
+	 * CAD conversion, so a US stock held in a CAD account is still converted at the USD/CAD rate.
+	 */
+	@Transactional(readOnly = true)
+	public void onPriceTick(String ticker, BigDecimal price, Instant when, String currency) {
 		if (ticker == null || price == null || when == null) {
 			return;
 		}
+		String ccy = currency == null ? "USD" : currency.trim().toUpperCase();
 		prices.put(ticker.trim().toUpperCase(),
-				new PricePoint(price, when, !marketClock.isRegularHours(when)));
+				new PricePoint(price, when, !marketClock.isRegularHours(when), ccy));
 		livePush.publish(TOPIC, currentSnapshot());
 	}
 
@@ -93,6 +109,10 @@ public class LivePortfolioService {
 	@Transactional(readOnly = true)
 	public PortfolioSnapshot currentSnapshot() {
 		BigDecimal usdCad = fx.usdCadOn(LocalDate.now(TORONTO)).orElse(null);
+		Map<String, AccountMeta> ownerByKey = new java.util.HashMap<>();
+		for (AccountMeta m : accountMeta.findAll()) {
+			ownerByKey.put(accountKey(m.getInstitution(), m.getAccount()), m);
+		}
 		List<PositionValue> rows = new ArrayList<>();
 		BigDecimal totalValueCad = BigDecimal.ZERO;
 		BigDecimal totalCostCad = BigDecimal.ZERO;
@@ -117,20 +137,32 @@ public class LivePortfolioService {
 					? percent(price.subtract(prevClose), prevClose) : null;
 
 			boolean afterHours = pp != null && pp.afterHours();
-			BigDecimal cadMarketValue = toCad(marketValue, p.getCostBasisCurrency(), usdCad);
+			// Convert on the PRICE's currency (USD from Finnhub, CAD from the TSX feed), not the
+			// position's cost-basis currency — a US stock in a CAD account is still priced in USD.
+			String priceCurrency = pp == null ? null : pp.currency();
+			BigDecimal cadMarketValue = toCad(marketValue, priceCurrency, usdCad);
 			BigDecimal cadAcb = p.getCadAcb();
 			BigDecimal cadPnl = (cadMarketValue != null && cadAcb != null)
 					? money(cadMarketValue.subtract(cadAcb)) : null;
-			// USD market value: native for USD holdings, else convert the CAD value back to USD.
-			BigDecimal usdMarketValue = "USD".equalsIgnoreCase(p.getCostBasisCurrency()) ? marketValue
+			// USD market value: native when priced in USD, else convert the CAD value back to USD.
+			BigDecimal usdMarketValue = "USD".equalsIgnoreCase(priceCurrency) ? marketValue
 					: (cadMarketValue != null && isPositive(usdCad))
 							? money(cadMarketValue.divide(usdCad, 6, java.math.RoundingMode.HALF_UP)) : null;
+
+			// Friendly account name/currency from the label + owner (Joint/Solo + name) from account_meta.
+			AccountLabels.Parsed label = AccountLabels.parse(p.getAccount());
+			AccountMeta meta = ownerByKey.get(accountKey(p.getInstitution(), p.getAccount()));
+			String accountName = label.displayName();
+			String accountCurrency = label.currency() != null ? label.currency() : p.getCostBasisCurrency();
+			String ownerType = meta == null ? null : meta.getOwnerType();
+			String ownerName = meta == null ? null : meta.getOwnerName();
 
 			rows.add(new PositionValue(p.getTicker(), p.getCompanyName(), shares, price, marketValue,
 					costBasis, totalPnl, totalPnlPercent, prevClose, dayPnl, dayPnlPercent,
 					p.getCostBasisCurrency(), cadMarketValue, cadPnl, null, afterHours,
 					pp == null ? null : pp.asOf(), p.getInstitution(), p.getAccount(),
-					p.getId(), usdMarketValue, cadAcb, p.isFxEstimated()));
+					p.getId(), usdMarketValue, cadAcb, p.isFxEstimated(),
+					accountName, accountCurrency, ownerType, ownerName));
 
 			// Total value (and the weight base) is the sum of EVERY priced position — including
 			// FX-estimated ones (cadAcb null) — so weights sum to 100%. Cost only sums where the CAD
@@ -159,8 +191,17 @@ public class LivePortfolioService {
 						? r.withWeight(percent(r.cadMarketValue(), total)) : r)
 				.toList();
 
+		BigDecimal totalValueUsd = isPositive(usdCad)
+				? money(totalValueCad.divide(usdCad, 6, RoundingMode.HALF_UP)) : null;
 		return new PortfolioSnapshot(money(totalValueCad), money(totalCostCad),
-				money(totalValueCad.subtract(totalCostCad)), anyAfterHours, asOf, withWeights);
+				money(totalValueCad.subtract(totalCostCad)), totalValueUsd, anyAfterHours, asOf, withWeights);
+	}
+
+	/** Lookup key for account_meta: institution + account label, null-safe and case-insensitive. */
+	static String accountKey(String institution, String account) {
+		String inst = institution == null ? "" : institution.trim().toUpperCase();
+		String acct = account == null ? "" : account.trim().toUpperCase();
+		return inst + "|" + acct;
 	}
 
 	private static BigDecimal toCad(BigDecimal amount, String currency, BigDecimal usdCad) {
@@ -187,7 +228,7 @@ public class LivePortfolioService {
 		return v == null ? null : v.setScale(2, RoundingMode.HALF_UP);
 	}
 
-	/** Latest price for a ticker with its session + timestamp. */
-	record PricePoint(BigDecimal price, Instant asOf, boolean afterHours) {
+	/** Latest price for a ticker with its session + timestamp + quote currency (USD or CAD). */
+	record PricePoint(BigDecimal price, Instant asOf, boolean afterHours, String currency) {
 	}
 }

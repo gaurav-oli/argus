@@ -43,6 +43,10 @@ public class PortfolioImport {
 	@Column(name = "raw_cash", nullable = false)
 	private String rawCash = "[]";
 
+	/** Parsed per-account owner metadata, JSON array of {@link ParsedAccount}; applied on confirm. */
+	@Column(name = "raw_accounts", nullable = false)
+	private String rawAccounts = "[]";
+
 	/** Top-level parse note surfaced to the user (e.g. "no holdings found"); null when clean. */
 	private String message;
 
@@ -80,6 +84,14 @@ public class PortfolioImport {
 
 	public void setRawCash(String rawCash) {
 		this.rawCash = rawCash == null ? "[]" : rawCash;
+	}
+
+	public String getRawAccounts() {
+		return rawAccounts;
+	}
+
+	public void setRawAccounts(String rawAccounts) {
+		this.rawAccounts = rawAccounts == null ? "[]" : rawAccounts;
 	}
 
 	public void markConfirmed() {

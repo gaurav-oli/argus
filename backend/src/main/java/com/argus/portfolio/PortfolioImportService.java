@@ -33,6 +33,8 @@ public class PortfolioImportService {
 	};
 	private static final TypeReference<List<ParsedCash>> CASH_TYPE = new TypeReference<>() {
 	};
+	private static final TypeReference<List<ParsedAccount>> ACCOUNTS_TYPE = new TypeReference<>() {
+	};
 
 	private final StatementParser parser;
 	private final LlmStatementParser llmParser;
@@ -42,6 +44,7 @@ public class PortfolioImportService {
 	private final PositionAcbService acbService;
 	private final FxRateService fx;
 	private final CashService cashService;
+	private final AccountMetaRepository accountMeta;
 	private final org.springframework.context.ApplicationEventPublisher events;
 
 	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
@@ -51,6 +54,7 @@ public class PortfolioImportService {
 	public PortfolioImportService(StatementParser parser, LlmStatementParser llmParser,
 			PortfolioImportRepository imports, PositionRepository positions, PositionLotRepository lots,
 			PositionAcbService acbService, FxRateService fx, CashService cashService,
+			AccountMetaRepository accountMeta,
 			org.springframework.context.ApplicationEventPublisher events) {
 		this.parser = parser;
 		this.llmParser = llmParser;
@@ -60,6 +64,7 @@ public class PortfolioImportService {
 		this.acbService = acbService;
 		this.fx = fx;
 		this.cashService = cashService;
+		this.accountMeta = accountMeta;
 		this.events = events;
 	}
 
@@ -79,6 +84,7 @@ public class PortfolioImportService {
 		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
 		batch.setInstitution(institution);
 		batch.setRawCash(json.writeValueAsString(result.cash()));
+		batch.setRawAccounts(json.writeValueAsString(result.accounts()));
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
 				saved.getMessage(), result.holdings());
@@ -147,6 +153,11 @@ public class PortfolioImportService {
 		// Cash balances parsed from the statement → folded into the live total (set 0 removes).
 		for (ParsedCash c : readCash(batch.getRawCash())) {
 			cashService.set(c.account(), c.currency(), c.amount());
+		}
+
+		// Per-account owner metadata → upsert (keyed by institution + account label).
+		for (ParsedAccount a : readAccounts(batch.getRawAccounts())) {
+			upsertAccountMeta(institution, a);
 		}
 
 		batch.markConfirmed();
@@ -229,6 +240,27 @@ public class PortfolioImportService {
 
 	private List<ParsedCash> readCash(String rawCash) {
 		return rawCash == null || rawCash.isBlank() ? List.of() : json.readValue(rawCash, CASH_TYPE);
+	}
+
+	private List<ParsedAccount> readAccounts(String rawAccounts) {
+		return rawAccounts == null || rawAccounts.isBlank() ? List.of()
+				: json.readValue(rawAccounts, ACCOUNTS_TYPE);
+	}
+
+	/** Create or update the owner metadata for an account (keyed by institution + account label). */
+	private void upsertAccountMeta(String institution, ParsedAccount a) {
+		if (a.account() == null || a.account().isBlank()) {
+			return;
+		}
+		AccountMeta existing = accountMeta.findByInstitutionAndAccount(institution, a.account()).orElse(null);
+		if (existing == null) {
+			accountMeta.save(new AccountMeta(institution, a.account(), a.ownerType(), a.ownerName()));
+		}
+		else {
+			existing.setOwnerType(a.ownerType());
+			existing.setOwnerName(a.ownerName());
+			accountMeta.save(existing);
+		}
 	}
 
 	private List<ParsedHolding> read(String rawHoldings) {

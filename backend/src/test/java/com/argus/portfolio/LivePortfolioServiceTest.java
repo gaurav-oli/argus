@@ -33,8 +33,10 @@ class LivePortfolioServiceTest {
 	private final LivePushService livePush = mock(LivePushService.class);
 	// No cash in these valuation tests — a mock repo yields an empty list, so cash total is 0.
 	private final CashService cash = new CashService(mock(CashBalanceRepository.class));
+	// Mockito returns an empty list for findAll() by default → no owner enrichment in these tests.
+	private final AccountMetaRepository accountMeta = mock(AccountMetaRepository.class);
 	private final LivePortfolioService service =
-			new LivePortfolioService(positions, fx, new MarketClock(), livePush, cash);
+			new LivePortfolioService(positions, fx, new MarketClock(), livePush, cash, accountMeta);
 
 	private static final Instant REGULAR =
 			ZonedDateTime.of(LocalDate.of(2023, 6, 15), LocalTime.of(14, 0), ZoneId.of("America/New_York")).toInstant();
@@ -70,8 +72,49 @@ class LivePortfolioServiceTest {
 		assertNull(pv.dayPnl());          // no previous close recorded → day P&L unknown
 		assertNull(pv.previousClose());
 		assertEquals(0, snap.totalValueCad().compareTo(new BigDecimal("1620.00")));
+		assertEquals(0, snap.totalValueUsd().compareTo(new BigDecimal("1200.00"))); // 1620 / 1.35
 		assertEquals(0, snap.totalPnlCad().compareTo(new BigDecimal("270.00")));
 		assertFalse(snap.anyAfterHours());
+	}
+
+	@Test
+	void usStockInCadAccountConvertsAtFx() {
+		// A US stock held in a CAD account: cost basis is CAD, but the Finnhub price is USD. The market
+		// value must convert at USD/CAD (regression: previously the FX step was skipped for CAD-cost rows).
+		Position nvda = new Position("NVDA", "NVIDIA", new BigDecimal("100"), new BigDecimal("10000"), "CAD",
+				null, false, "pdf_import");
+		nvda.updateAcbCaches(new BigDecimal("100"), new BigDecimal("10000"), "CAD", new BigDecimal("10000"), false);
+		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(nvda));
+		when(fx.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.40")));
+
+		service.onPriceTick("NVDA", new BigDecimal("200"), REGULAR); // default USD (Finnhub path)
+
+		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
+		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		PortfolioSnapshot snap = captor.getValue();
+		PositionValue pv = snap.positions().get(0);
+
+		assertEquals(0, pv.marketValue().compareTo(new BigDecimal("20000.00")));      // 100 × 200 (USD)
+		assertEquals(0, pv.cadMarketValue().compareTo(new BigDecimal("28000.00")));   // × 1.40
+		assertEquals(0, snap.totalValueCad().compareTo(new BigDecimal("28000.00")));
+	}
+
+	@Test
+	void cadPricedTickIsNotConverted() {
+		// A TSX-listed ETF priced in CAD (the CanadianEtfPriceFeed path) must NOT be multiplied by FX.
+		Position vfv = new Position("VFV", "Vanguard S&P 500", new BigDecimal("10"), new BigDecimal("1500"),
+				"CAD", null, false, "pdf_import");
+		vfv.updateAcbCaches(new BigDecimal("10"), new BigDecimal("1500"), "CAD", new BigDecimal("1500"), false);
+		when(positions.findAllByOrderByTickerAsc()).thenReturn(List.of(vfv));
+		when(fx.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.40")));
+
+		service.onPriceTick("VFV", new BigDecimal("180"), REGULAR, "CAD");
+
+		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
+		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		PositionValue pv = captor.getValue().positions().get(0);
+
+		assertEquals(0, pv.cadMarketValue().compareTo(new BigDecimal("1800.00")));    // 10 × 180, no FX
 	}
 
 	@Test

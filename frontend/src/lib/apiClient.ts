@@ -367,13 +367,22 @@ export interface PositionValue {
   usdMarketValue: number | null;
   cadAcb: number | null;
   fxEstimated: boolean;
+  /** Friendly account name derived from the label, e.g. "RRSP (USD: WQD7)" / "Cash Account (CAD: WK3A)". */
+  accountName: string | null;
+  /** The account's own currency ("CAD" | "USD"). */
+  accountCurrency: string | null;
+  /** "Joint" | "Solo" (null when unknown). */
+  ownerType: string | null;
+  /** Holder name(s), e.g. "Gaurav Oli & Varsha Gupta" or "Gaurav Oli". */
+  ownerName: string | null;
 }
 
-/** Mirrors the backend `PortfolioSnapshot` record — totals in CAD. Pushed live on `/topic/portfolio`. */
+/** Mirrors the backend `PortfolioSnapshot` record — totals in CAD (plus a USD equivalent). Live on `/topic/portfolio`. */
 export interface PortfolioSnapshot {
   totalValueCad: number | null;
   totalCostCad: number | null;
   totalPnlCad: number | null;
+  totalValueUsd: number | null;
   anyAfterHours: boolean;
   asOf: string;
   positions: PositionValue[];
@@ -388,6 +397,12 @@ export interface CashBalanceView {
   account: string;
   currency: string;
   amount: number;
+  /** Friendly account name, e.g. "Cash Account (USD: WK3B)". */
+  accountName: string | null;
+  /** "Joint" | "Solo" (null when unknown). */
+  ownerType: string | null;
+  /** Holder name(s). */
+  ownerName: string | null;
 }
 
 export const getCash = (): Promise<CashBalanceView[]> => apiGet<CashBalanceView[]>("/api/portfolio/cash");
