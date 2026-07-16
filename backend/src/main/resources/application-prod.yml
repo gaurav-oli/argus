@@ -14,6 +14,17 @@ spring:
         options:
           model: ${ARGUS_BIG_MODEL:gemma4:26b}
           keep-alive: ${ARGUS_MODEL_KEEP_ALIVE:5m}
+          # Hard cap on generated tokens (Mini validation, 2026-07-16). Without one, worst-case
+          # latency is UNBOUNDED: the custom-imported gemma4 tags ship with no stop sequence
+          # (confirmed via a raw Ollama call bypassing the backend — docs/mac-mini-validation.md §3),
+          # so a trivial 3-word answer generated 556 tokens of runaway fake-conversation before
+          # happening to stop on its own, and some calls never returned at all (60-180s+, HTTP 000).
+          # A real grounded chat answer (portfolio + investor profile + calendar context) can
+          # legitimately need ~700-900 tokens — a lower cap (512, tried first) silently truncated
+          # genuine answers into emptiness rather than skipping past junk. At the measured
+          # ~12 tok/s, 1024 covers real answers with room to spare while still bounding the true
+          # worst case to roughly 85s instead of unbounded/never.
+          num-predict: ${ARGUS_MODEL_MAX_TOKENS:1024}
 
 argus:
   model:

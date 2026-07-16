@@ -100,16 +100,28 @@ and a running Redis — none fully exercisable on the dev MacBook.
       `Web push 'Your morning briefing' delivered to 1 device(s)` — confirmed on your phone.
 - [ ] `GET /api/briefing/latest` → dashboard **BriefingCard** rendering — visual, needs the browser/device.
 - [ ] The **08:00 America/Toronto** cron firing unattended — needs an overnight observation.
-- [x] **REGRESSION found 2026-07-16:** `POST /api/briefing/generate` now hangs **>60s with no response
-      at all** (`HTTP 000`), reproduced fresh after a backend restart (rules out a stuck permit from a
-      prior call). This is *worse* than the §1 CORRECTION's documented 35–55s junk-token latency — it no
-      longer completes within a reasonable window. Same symptom independently reproduced on portfolio
-      chat (§6) and persona generation (§13) in the same session — the local `gemma4:12b` build appears
-      to have degraded further, or the larger post-RBC-import context (44 positions vs 25) is pushing it
-      past whatever previously let it limp to completion. **The deterministic fallback path is
-      unverified** because the request never returns to trigger it — worth confirming whether the
-      fallback fires on eventual timeout/failure or whether the request truly never completes. Haiku
-      escalation (§7, §13) is unaffected and fast (~5s) — recommend leaning on it until the local model
+- [x] **ROOT-CAUSED 2026-07-16, mitigation shipped, not fully resolved.** Local-model calls
+      (briefing, portfolio chat, persona generation) were hanging 60–180s+ with **zero response**
+      (`HTTP 000`), reproduced fresh after a backend restart (rules out a stuck permit). Root cause,
+      confirmed with a raw Ollama call **bypassing the backend entirely**: the custom-imported
+      `gemma4` tags have no stop sequence, so generation is genuinely unbounded — a trivial 3-word
+      prompt ("Say hello") generated **556 tokens** of runaway fake-conversation before happening to
+      stop on its own; nothing bounds the worst case. **Shipped fix:** `spring.ai.ollama.chat.options.
+      num-predict` (new `ARGUS_MODEL_MAX_TOKENS`, default 1024) hard-caps generation — this
+      **converts the failure from unbounded/never-returns into a bounded, deterministic response**
+      every time (verified). **What it does NOT fix:** for the real, large production prompts
+      (full portfolio + investor profile + calendar grounding), the capped response can still come
+      back as `content: ""` — the model's token budget is being consumed without producing usable
+      visible text for prompts this size/shape, distinct from (and on top of) the raw stop-token bug.
+      A synthetic *smaller* multi-section prompt tested directly against Ollama **did** produce a
+      correct, well-grounded 782-token answer in 67s, so the model isn't fundamentally incapable —
+      something about the real prompt's actual size/formatting is triggering worse behavior than my
+      synthetic approximation. **Also found:** neither the backend nor the frontend has a safety net
+      for an empty local-model answer — it would currently reach the user as a blank chat bubble with
+      no error. Not fixed here (auto-falling-back to paid Haiku on empty/bad local output is a
+      cost/behavior decision, flagged for your call rather than wired in silently). **Practical
+      recommendation unchanged from §1's original decision:** Haiku escalation (§7, §13) is fast
+      (~5s) and reliable throughout all of this — keep leaning on it until the local model
       is replaced (already the accepted long-term plan per §1 CORRECTION).
 
 ## 4. General hardware/ops to confirm on the Mini

@@ -73,6 +73,10 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       ARGUS_BIG_MODEL: ${ARGUS_BIG_MODEL:-gemma4:26b}   # validated by Story 1.3 (2026-06-21)
       ARGUS_MODEL_KEEP_ALIVE: ${ARGUS_MODEL_KEEP_ALIVE:-5m}   # unload-when-idle (frees ~17GB)
+      # Hard cap on local-model generated tokens (Mini validation, 2026-07-16 — see application-prod.yml
+      # for the full rationale): the broken gemma4 template has no stop sequence, so without a cap
+      # worst-case latency is unbounded. 1024 covers a real grounded chat answer with room to spare.
+      ARGUS_MODEL_MAX_TOKENS: ${ARGUS_MODEL_MAX_TOKENS:-1024}
       # Investor staggered paper-trade horizons (argus.paper-investor.horizon-days-list). One leg per
       # horizon per thesis (7d legs give feedback within a week; 30/90 measure the longer timeframes).
       ARGUS_PAPER_INVESTOR_HORIZON_DAYS_LIST: ${PAPER_INVESTOR_HORIZON_DAYS_LIST:-7,30,90}
