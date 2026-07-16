@@ -30,6 +30,12 @@ public class AgentSignalGatherer {
 
 	private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AgentSignalGatherer.class);
 
+	/**
+	 * Net bullish/bearish skew must exceed this deadzone before a source calls a direction; inside it the
+	 * signal reads NEUTRAL. Shared by the social and internet signals so their thresholds can't drift.
+	 */
+	private static final double SIGNAL_DIRECTION_DEADZONE = 0.15;
+
 	private static final Duration NEWS_WINDOW = Duration.ofDays(7);
 	private static final int FULL_COVERAGE_ARTICLES = 5;
 	private static final Duration SOCIAL_WINDOW = Duration.ofDays(3);
@@ -115,8 +121,8 @@ public class AgentSignalGatherer {
 			return Optional.empty(); // attention is steady and undirected — nothing to add
 		}
 		double net = scored == 0 ? 0 : (double) (bull - bear) / scored;
-		SignalDirection dir = net > 0.15 ? SignalDirection.BULLISH
-				: net < -0.15 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
+		SignalDirection dir = net > SIGNAL_DIRECTION_DEADZONE ? SignalDirection.BULLISH
+				: net < -SIGNAL_DIRECTION_DEADZONE ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
 		double conviction = Math.min(1.0, hn / 10.0) * Math.abs(net);
 		double spikeBoost = spike ? Math.min(1.0, ratio - 1.0) : 0;
 		double weight = Math.min(INTERNET_MAX_WEIGHT, 0.1 + 0.2 * conviction + 0.1 * spikeBoost);
@@ -169,8 +175,8 @@ public class AgentSignalGatherer {
 			return Optional.empty(); // too little crowd signal to be meaningful
 		}
 		double net = (double) (bull - bear) / scored; // -1 (all bearish) .. +1 (all bullish)
-		SignalDirection dir = net > 0.15 ? SignalDirection.BULLISH
-				: net < -0.15 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
+		SignalDirection dir = net > SIGNAL_DIRECTION_DEADZONE ? SignalDirection.BULLISH
+				: net < -SIGNAL_DIRECTION_DEADZONE ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
 		double volume = Math.min(1.0, (double) total / SOCIAL_FULL_VOLUME);
 		double weight = SOCIAL_MAX_WEIGHT * volume * (0.4 + 0.6 * Math.abs(net));
 		String rationale = String.format("Crowd: %d bullish / %d bearish of %d posts (net %+.0f%%)",
