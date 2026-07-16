@@ -229,6 +229,20 @@ colors only render in the running app, so:
       inputs are not yet included."
 [Source: health-score band unification; `frontend/src/lib/scoreBands.ts`, `HealthScoreRing.tsx`, `HealthScoreBadge.tsx`, `HealthScoreBreakdown.tsx`]
 
+## 13. Personas — consensus summary + Canadian lens (Epic 7, Stories 7.4/7.5)  ⏳ real-model check on the Mini
+Logic verified on the MacBook (`CanadianContextServiceTest` 4/4; `tsc`/`eslint` **green**), but persona
+verdicts come from the local BIG model (gemma) — quality/format only observable on the running stack:
+- [ ] **Consensus summary (7.4):** each rec card's "What the personas think" shows a one-line consensus
+      derived from the four stances (e.g. "leaning support (3 agree, 1 caution)") coloured by the lean;
+      the 🔄 warming state polls then fills in.
+- [ ] **Canadian lens (7.5, FR-34):** for a **US-listed** rec (e.g. NVDA/AAPL) the Canadian persona's
+      verdict actually **cites the CAD-equivalent** of the price target (live BoC USD/CAD) **and** the
+      account-specific US-withholding note (15%, waived in RRSP, unrecoverable in TFSA) — not invented
+      numbers. For a **CAD-listed** name (e.g. ZGLD/XQQ) it should say no US withholding applies.
+- [ ] The CAD-equivalent tracks the live rate (sanity-check vs BoC), and unpriced names (e.g. SPCX) still
+      surface the US-listed withholding note (the safe default).
+[Source: Epic 7 personas; `com.argus.persona` (PersonaService, CanadianContextService), `RecommendationCards.tsx`]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._
