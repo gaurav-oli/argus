@@ -221,6 +221,8 @@ function PersonaTakes({ recId }: { recId: number }) {
     takes.length > 0 &&
     takes.every((t) => t.stance === "CAUTION" && t.rationale.includes("warming up"));
 
+  const consensus = takes && takes.length > 0 && !warming ? summarizeConsensus(takes) : null;
+
   return (
     <div className="border-t border-border pt-2">
       <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
@@ -231,7 +233,13 @@ function PersonaTakes({ recId }: { recId: number }) {
       ) : takes.length === 0 ? (
         <p className="text-[11px] text-text-secondary">No persona takes yet.</p>
       ) : (
-        <ul className="flex flex-col gap-1.5">
+        <>
+          {consensus && (
+            <p className="mb-1.5 text-[11px] font-medium" style={{ color: stanceColor(consensus.lean) }}>
+              Consensus: {consensus.label}
+            </p>
+          )}
+          <ul className="flex flex-col gap-1.5">
           {takes.map((t) => (
             <li key={t.key} className="flex items-start gap-2 text-xs">
               <span className="mt-px w-24 shrink-0 font-medium text-text-primary" title={t.lens}>
@@ -246,10 +254,41 @@ function PersonaTakes({ recId }: { recId: number }) {
               <span className="text-text-secondary">{t.rationale}</span>
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
     </div>
   );
+}
+
+/**
+ * One-line consensus over the four persona verdicts, derived locally from the stances (no extra model
+ * call). The lean is the majority stance — AGREE/DISAGREE win over CAUTION on a tie, and an even
+ * agree/disagree split reads as "split".
+ */
+function summarizeConsensus(takes: PersonaTake[]): { label: string; lean: string } {
+  const agree = takes.filter((t) => t.stance === "AGREE").length;
+  const disagree = takes.filter((t) => t.stance === "DISAGREE").length;
+  const caution = takes.filter((t) => t.stance === "CAUTION").length;
+  const parts = [
+    agree > 0 ? `${agree} agree` : null,
+    caution > 0 ? `${caution} caution` : null,
+    disagree > 0 ? `${disagree} disagree` : null,
+  ].filter(Boolean);
+  let lean = "CAUTION";
+  let verdict = "mixed";
+  if (agree > disagree) {
+    lean = "AGREE";
+    verdict = agree === takes.length ? "unanimous support" : "leaning support";
+  } else if (disagree > agree) {
+    lean = "DISAGREE";
+    verdict = disagree === takes.length ? "unanimous against" : "leaning against";
+  } else if (agree === disagree && agree > 0) {
+    verdict = "split";
+  } else {
+    verdict = "cautious";
+  }
+  return { label: `${verdict} (${parts.join(", ")})`, lean };
 }
 
 function prettyState(state: string): string {

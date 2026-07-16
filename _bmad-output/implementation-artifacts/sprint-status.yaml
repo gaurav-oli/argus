@@ -113,7 +113,7 @@ development_status:
   7-1-recommendation-chat: done
   7-2-portfolio-chat: done
   7-3-haiku-escalation: done
-  7-4-four-personas: backlog
+  7-4-four-personas: done          # com.argus.persona (Buffett/Lynch/Devil's-Advocate/Canadian) → local BIG-tier verdicts (AGREE/CAUTION/DISAGREE) via PersonaService, cached in persona_verdicts (V25), warmer polling; "What the personas think" on each rec card with a locally-derived consensus summary. tsc/eslint green. Real gemma verdict quality → mac-mini-validation.md.
   7-5-canadian-investor-persona: backlog
   epic-7-retrospective: optional
 
