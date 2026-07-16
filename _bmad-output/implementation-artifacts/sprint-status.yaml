@@ -36,7 +36,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-17
-last_updated: 2026-07-06
+last_updated: 2026-07-15
 project: ProjectX
 project_key: NOKEY
 tracking_system: file-system
@@ -109,11 +109,12 @@ development_status:
   epic-6-retrospective: optional
 
   # Epic 7: Conversational AI & Personas
-  epic-7: done
+  epic-7: in-progress   # reopened: 7-6 (persisted investor profile) added as a follow-on to 7-5
   7-1-recommendation-chat: done
   7-2-portfolio-chat: done
   7-3-haiku-escalation: done
   7-4-four-personas: done          # com.argus.persona (Buffett/Lynch/Devil's-Advocate/Canadian) → local BIG-tier verdicts (AGREE/CAUTION/DISAGREE) via PersonaService, cached in persona_verdicts (V25), warmer polling; "What the personas think" on each rec card with a locally-derived consensus summary. tsc/eslint green. Real gemma verdict quality → mac-mini-validation.md.
+  7-6-persisted-investor-profile: ready-for-dev   # NEW follow-on to 7-5: single-row investor_profile entity (V44) capturing risk tolerance/goal/target + editable Profile-page card; InvestorProfileService & the Canadian persona source residency + preferences from it (config fallback). Spec: 7-6-persisted-investor-profile.md. Learned-patterns + active goal-tracker alerts are out of scope.
   7-5-canadian-investor-persona: done   # FR-34 Canadian lens: CanadianContextService grounds the Canadian persona with the live BoC USD/CAD rate, the CAD-equivalent of a US-listed rec's price target, and deterministic TFSA/RRSP/RESP eligibility + US 15% dividend-withholding facts (waived in RRSP, unrecoverable in TFSA). Fed into PersonaService's prompt; CanadianContextServiceTest 4/4. Persisted/editable profile (risk tolerance, goals) remains future work (see InvestorProfileService). Real gemma verdict quality → mac-mini-validation.md.
   epic-7-retrospective: optional
 
