@@ -33,11 +33,6 @@ public class ConversationService {
 	private static final int MAX_RECENT_RECS = 10;
 	private static final ZoneId TORONTO = ZoneId.of("America/Toronto");
 
-	/** Until a persisted investor profile exists (Story 7.5 + a profile entity), ground from a constant. */
-	private static final String INVESTOR_PROFILE =
-			"Canadian solo investor; home currency CAD; holds US- and Canada-listed equities; "
-					+ "TFSA/RRSP tax context matters (US dividend withholding, contribution room).";
-
 	private static final String SYSTEM_FRAMING = """
 			You are Argus, a personal investment assistant. Answer the user's question using ONLY the \
 			context below about the user's portfolio and the recommendation(s) shown. Cite the \
@@ -52,11 +47,12 @@ public class ConversationService {
 	private final PortfolioContextAssembler portfolioAssembler;
 	private final RecommendationService recommendations;
 	private final CalendarEventRepository calendarEvents;
+	private final InvestorProfileService investorProfile;
 
 	public ConversationService(ModelGateway modelGateway, LivePortfolioService livePortfolio,
 			HealthScoreService healthScore, RecommendationContextAssembler recommendationAssembler,
 			PortfolioContextAssembler portfolioAssembler, RecommendationService recommendations,
-			CalendarEventRepository calendarEvents) {
+			CalendarEventRepository calendarEvents, InvestorProfileService investorProfile) {
 		this.modelGateway = modelGateway;
 		this.livePortfolio = livePortfolio;
 		this.healthScore = healthScore;
@@ -64,6 +60,7 @@ public class ConversationService {
 		this.portfolioAssembler = portfolioAssembler;
 		this.recommendations = recommendations;
 		this.calendarEvents = calendarEvents;
+		this.investorProfile = investorProfile;
 	}
 
 	public String askAboutRecommendation(Recommendation rec, List<ChatMessage> messages) {
@@ -97,7 +94,7 @@ public class ConversationService {
 				.findByEventDateBetweenOrderByEventDateAsc(today, today.plusDays(CALENDAR_WINDOW_DAYS));
 		List<Recommendation> recentRecs = recommendations.recent().stream().limit(MAX_RECENT_RECS).toList();
 		String grounding = portfolioAssembler.assemble(portfolio, health, events, recentRecs,
-				INVESTOR_PROFILE, today, deeper);
+				investorProfile.describe(), today, deeper);
 		return answer(grounding, messages, deeper);
 	}
 

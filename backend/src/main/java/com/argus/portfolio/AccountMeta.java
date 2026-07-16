@@ -10,9 +10,11 @@ import java.time.Instant;
 
 /**
  * Owner identity for a brokerage account (Portfolio-tab detail), keyed by (institution, account
- * label). Parsed from the statement header on import — {@code ownerType} is {@code Joint} or
- * {@code Solo} and {@code ownerName} the holder name(s). The account number/type/currency live in
- * the {@code account} label itself (see {@link AccountLabels}); this row adds only who owns it.
+ * label). Parsed from the statement header on import — {@code ownerType} is {@code Joint},
+ * {@code Solo} or {@code Corporate} and {@code ownerName} the holder name(s). {@code accountType} is
+ * the normalized registration type (TFSA/RRSP/RESP/Cash/Corporate/…) used to group accounts across
+ * banks; it's stored explicitly because some banks (e.g. RBC) don't carry the type in the account
+ * label, so {@link AccountLabels}-from-label parsing isn't enough. Null when the parser couldn't tell.
  */
 @Entity
 @Table(name = "account_meta")
@@ -33,6 +35,9 @@ public class AccountMeta {
 	@Column(name = "owner_name")
 	private String ownerName;
 
+	@Column(name = "account_type")
+	private String accountType;
+
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt = Instant.now();
 
@@ -40,11 +45,13 @@ public class AccountMeta {
 		// JPA
 	}
 
-	public AccountMeta(String institution, String account, String ownerType, String ownerName) {
+	public AccountMeta(String institution, String account, String ownerType, String ownerName,
+			String accountType) {
 		this.institution = institution;
 		this.account = account;
 		this.ownerType = ownerType;
 		this.ownerName = ownerName;
+		this.accountType = accountType;
 	}
 
 	public Long getId() {
@@ -73,6 +80,15 @@ public class AccountMeta {
 
 	public void setOwnerName(String ownerName) {
 		this.ownerName = ownerName;
+		this.updatedAt = Instant.now();
+	}
+
+	public String getAccountType() {
+		return accountType;
+	}
+
+	public void setAccountType(String accountType) {
+		this.accountType = accountType;
 		this.updatedAt = Instant.now();
 	}
 }

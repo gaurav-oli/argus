@@ -156,13 +156,17 @@ public class LivePortfolioService {
 			String accountCurrency = label.currency() != null ? label.currency() : p.getCostBasisCurrency();
 			String ownerType = meta == null ? null : meta.getOwnerType();
 			String ownerName = meta == null ? null : meta.getOwnerName();
+			// Prefer the stored (import-time) type; fall back to normalizing the label for accounts
+			// imported before account_type existed or where the parser couldn't tell.
+			String accountType = meta != null && meta.getAccountType() != null ? meta.getAccountType()
+					: AccountLabels.canonicalType(label.accountType());
 
 			rows.add(new PositionValue(p.getTicker(), p.getCompanyName(), shares, price, marketValue,
 					costBasis, totalPnl, totalPnlPercent, prevClose, dayPnl, dayPnlPercent,
 					p.getCostBasisCurrency(), cadMarketValue, cadPnl, null, afterHours,
 					pp == null ? null : pp.asOf(), p.getInstitution(), p.getAccount(),
 					p.getId(), usdMarketValue, cadAcb, p.isFxEstimated(),
-					accountName, accountCurrency, ownerType, ownerName));
+					accountName, accountCurrency, ownerType, ownerName, accountType));
 
 			// Total value (and the weight base) is the sum of EVERY priced position — including
 			// FX-estimated ones (cadAcb null) — so weights sum to 100%. Cost only sums where the CAD

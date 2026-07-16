@@ -54,10 +54,10 @@ public class BriefingController {
 		return MarketPulseView.from(r.pulse(), r.hasUpdates());
 	}
 
-	public record BriefingView(Long id, String headline, String body, Instant generatedAt) {
+	public record BriefingView(Long id, String headline, String body, Instant generatedAt, boolean fallback) {
 
 		static BriefingView from(Briefing b) {
-			return new BriefingView(b.getId(), b.getHeadline(), b.getBody(), b.getGeneratedAt());
+			return new BriefingView(b.getId(), b.getHeadline(), b.getBody(), b.getGeneratedAt(), b.isFallback());
 		}
 	}
 

@@ -82,6 +82,11 @@ export function HealthScoreBreakdown({ result, onClose }: { result: HealthScoreR
             ))
           )}
         </div>
+
+        <p className="mt-3 border-t border-border/60 pt-2 text-[11px] leading-relaxed text-text-secondary/80">
+          Rule-based score (concentration, diversification &amp; data quality). Agent-sentiment and
+          open-risk inputs are not yet included.
+        </p>
       </div>
     </>
   );

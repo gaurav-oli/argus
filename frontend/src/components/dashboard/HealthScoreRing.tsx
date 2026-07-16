@@ -6,6 +6,7 @@ import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { getHealthScore, type HealthScoreResult } from "@/lib/apiClient";
+import { healthBand } from "@/lib/scoreBands";
 import { useMounted } from "@/lib/useMounted";
 
 /**
@@ -26,9 +27,9 @@ export function HealthScoreRing() {
   }, []);
 
   const score = health?.score ?? 0;
-  const label = score >= 75 ? "Healthy" : score >= 50 ? "Balanced" : "At risk";
-  const color =
-    score >= 75 ? "var(--chart-gains)" : score >= 50 ? "var(--chart-accent)" : "var(--color-warning)";
+  const band = healthBand(score);
+  const label = band.label;
+  const color = band.colorVar;
   const data = [{ name: "score", value: score, fill: color }];
 
   return (

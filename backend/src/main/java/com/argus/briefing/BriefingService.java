@@ -103,10 +103,11 @@ public class BriefingService {
 			log.warn("Briefing model call failed ({}) — using deterministic fallback", ex.getMessage());
 		}
 
-		String headline = parsed != null ? parsed.headline() : fallbackHeadline(facts);
-		String body = parsed != null ? parsed.body() : fallbackBody(facts);
+		boolean usedFallback = parsed == null;
+		String headline = usedFallback ? fallbackHeadline(facts) : parsed.headline();
+		String body = usedFallback ? fallbackBody(facts) : parsed.body();
 
-		Briefing saved = briefings.save(new Briefing(headline, body));
+		Briefing saved = briefings.save(new Briefing(headline, body, usedFallback));
 		try {
 			markDeferredDelivered(facts); // the held NORMAL alerts have now been carried
 		} catch (RuntimeException ex) {

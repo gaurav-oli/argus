@@ -20,6 +20,7 @@ import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { riskColorClass } from "@/lib/scoreBands";
 import { useEffect, useState } from "react";
 
 /**
@@ -474,9 +475,7 @@ function tier(t: string): { text: string; bar: string } {
 }
 
 function riskColor(score: number): string {
-  if (score >= 70) return "text-losses";
-  if (score >= 40) return "text-warning";
-  return "text-text-primary";
+  return riskColorClass(score);
 }
 
 function timeAgo(iso: string): string {

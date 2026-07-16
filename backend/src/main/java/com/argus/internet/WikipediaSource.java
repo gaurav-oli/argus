@@ -35,7 +35,7 @@ public class WikipediaSource implements InternetSource {
 	private static final Logger log = LoggerFactory.getLogger(WikipediaSource.class);
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 	private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyyMMdd");
-	private static final String UA = "Argus/1.0 (argus@example.com)";
+	private static final String UA = "Argus/1.0 (gaurav.oli@brainridgeconsulting.com)";
 	private static final int LOOKBACK_DAYS = 14;
 
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();

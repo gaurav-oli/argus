@@ -9,7 +9,7 @@ import {
   type PositionValue,
 } from "@/lib/apiClient";
 import { subscribeToTopic } from "@/lib/wsClient";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 const money = (n: number | null) =>
   n == null ? "—" : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -29,6 +29,7 @@ type AccountGroup = {
   currency: string; // "CAD" | "USD"
   ownerType: string | null;
   ownerName: string | null;
+  accountType: string | null; // "TFSA" | "RRSP" | "Cash" | "Corporate" | … (null when unknown)
   positions: PositionValue[];
   cash: CashBalanceView[];
 };
@@ -38,6 +39,22 @@ type OwnerGroup = {
   ownerType: string | null;
   ownerName: string | null;
   accounts: AccountGroup[];
+};
+
+/** One (owner + account type) rollup — the same registration combined across banks, e.g. an owner's
+ * NBDB TFSA + RBC TFSA. All amounts are CAD sums over the member accounts. Securities and cash are
+ * kept separate: invested/gain-loss cover securities only (cash has no cost or P&L). */
+type TypeRollup = {
+  key: string;
+  ownerType: string | null;
+  ownerName: string | null;
+  accountType: string;
+  institutions: string[];
+  accounts: AccountGroup[];
+  invested: number; // Σ CAD ACB (book cost of securities)
+  marketCad: number; // Σ CAD market value of securities
+  cashCad: number; // Σ CAD uninvested cash
+  pnlCad: number; // marketCad − invested (securities P&L)
 };
 
 /**
@@ -100,11 +117,130 @@ export function HoldingsTable() {
         </span>
       </div>
 
+      <AccountTypeRollup owners={owners} fx={fx} />
+
       {owners.map((o) => (
         <OwnerSection key={o.key} owner={o} fx={fx} onRemoveCash={removeCash} />
       ))}
 
       <CashSummary cash={cash} fx={fx} onRemove={removeCash} />
+    </div>
+  );
+}
+
+const signedMoney = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pnlClass = (n: number) => (n >= 0 ? "text-gains" : "text-losses");
+
+/**
+ * Combined-by-account-type rollup (Multi-Bank Holdings). For each owner, the same registration type
+ * is summed ACROSS banks — e.g. an owner's NBDB TFSA + RBC TFSA shown as one TFSA line with total
+ * invested and gain/loss (CAD). Owners never merge (a corporation stays its own owner), so nothing
+ * crosses an ownership boundary. Each type row expands to the underlying per-bank accounts.
+ */
+function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const ownerRollups = owners
+    .map((o) => ({ owner: o, types: rollupTypes(o, fx) }))
+    .filter((r) => r.types.length > 0);
+  if (ownerRollups.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h4 className="text-sm font-semibold text-text-primary">Combined by account type</h4>
+      <p className="text-xs text-text-secondary">
+        Same registration summed across banks, within each owner (in CAD). Invested and gain/loss cover
+        securities; uninvested cash is shown separately.
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full min-w-[720px] text-left text-sm tabular-nums">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wide text-text-secondary">
+              <th className="px-3 py-2 font-medium">Owner / Type</th>
+              <th className="hidden px-3 py-2 font-medium sm:table-cell">Banks</th>
+              <th className="px-3 py-2 text-right font-medium">Invested ≈CAD</th>
+              <th className="px-3 py-2 text-right font-medium">Market ≈CAD</th>
+              <th className="px-3 py-2 text-right font-medium">Cash ≈CAD</th>
+              <th className="px-3 py-2 text-right font-medium">Gain / Loss</th>
+            </tr>
+          </thead>
+          {ownerRollups.map(({ owner, types }) => (
+            <tbody key={owner.key}>
+              <tr className="border-t border-border bg-[var(--hover-wash)]">
+                <td className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-secondary" colSpan={6}>
+                  {owner.ownerType ? `${owner.ownerType} · ` : ""}
+                  {owner.ownerName ?? "Unassigned"}
+                </td>
+              </tr>
+              {types.map((r) => {
+                const pct = r.invested > 0 ? (r.pnlCad / r.invested) * 100 : null;
+                const isOpen = expanded.has(r.key);
+                const canExpand = r.accounts.length > 1 || r.institutions.length > 1;
+                return (
+                  <Fragment key={r.key}>
+                    <tr
+                      className={`border-t border-border/60 ${canExpand ? "cursor-pointer hover:bg-[var(--hover-wash)]" : ""}`}
+                      onClick={canExpand ? () => toggle(r.key) : undefined}
+                    >
+                      <td className="px-3 py-2 font-medium text-text-primary">
+                        {canExpand && (
+                          <span className="mr-1.5 inline-block w-2 text-text-secondary">{isOpen ? "▾" : "▸"}</span>
+                        )}
+                        {r.accountType}
+                      </td>
+                      <td className="hidden px-3 py-2 sm:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {r.institutions.length > 0
+                            ? r.institutions.map((inst) => (
+                                <Pill key={inst} muted>
+                                  {inst}
+                                </Pill>
+                              ))
+                            : <span className="text-text-secondary">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-text-primary">{money(r.invested)}</td>
+                      <td className="px-3 py-2 text-right text-text-primary">{money(r.marketCad)}</td>
+                      <td className="px-3 py-2 text-right text-text-secondary">{r.cashCad > 0 ? money(r.cashCad) : "—"}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${pnlClass(r.pnlCad)}`}>
+                        {signedMoney(r.pnlCad)}
+                        {pct != null && <span className="ml-1 text-[11px]">({pct >= 0 ? "+" : ""}{pct.toFixed(2)}%)</span>}
+                      </td>
+                    </tr>
+                    {isOpen &&
+                      r.accounts.map((a) => {
+                        const t = accountCad(a, fx);
+                        const apct = t.invested > 0 ? (t.pnl / t.invested) * 100 : null;
+                        return (
+                          <tr key={a.key} className="border-t border-border/40 bg-surface text-[13px]">
+                            <td className="px-3 py-1.5 pl-8 text-text-secondary">{a.accountName}</td>
+                            <td className="hidden px-3 py-1.5 sm:table-cell">
+                              {a.institution ? <Pill muted>{a.institution}</Pill> : <span className="text-text-secondary">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.invested)}</td>
+                            <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.market)}</td>
+                            <td className="px-3 py-1.5 text-right text-text-secondary">{t.cash > 0 ? money(t.cash) : "—"}</td>
+                            <td className={`px-3 py-1.5 text-right ${pnlClass(t.pnl)}`}>
+                              {signedMoney(t.pnl)}
+                              {apct != null && <span className="ml-1 text-[11px]">({apct >= 0 ? "+" : ""}{apct.toFixed(2)}%)</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          ))}
+        </table>
+      </div>
     </div>
   );
 }
@@ -363,6 +499,61 @@ function accountTotals(a: AccountGroup, fx: number): { native: number; cad: numb
   return { native: a.currency === "CAD" ? cad : usd, cad, usd };
 }
 
+/** CAD book cost / market value / gain-loss (securities) plus uninvested cash for one account. */
+function accountCad(a: AccountGroup, fx: number): { invested: number; market: number; pnl: number; cash: number } {
+  let invested = 0;
+  let market = 0;
+  let pnl = 0;
+  for (const p of a.positions) {
+    invested += p.cadAcb ?? 0;
+    market += p.cadMarketValue ?? 0;
+    pnl += p.cadPnl ?? 0;
+  }
+  let cash = 0;
+  for (const c of a.cash) {
+    cash += c.currency === "CAD" ? c.amount : c.amount * fx;
+  }
+  return { invested, market, pnl, cash };
+}
+
+/**
+ * Combine an owner's accounts by registration type across banks — e.g. their NBDB TFSA + RBC TFSA
+ * into a single TFSA rollup. Sums stay in CAD (the common currency) so cross-currency accounts (a
+ * dual-currency RBC account's CAD + USD sides) add up. Accounts whose type is unknown fall into an
+ * "Other" bucket. Sorted by market value (securities + cash), largest first.
+ */
+function rollupTypes(owner: OwnerGroup, fx: number): TypeRollup[] {
+  const byType = new Map<string, TypeRollup>();
+  for (const a of owner.accounts) {
+    const type = a.accountType ?? "Other";
+    const key = `${owner.key}|${type}`;
+    let r = byType.get(key);
+    if (!r) {
+      r = {
+        key,
+        ownerType: owner.ownerType,
+        ownerName: owner.ownerName,
+        accountType: type,
+        institutions: [],
+        accounts: [],
+        invested: 0,
+        marketCad: 0,
+        cashCad: 0,
+        pnlCad: 0,
+      };
+      byType.set(key, r);
+    }
+    r.accounts.push(a);
+    if (a.institution && !r.institutions.includes(a.institution)) r.institutions.push(a.institution);
+    const t = accountCad(a, fx);
+    r.invested += t.invested;
+    r.marketCad += t.market;
+    r.cashCad += t.cash;
+    r.pnlCad += t.pnl;
+  }
+  return [...byType.values()].sort((x, y) => y.marketCad + y.cashCad - (x.marketCad + x.cashCad));
+}
+
 /** Build owner → account groups from live positions + cash. Joint owners sort first. */
 function groupByOwner(positions: PositionValue[], cash: CashBalanceView[]): OwnerGroup[] {
   const accounts = new Map<string, AccountGroup>();
@@ -377,6 +568,7 @@ function groupByOwner(positions: PositionValue[], cash: CashBalanceView[]): Owne
     currency: string | null,
     ownerType: string | null,
     ownerName: string | null,
+    accountType: string | null,
   ): AccountGroup => {
     const key = accountKey(institution, account);
     let g = accounts.get(key);
@@ -388,19 +580,21 @@ function groupByOwner(positions: PositionValue[], cash: CashBalanceView[]): Owne
         currency: currency ?? "CAD",
         ownerType,
         ownerName,
+        accountType,
         positions: [],
         cash: [],
       };
       accounts.set(key, g);
     }
-    // Owner/name can arrive first from whichever row; keep the first non-null.
+    // Owner/name/type can arrive first from whichever row; keep the first non-null.
     if (!g.ownerName && ownerName) g.ownerName = ownerName;
     if (!g.ownerType && ownerType) g.ownerType = ownerType;
+    if (!g.accountType && accountType) g.accountType = accountType;
     return g;
   };
 
   for (const p of positions) {
-    ensureAccount(p.institution, p.account, p.accountName, p.accountCurrency, p.ownerType, p.ownerName).positions.push(p);
+    ensureAccount(p.institution, p.account, p.accountName, p.accountCurrency, p.ownerType, p.ownerName, p.accountType).positions.push(p);
   }
   // Cash carries no institution; match an existing account by label, else create an institution-less one.
   for (const c of cash) {
@@ -410,7 +604,7 @@ function groupByOwner(positions: PositionValue[], cash: CashBalanceView[]): Owne
       if (!existing.ownerName && c.ownerName) existing.ownerName = c.ownerName;
       if (!existing.ownerType && c.ownerType) existing.ownerType = c.ownerType;
     } else {
-      ensureAccount(null, c.account, c.accountName, c.currency, c.ownerType, c.ownerName).cash.push(c);
+      ensureAccount(null, c.account, c.accountName, c.currency, c.ownerType, c.ownerName, null).cash.push(c);
     }
   }
 

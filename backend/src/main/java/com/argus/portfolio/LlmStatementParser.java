@@ -35,13 +35,25 @@ public class LlmStatementParser {
 			contain MULTIPLE accounts and MULTIPLE statement periods (dates).
 
 			Extract the CURRENT holdings AND the cash balances as JSON. Rules:
-			- If the same account appears for more than one statement date, use ONLY the most recent date.
+			- If the same account appears for more than one statement DATE, use ONLY the most recent date.
+			- DUAL-CURRENCY ACCOUNTS: some brokerages (e.g. RBC Direct Investing) split ONE account into two
+			  side-by-side sub-statements for the SAME date — a Canadian-dollar side ("Cdn. Dollar Statement"
+			  / "…(CDN$)") and a US-dollar side ("U.S. Dollar Statement" / "…(U.S.$)"), each with its own
+			  Asset Summary, Asset Review holdings, and cash balance. These are NOT duplicates and NOT
+			  different dates — extract BOTH sides. The CAD-side securities/cash are "CAD"; the USD-side
+			  securities/cash are "USD". One side may be empty ($0) while the other holds everything — still
+			  return whatever the non-empty side holds. Give the two sides DISTINCT account labels that differ
+			  only by currency (e.g. "64079 CAD RRSP" and "64079 USD RRSP"), but the SAME owner and the SAME
+			  accountType.
 			- Include ALL accounts and account types (Cash, TFSA, RRSP, RESP, etc.).
-			- "holdings": real security positions only. EXCLUDE tax/GST lines, FX-rate lines, activity and
-			  transaction history, dividends, and any "Total" rows.
-			- "cash": the uninvested CASH / money-market / sweep balance for each account that holds cash
-			  (the account's cash, not invested in securities). One entry per account; skip $0 / no-cash
-			  accounts. Use the cash amount in that account's currency.
+			- "holdings": real security positions only, listed under ANY asset-class heading (Common Shares,
+			  Preferred Shares, Foreign Securities, Mutual Funds, "Other", ADRs, etc. — include them all).
+			  EXCLUDE tax/GST lines, FX-rate lines, activity and transaction history, dividends, and any
+			  "Total"/"Total Value of…" subtotal rows.
+			- "cash": the uninvested CASH / money-market / sweep balance for each account SIDE that holds cash
+			  (the account's cash, not invested in securities). One entry per account label (so a dual-currency
+			  account can have a CAD cash entry AND a USD cash entry); skip $0 / no-cash sides. Use the cash
+			  amount in that side's currency.
 			- "ticker" must be the exchange symbol (e.g. NVDA, TSLA, VFV, XQQ), NOT the company name. The
 			  symbol may be glued to the end of the company name in the text.
 			- "shares" is the quantity held.
@@ -49,18 +61,29 @@ public class LlmStatementParser {
 			- "currency" is the account's currency: "CAD" or "USD".
 			- "account" is a short label for the account, combining the account number and type when
 			  available, e.g. "687WK3-B USD Cash", "RRSP (USD)", "TFSA", "Family RESP". Use the SAME label
-			  for a holding and the cash in the same account.
+			  for a holding and the cash in the same account. If the type is NOT in the account-number line
+			  but appears in the statement HEADER/title (e.g. "TFSA Statement", "RRSP Statement", or
+			  "Cdn. Dollar Statement"/"US Dollar Statement" which mean a Cash / non-registered account),
+			  fold that type and the statement currency into the label, e.g. "68511 CAD TFSA".
 			- If the same security is held in more than one account, return it once per account.
-			- "accounts": one entry per DISTINCT account, describing who owns it (from the account holder
-			  name(s) in that account's statement header). "ownerType" is "Joint" when the header lists two
-			  holders (e.g. two names, "OR", "JTWROS", "joint"), otherwise "Solo". "ownerName" is the
-			  holder name(s), title-cased, e.g. "Gaurav Oli & Varsha Gupta" for joint or "Gaurav Oli" for
-			  solo. Use the SAME "account" label as the holdings/cash for that account.
+			- "accounts": one entry per DISTINCT account, describing who owns it and its registration type.
+			  * "ownerType": "Joint" when the header lists two individual holders (two names, "OR", "JTWROS",
+			    "joint"); "Corporate" when the holder is a company/business (name contains INC, LTD, CORP,
+			    LIMITED, INCORPORATED, or a numbered company like "10264083 CANADA INC."); otherwise "Solo".
+			  * "ownerName": the holder name(s), title-cased — for an individual "Gaurav Oli", for joint
+			    "Gaurav Oli & Varsha Gupta", for a corporation the exact company name "10264083 Canada Inc.".
+			    For a corporate statement addressed "COMPANY NAME / ATTN A PERSON", the owner is the COMPANY,
+			    not the attn person.
+			  * "accountType": the normalized registration type — one of TFSA, RRSP, RRIF, RESP, LIRA,
+			    Margin, Cash, or Corporate. Derive it from the statement header/title and/or the account
+			    label. A "Cdn. Dollar"/"US Dollar"/non-registered/cash account is "Cash"; a corporate/business
+			    account with no registration is "Corporate". Leave null only if genuinely undeterminable.
+			  Use the SAME "account" label as the holdings/cash for that account.
 
 			Return ONLY a JSON object, no prose, no markdown fences:
 			{"holdings":[{"ticker":"NVDA","companyName":"NVIDIA CORP","shares":401,"bookValue":50100.46,"currency":"USD","account":"687WK3-B USD Cash"}],
 			 "cash":[{"account":"687WK3-B USD Cash","currency":"USD","amount":12345.67}],
-			 "accounts":[{"account":"687WK3-B USD Cash","ownerType":"Joint","ownerName":"Gaurav Oli & Varsha Gupta"}]}
+			 "accounts":[{"account":"687WK3-B USD Cash","ownerType":"Joint","ownerName":"Gaurav Oli & Varsha Gupta","accountType":"Cash"}]}
 
 			STATEMENT TEXT:
 			""";
@@ -97,14 +120,16 @@ public class LlmStatementParser {
 
 	private static ParsedAccount toAccount(LlmAccount a) {
 		String type = a.ownerType() == null ? null : a.ownerType().trim();
-		if (type != null && !type.equalsIgnoreCase("Joint") && !type.equalsIgnoreCase("Solo")) {
+		if (type != null && !type.equalsIgnoreCase("Joint") && !type.equalsIgnoreCase("Solo")
+				&& !type.equalsIgnoreCase("Corporate")) {
 			type = null; // unrecognized → leave unset rather than storing noise
 		}
 		else if (type != null) {
 			type = type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase();
 		}
 		String name = a.ownerName() == null || a.ownerName().isBlank() ? null : a.ownerName().trim();
-		return new ParsedAccount(a.account().trim(), type, name);
+		String accountType = AccountLabels.canonicalType(a.accountType());
+		return new ParsedAccount(a.account().trim(), type, name, accountType);
 	}
 
 	private static ParsedHolding toHolding(LlmHolding h) {
@@ -172,6 +197,6 @@ public class LlmStatementParser {
 	private record LlmCash(String account, String currency, BigDecimal amount) {
 	}
 
-	private record LlmAccount(String account, String ownerType, String ownerName) {
+	private record LlmAccount(String account, String ownerType, String ownerName, String accountType) {
 	}
 }

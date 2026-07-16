@@ -58,11 +58,12 @@ public class NewsController {
 	}
 
 	public record NewsCardView(Long id, String headline, String summary, String source, String url,
-			List<String> tickers, Instant publishedAt, Instant fetchedAt, Instant generatedAt) {
+			List<String> tickers, Instant publishedAt, Instant fetchedAt, Instant generatedAt, boolean fallback) {
 
 		static NewsCardView from(NewsCard c) {
 			return new NewsCardView(c.getId(), c.getHeadline(), c.getSummary(), c.getSource(), c.getUrl(),
-					List.of(c.getTickers()), c.getPublishedAt(), c.getFetchedAt(), c.getGeneratedAt());
+					List.of(c.getTickers()), c.getPublishedAt(), c.getFetchedAt(), c.getGeneratedAt(),
+					c.isFallback());
 		}
 	}
 }

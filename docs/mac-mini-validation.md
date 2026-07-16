@@ -182,6 +182,53 @@ frontend `tsc`/`eslint` green). Needs the running stack / real outage / external
 - [ ] **10.3 Recovery drill:** once backups exist, follow [`/RECOVERY.md`](../RECOVERY.md) end-to-end on a
       scratch volume and confirm the documented data-loss bounds hold.
 
+## 11. Multi-Bank — RBC import + cross-bank "Combined by account type"  ⏳ TODO on the Mini
+Built + statically verified on the MacBook (backend `mvn -o compile test-compile` **green**; frontend
+`tsc --noEmit` **green**). Adds RBC statement support, a first-class normalized account **type**, a
+cross-bank rollup, and a dual-currency review guard. Needs the running stack (Postgres + Flyway + the
+LLM parser via Ollama/Haiku + a price feed) — none exercisable on the MacBook. **The 4 RBC PDFs live in
+`~/Downloads/RBC/` (copy them to the Mini).** Corrected inventory (each RBC account is DUAL-CURRENCY —
+a CDN$ side + a U.S.$ side in one PDF):
+- `Statement-2018` → **10264083 Canada Inc.** (incorporation) — Cash/Corporate. CAD: DOL + $2,337. USD: **$244,384 cash** + AMZN·GOOGL·AAPL·MSFT·NVDA·NKE·TSLA·TSM.
+- `Statement-2725` → Gaurav Oli — Cash. CAD: ZGLD, XQQ + $30. USD: $1,898 + AMZN·GOOGL·MSFT·NVDA·SMCI·WMT.
+- `Statement-4079` → Gaurav Oli — RRSP. CAD: empty. USD: $10,703 + SPCX ×27.
+- `Statement-8511` → Gaurav Oli — TFSA. CAD: empty. USD: $60 + GOOGL ×34.
+
+**Migration:**
+- [ ] `V42__account_type.sql` applies on boot (Flyway) — adds `account_meta.account_type`.
+
+**RBC import (Holdings tab → pick "RBC" → upload each PDF → Confirm; LLM parser is the default):**
+- [ ] Each PDF parses **BOTH** the CDN$ and U.S.$ sub-statements — holdings tagged with the right currency, not collapsed as a duplicate date. All securities captured incl. the "Other"/ADR row (TSM) in `2018`.
+- [ ] **Owner** is correct: `2018` → owner `10264083 Canada Inc.`, ownerType **Corporate** (owner is the company, not the ATTN person); the other three → `Gaurav Oli`, Solo.
+- [ ] **Type** is correct: `2018`/`2725` → Cash, `4079` → RRSP, `8511` → TFSA (derived from the statement header, not the account number).
+- [ ] USD-side book cost has no purchase date → ACB uses **estimated FX** (flagged `fxEstimated`); confirm the estimate looks right and that per-holding FX can be set via `confirmFx`.
+
+**Dual-currency review guard (`PortfolioImportService` + `AccountLabels.baseKey`):**
+- [ ] Re-import a statement with one currency side removed/empty → the holdings on the missing side get `needsReview=true` and a `log.warn` ("a currency side of a dual-currency account was absent") fires — not silently left stale.
+
+**Combined-by-account-type rollup (Holdings tab, `HoldingsTable.tsx`):**
+- [ ] The **"Combined by account type"** section sums the same registration ACROSS banks within an owner (e.g. Gaurav's NBDB TFSA + RBC TFSA → one TFSA line), in CAD, with Invested / Market / **Cash** / Gain-Loss columns; expand drills into each bank account.
+- [ ] The **incorporation stays its own owner** — never merged into personal totals.
+- [ ] CAD↔USD uses the **latest** BoC USD/CAD (already confirmed in code: `usdCadOn(today)` → nearest prior business day). Sanity-check the converted numbers vs the statement's own FX line (1 USD = 1.42015 CAD on 2026-06-30).
+
+**Pricing (expect gaps until the feed covers them):**
+- [ ] Confirm which RBC tickers price live and which stay unpriced: `SPCX` (SpaceX proxy), the `TSM` ADR, and TSX tickers `ZGLD`/`XQQ` need the TSX feed; unpriced positions show cost with no market value.
+[Source: multi-bank RBC support; `com.argus.portfolio` (LlmStatementParser, AccountLabels, AccountMeta, PortfolioImportService, LivePortfolioService); `V42__account_type.sql`]
+
+## 12. Health-score bands — unified score→color mapping  ⏳ visual check on the Mini
+Presentation-only refactor (backend scores unchanged). `frontend/src/lib/scoreBands.ts` is now the single
+source of truth for mapping a 0–100 score to a band; the health **ring** (`HealthScoreRing`), the top-bar
+**badge** (`HealthScoreBadge`), and the **breakdown** popover previously hardcoded three different threshold
+sets (75/50, 80/60, …) and could disagree. Statically verified on the MacBook (`tsc`/`eslint` **green**);
+colors only render in the running app, so:
+- [ ] The ring, the top-bar badge, and the breakdown all agree on the **same band** for the same score
+      (e.g. a 72 reads "Balanced"/amber everywhere, not "Healthy" in one place and "Balanced" in another).
+- [ ] Band boundaries look right: **≥75 Healthy** (green), **50–74 Balanced** (amber), **<50 At risk** (red),
+      and a null/absent score shows the neutral "—" state.
+- [ ] The breakdown popover shows the new footnote — "Rule-based score … Agent-sentiment and open-risk
+      inputs are not yet included."
+[Source: health-score band unification; `frontend/src/lib/scoreBands.ts`, `HealthScoreRing.tsx`, `HealthScoreBadge.tsx`, `HealthScoreBreakdown.tsx`]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

@@ -55,6 +55,10 @@ public class NewsCard {
 	@Column(name = "generated_at")
 	private Instant generatedAt;
 
+	/** True when the summary is the deterministic fallback (model call failed), not model-written. */
+	@Column(nullable = false)
+	private boolean fallback = false;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -74,14 +78,20 @@ public class NewsCard {
 		this.fetchedAt = article.getIngestedAt();
 	}
 
-	/** Attach the generated paragraph; the card becomes "ready" to show. */
-	void summarize(String paragraph) {
+	/** Attach the generated paragraph; the card becomes "ready" to show. {@code fallback} true when the
+	 * paragraph is the deterministic fallback rather than model output. */
+	void summarize(String paragraph, boolean fallback) {
 		this.summary = paragraph;
+		this.fallback = fallback;
 		this.generatedAt = Instant.now();
 	}
 
 	boolean isReady() {
 		return summary != null;
+	}
+
+	public boolean isFallback() {
+		return fallback;
 	}
 
 	public Long getId() {

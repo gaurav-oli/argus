@@ -30,13 +30,18 @@ public class Briefing {
 	@Column(name = "generated_at", nullable = false)
 	private Instant generatedAt = Instant.now();
 
+	/** True when this briefing was built by the deterministic fallback (model call failed), not the model. */
+	@Column(nullable = false)
+	private boolean fallback = false;
+
 	protected Briefing() {
 		// JPA
 	}
 
-	public Briefing(String headline, String body) {
+	public Briefing(String headline, String body, boolean fallback) {
 		this.headline = headline;
 		this.body = body;
+		this.fallback = fallback;
 	}
 
 	public Long getId() {
@@ -53,5 +58,9 @@ public class Briefing {
 
 	public Instant getGeneratedAt() {
 		return generatedAt;
+	}
+
+	public boolean isFallback() {
+		return fallback;
 	}
 }

@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
@@ -28,6 +30,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Service
 public class PortfolioImportService {
+
+	private static final Logger log = LoggerFactory.getLogger(PortfolioImportService.class);
 
 	private static final TypeReference<List<ParsedHolding>> HOLDINGS_TYPE = new TypeReference<>() {
 	};
@@ -150,6 +154,30 @@ public class PortfolioImportService {
 			}
 		}
 
+		// Dual-currency guard (RBC splits one account into CAD + USD sub-statements). If this import
+		// touched an account — matched by its currency-agnostic base id+type — but omitted a currency
+		// side we still hold, that side may have been mis-parsed (a missed page/section) rather than
+		// genuinely gone. Flag those holdings for review rather than silently leaving them stale.
+		Set<String> coveredBases = new HashSet<>();
+		for (String acct : coveredAccounts) {
+			coveredBases.add(AccountLabels.baseKey(acct));
+		}
+		int missingSideFlags = 0;
+		for (Position p : existingForBank) {
+			String label = normAccount(p.getAccount());
+			if (!coveredAccounts.contains(label) && coveredBases.contains(AccountLabels.baseKey(p.getAccount()))
+					&& !p.isNeedsReview()) {
+				p.setNeedsReview(true);
+				positions.save(p);
+				missingSideFlags++;
+			}
+		}
+		if (missingSideFlags > 0) {
+			log.warn("Import {}: flagged {} holding(s) for review — a currency side of a dual-currency "
+					+ "account was absent from this statement (possible missed sub-statement).",
+					importId, missingSideFlags);
+		}
+
 		// Cash balances parsed from the statement → folded into the live total (set 0 removes).
 		for (ParsedCash c : readCash(batch.getRawCash())) {
 			cashService.set(c.account(), c.currency(), c.amount());
@@ -254,11 +282,16 @@ public class PortfolioImportService {
 		}
 		AccountMeta existing = accountMeta.findByInstitutionAndAccount(institution, a.account()).orElse(null);
 		if (existing == null) {
-			accountMeta.save(new AccountMeta(institution, a.account(), a.ownerType(), a.ownerName()));
+			accountMeta.save(new AccountMeta(institution, a.account(), a.ownerType(), a.ownerName(),
+					a.accountType()));
 		}
 		else {
 			existing.setOwnerType(a.ownerType());
 			existing.setOwnerName(a.ownerName());
+			// Keep a previously-detected type if this statement couldn't determine one.
+			if (a.accountType() != null) {
+				existing.setAccountType(a.accountType());
+			}
 			accountMeta.save(existing);
 		}
 	}

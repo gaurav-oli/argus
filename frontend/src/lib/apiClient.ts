@@ -371,10 +371,12 @@ export interface PositionValue {
   accountName: string | null;
   /** The account's own currency ("CAD" | "USD"). */
   accountCurrency: string | null;
-  /** "Joint" | "Solo" (null when unknown). */
+  /** "Joint" | "Solo" | "Corporate" (null when unknown). */
   ownerType: string | null;
   /** Holder name(s), e.g. "Gaurav Oli & Varsha Gupta" or "Gaurav Oli". */
   ownerName: string | null;
+  /** Normalized registration type for cross-bank grouping: "TFSA" | "RRSP" | "RESP" | "Cash" | "Corporate" | … (null when unknown). */
+  accountType: string | null;
 }
 
 /** Mirrors the backend `PortfolioSnapshot` record — totals in CAD (plus a USD equivalent). Live on `/topic/portfolio`. */
@@ -873,6 +875,8 @@ export interface Briefing {
   headline: string;
   body: string;
   generatedAt: string;
+  /** True when this briefing was built by the deterministic fallback (model call failed), not the model. */
+  fallback: boolean;
 }
 
 /** The latest briefing, or `null` when none exists yet — the backend returns 204 (not a JSON body). */
@@ -929,6 +933,8 @@ export interface NewsCardItem {
   /** When Argus fetched the article. */
   fetchedAt: string;
   generatedAt: string | null;
+  /** True when the summary is the deterministic fallback (model call failed), not model-written. */
+  fallback: boolean;
 }
 
 /** Mirrors the backend `NewsController.NewsFeed` record. */

@@ -43,7 +43,8 @@ public class EdgarClient {
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
 	private final Map<String, String> cikByTicker = new ConcurrentHashMap<>();
 
-	public EdgarClient(@Value("${argus.sec.user-agent:Argus/1.0 (argus@example.com)}") String userAgent) {
+	public EdgarClient(
+			@Value("${argus.sec.user-agent:Argus/1.0 (gaurav.oli@brainridgeconsulting.com)}") String userAgent) {
 		this.userAgent = userAgent;
 	}
 

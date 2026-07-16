@@ -121,22 +121,27 @@ public class NewsCurationService {
 			return;
 		}
 		NewsArticle article = articles.findById(card.getArticleId()).orElse(null);
-		String paragraph = summarize(card, article);
-		card.summarize(paragraph);
+		Generated g = summarize(card, article);
+		card.summarize(g.text(), g.fallback());
 		cards.save(card);
-		log.info("Generated news summary for card {} ({})", card.getId(), card.getHeadline());
+		log.info("Generated news summary for card {} ({}){}", card.getId(), card.getHeadline(),
+				g.fallback() ? " [fallback]" : "");
 	}
 
-	private String summarize(NewsCard card, NewsArticle article) {
+	private Generated summarize(NewsCard card, NewsArticle article) {
 		try {
 			String parsed = clean(gateway.generate(prompt(card, article)));
 			if (parsed != null && !parsed.isBlank()) {
-				return parsed;
+				return new Generated(parsed, false);
 			}
 		} catch (RuntimeException ex) {
 			log.warn("News-summary model call failed ({}) — using deterministic fallback", ex.getMessage());
 		}
-		return fallback(card, article);
+		return new Generated(fallback(card, article), true);
+	}
+
+	/** A generated summary paragraph plus whether it came from the deterministic fallback. */
+	private record Generated(String text, boolean fallback) {
 	}
 
 	private String prompt(NewsCard card, NewsArticle article) {
