@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionCard } from "@/components/ui/MotionCard";
 import {
   getCash,
   getPortfolioValue,
@@ -8,19 +9,16 @@ import {
   type PortfolioSnapshot,
   type PositionValue,
 } from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
 import { subscribeToTopic } from "@/lib/wsClient";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 const money = (n: number | null) =>
   n == null ? "—" : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const qty = (n: number | null) => (n == null ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 4 }));
-
-/** "Joint · Gaurav & Varsha" / "Solo · Gaurav Oli" / null when unknown. */
-const ownerLabel = (ownerType: string | null, ownerName: string | null): string | null => {
-  if (!ownerName && !ownerType) return null;
-  if (ownerName && ownerType) return `${ownerType} · ${ownerName}`;
-  return ownerName ?? ownerType;
-};
+const signedMoney = (n: number) =>
+  `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pnlClass = (n: number) => (n >= 0 ? "text-gains" : "text-losses");
 
 type AccountGroup = {
   key: string;
@@ -58,15 +56,18 @@ type TypeRollup = {
 };
 
 /**
- * The Holdings ledger (Story 3.5 + Multi-Bank Holdings). Live from `/topic/portfolio`. Grouped the
- * way a household reads a statement: by owner (Joint / each Solo holder) → account → position, with
- * per-account and per-owner subtotals, native + CAD + USD columns, and uninvested cash folded in so
- * each account totals to the brokerage's figure. Works across banks — every account shows which bank
- * it's at, so uploading another institution's statement slots straight in.
+ * The Holdings ledger (Story 3.5 + Multi-Bank Holdings). Live from `/topic/portfolio`.
+ *
+ * Information architecture (redesigned — the flat per-owner mega-table made it hard to tell which
+ * account was on screen while scrolling, and cash/rollup/detail repeated the same numbers three
+ * times): a compact cross-bank summary up top, an owner switcher so the household's four ledgers
+ * don't have to be read as one continuous scroll, then each owner as a distinct panel containing one
+ * clearly-bordered card per account (cash shown as a plain stat, not a disguised fake holding row).
  */
 export function HoldingsTable() {
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
   const [cash, setCashRows] = useState<CashBalanceView[]>([]);
+  const [selectedOwner, setSelectedOwner] = useState<string>("all");
 
   const refetchCash = () => getCash().then(setCashRows).catch(() => {});
 
@@ -90,6 +91,10 @@ export function HoldingsTable() {
   }, [positions]);
 
   const owners = useMemo(() => groupByOwner(positions, cash), [positions, cash]);
+  const visibleOwners = useMemo(
+    () => (selectedOwner === "all" ? owners : owners.filter((o) => o.key === selectedOwner)),
+    [owners, selectedOwner],
+  );
 
   async function removeCash(c: CashBalanceView) {
     await setCash(c.account, c.currency, 0);
@@ -117,19 +122,82 @@ export function HoldingsTable() {
         </span>
       </div>
 
-      <AccountTypeRollup owners={owners} fx={fx} />
+      <OwnerTabs owners={owners} selected={selectedOwner} onSelect={setSelectedOwner} />
 
-      {owners.map((o) => (
-        <OwnerSection key={o.key} owner={o} fx={fx} onRemoveCash={removeCash} />
-      ))}
+      <AccountTypeRollup owners={visibleOwners} fx={fx} />
 
-      <CashSummary cash={cash} fx={fx} onRemove={removeCash} />
+      <div className="flex flex-col gap-4">
+        {visibleOwners.map((o, i) => (
+          <OwnerPanel key={o.key} owner={o} fx={fx} index={i} onRemoveCash={removeCash} />
+        ))}
+      </div>
     </div>
   );
 }
 
-const signedMoney = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const pnlClass = (n: number) => (n >= 0 ? "text-gains" : "text-losses");
+/**
+ * Owner switcher — the single biggest fix for "which account am I looking at": instead of every
+ * owner's full ledger stacked in one endless scroll, pick one household member (or "All") and only
+ * their panel renders below. Also scopes the cross-bank rollup, so one control filters everything.
+ */
+function OwnerTabs({
+  owners,
+  selected,
+  onSelect,
+}: {
+  owners: OwnerGroup[];
+  selected: string;
+  onSelect: (key: string) => void;
+}) {
+  if (owners.length <= 1) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by account owner">
+      <TabButton active={selected === "all"} onClick={() => onSelect("all")}>
+        All owners
+      </TabButton>
+      {owners.map((o) => {
+        const isJoint = (o.ownerType ?? "").toLowerCase() === "joint";
+        return (
+          <TabButton key={o.key} active={selected === o.key} onClick={() => onSelect(o.key)} accent={isJoint}>
+            {o.ownerName ?? "Unassigned"}
+            <span className="ml-1 opacity-60">({o.accounts.length})</span>
+          </TabButton>
+        );
+      })}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  accent,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  accent?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "min-h-[36px] rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+        active
+          ? accent
+            ? "border-accent/50 bg-accent/15 text-accent"
+            : "border-text-primary/25 bg-elevated text-text-primary"
+          : "border-border text-text-secondary hover:border-border hover:bg-[var(--hover-wash)] hover:text-text-primary",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * Combined-by-account-type rollup (Multi-Bank Holdings). For each owner, the same registration type
@@ -154,7 +222,7 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
 
   return (
     <div className="flex flex-col gap-2">
-      <h4 className="text-sm font-semibold text-text-primary">Combined by account type</h4>
+      <h4 className="text-sm font-semibold text-text-primary">Summary — combined by account type</h4>
       <p className="text-xs text-text-secondary">
         Same registration summed across banks, within each owner (in CAD). Invested and gain/loss cover
         securities; uninvested cash is shown separately.
@@ -186,7 +254,10 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
                 return (
                   <Fragment key={r.key}>
                     <tr
-                      className={`border-t border-border/60 ${canExpand ? "cursor-pointer hover:bg-[var(--hover-wash)]" : ""}`}
+                      className={cn(
+                        "border-t border-border/60",
+                        canExpand && "cursor-pointer hover:bg-[var(--hover-wash)]",
+                      )}
                       onClick={canExpand ? () => toggle(r.key) : undefined}
                     >
                       <td className="px-3 py-2 font-medium text-text-primary">
@@ -245,14 +316,20 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
   );
 }
 
-/** One owner (Joint or a Solo holder): a badge, then each of their accounts, then an owner total. */
-function OwnerSection({
+/**
+ * One owner's full ledger — a distinct glass panel (the app's established grouping surface) so it
+ * reads as one clear unit vs. the other owners, containing one AccountCard per account plus an
+ * owner-level total. Replaces the old single continuous table that mixed every account's rows.
+ */
+function OwnerPanel({
   owner,
   fx,
+  index,
   onRemoveCash,
 }: {
   owner: OwnerGroup;
   fx: number;
+  index: number;
   onRemoveCash: (c: CashBalanceView) => void;
 }) {
   let ownerCad = 0;
@@ -265,55 +342,44 @@ function OwnerSection({
   const isJoint = (owner.ownerType ?? "").toLowerCase() === "joint";
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-            isJoint ? "bg-accent/15 text-accent" : "bg-elevated text-text-secondary"
-          }`}
-        >
-          {owner.ownerType ?? "Account"}
-        </span>
-        <h4 className="text-sm font-semibold text-text-primary">{owner.ownerName ?? "Unassigned"}</h4>
+    <MotionCard index={index} interactive={false} className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+              isJoint ? "bg-accent/15 text-accent" : "bg-elevated text-text-secondary",
+            )}
+          >
+            {owner.ownerType ?? "Account"}
+          </span>
+          <h4 className="text-sm font-semibold text-text-primary">{owner.ownerName ?? "Unassigned"}</h4>
+          <span className="text-xs text-text-secondary">
+            {owner.accounts.length} account{owner.accounts.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-sm font-semibold tabular-nums text-text-primary">{money(ownerCad)} CAD</div>
+          <div className="font-mono text-[11px] tabular-nums text-text-secondary">≈ {money(ownerUsd)} USD</div>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full min-w-[640px] text-left text-sm tabular-nums">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-text-secondary">
-              <th className="px-3 py-2 font-medium">Symbol</th>
-              <th className="hidden px-3 py-2 font-medium md:table-cell">Description</th>
-              <th className="px-3 py-2 text-right font-medium">Qty</th>
-              <th className="hidden px-3 py-2 text-right font-medium lg:table-cell">Book Value</th>
-              <th className="px-3 py-2 text-right font-medium">Market Value</th>
-              <th className="px-3 py-2 text-right font-medium">≈ CAD</th>
-              <th className="px-3 py-2 text-right font-medium">≈ USD</th>
-            </tr>
-          </thead>
-          <tbody>
-            {owner.accounts.map((a) => (
-              <AccountRows key={a.key} account={a} fx={fx} onRemoveCash={onRemoveCash} />
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-accent/40 bg-accent/5 font-semibold text-text-primary">
-              <td className="px-3 py-2" colSpan={4}>
-                {owner.ownerType ? `${owner.ownerType} · ` : ""}
-                {owner.ownerName ?? "Unassigned"} total
-              </td>
-              <td className="px-3 py-2 text-right" />
-              <td className="px-3 py-2 text-right">{money(ownerCad)}</td>
-              <td className="px-3 py-2 text-right">{money(ownerUsd)}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div className="flex flex-col gap-3">
+        {owner.accounts.map((a) => (
+          <AccountCard key={a.key} account={a} fx={fx} onRemoveCash={onRemoveCash} />
+        ))}
       </div>
-    </div>
+    </MotionCard>
   );
 }
 
-/** An account sub-header, its cash row, its holdings, and an account subtotal. */
-function AccountRows({
+/**
+ * One account, one unambiguous card: name/currency/bank in the header (impossible to lose track of
+ * while scrolling), cash as a plain labelled stat (not a fake ticker row), then just that account's
+ * holdings in a compact table. This — not a shared background tint on a table row — is what actually
+ * fixes "which account am I looking at."
+ */
+function AccountCard({
   account,
   fx,
   onRemoveCash,
@@ -329,145 +395,89 @@ function AccountRows({
   );
 
   return (
-    <>
-      <tr className="border-t border-border bg-[var(--hover-wash)]">
-        <td className="px-3 py-2" colSpan={7}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold text-text-primary">{account.accountName}</span>
-            <Pill>{account.currency}</Pill>
-            {account.institution && <Pill muted>{account.institution}</Pill>}
-            {ownerLabel(account.ownerType, account.ownerName) && (
-              <span className="text-[11px] text-text-secondary">
-                {ownerLabel(account.ownerType, account.ownerName)}
-              </span>
-            )}
+    <div className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border bg-[var(--hover-wash)] px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-semibold text-text-primary">{account.accountName}</span>
+          <Pill>{account.currency}</Pill>
+          {account.institution && <Pill muted>{account.institution}</Pill>}
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-[13px] font-semibold tabular-nums text-text-primary">
+            {money(t.cad)} CAD
           </div>
-        </td>
-      </tr>
+          <div className="font-mono text-[11px] tabular-nums text-text-secondary">≈ {money(t.usd)} USD</div>
+        </div>
+      </div>
 
       {account.cash.map((c) => {
         const cad = c.currency === "CAD" ? c.amount : c.amount * fx;
         const usd = c.currency === "USD" ? c.amount : c.amount / fx;
         return (
-          <tr key={`cash-${c.id}`} className="border-t border-border/60">
-            <td className="px-3 py-1.5 font-medium text-accent">CASH</td>
-            <td className="hidden px-3 py-1.5 text-text-secondary md:table-cell">
-              Cash balance
-              <button onClick={() => onRemoveCash(c)} className="ml-2 text-[10px] text-losses hover:underline">
+          <div
+            key={`cash-${c.id}`}
+            className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2 text-[13px]"
+          >
+            <span className="flex items-center gap-1.5 text-text-secondary">
+              <span className="font-medium text-accent">Cash available</span>
+              <button
+                onClick={() => onRemoveCash(c)}
+                className="min-h-[24px] text-[11px] text-losses hover:underline"
+                aria-label={`Remove cash balance for ${account.accountName}`}
+              >
                 remove
               </button>
-            </td>
-            <td className="px-3 py-1.5 text-right text-text-secondary">—</td>
-            <td className="hidden px-3 py-1.5 text-right text-text-secondary lg:table-cell">—</td>
-            <td className="px-3 py-1.5 text-right text-text-primary">{money(isCad ? cad : usd)}</td>
-            <td className="px-3 py-1.5 text-right text-text-primary">{money(cad)}</td>
-            <td className="px-3 py-1.5 text-right text-text-primary">{money(usd)}</td>
-          </tr>
+            </span>
+            <span className="font-mono tabular-nums text-text-primary">
+              {money(isCad ? cad : usd)} {account.currency}
+              <span className="ml-1.5 text-text-secondary">
+                ({money(cad)} CAD / {money(usd)} USD)
+              </span>
+            </span>
+          </div>
         );
       })}
 
-      {sortedPositions.map((p) => (
-        <tr key={p.id} className="border-t border-border/60">
-          <td className="px-3 py-1.5 font-medium text-text-primary">
-            {p.ticker}
-            {p.afterHours && <span className="ml-1.5 text-[10px] text-warning">AH</span>}
-          </td>
-          <td className="hidden px-3 py-1.5 text-text-secondary md:table-cell">
-            {p.companyName ?? "—"}
-            {p.currency === "USD" && isCad && p.price != null && (
-              <span className="ml-1.5 text-[11px] text-text-secondary/70">· US${qty(p.price)}</span>
-            )}
-          </td>
-          <td className="px-3 py-1.5 text-right text-text-primary">{qty(p.shares)}</td>
-          <td className="hidden px-3 py-1.5 text-right text-text-secondary lg:table-cell">{money(p.costBasis)}</td>
-          <td className="px-3 py-1.5 text-right text-text-primary">
-            {money(isCad ? p.cadMarketValue : p.usdMarketValue)}
-          </td>
-          <td className="px-3 py-1.5 text-right text-text-primary">{money(p.cadMarketValue)}</td>
-          <td className="px-3 py-1.5 text-right text-text-primary">{money(p.usdMarketValue)}</td>
-        </tr>
-      ))}
-
-      <tr className="border-t border-border bg-surface font-medium">
-        <td className="px-3 py-1.5 text-text-secondary" colSpan={4}>
-          Subtotal · {account.accountName}
-        </td>
-        <td className="px-3 py-1.5 text-right text-text-primary">{money(t.native)}</td>
-        <td className="px-3 py-1.5 text-right text-text-primary">{money(t.cad)}</td>
-        <td className="px-3 py-1.5 text-right text-text-primary">{money(t.usd)}</td>
-      </tr>
-    </>
-  );
-}
-
-/** Compact "cash on hand" summary across every account (req: which account, CAD/USD, owner). */
-function CashSummary({
-  cash,
-  fx,
-  onRemove,
-}: {
-  cash: CashBalanceView[];
-  fx: number;
-  onRemove: (c: CashBalanceView) => void;
-}) {
-  if (cash.length === 0) return null;
-  let totCad = 0;
-  let totUsd = 0;
-  for (const c of cash) {
-    totCad += c.currency === "CAD" ? c.amount : c.amount * fx;
-    totUsd += c.currency === "USD" ? c.amount : c.amount / fx;
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      <h4 className="text-sm font-semibold text-text-primary">Cash on hand — by account</h4>
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full min-w-[560px] text-left text-sm tabular-nums">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-text-secondary">
-              <th className="px-3 py-2 font-medium">Account</th>
-              <th className="hidden px-3 py-2 font-medium md:table-cell">Owner</th>
-              <th className="px-3 py-2 text-right font-medium">Cur.</th>
-              <th className="px-3 py-2 text-right font-medium">Cash</th>
-              <th className="px-3 py-2 text-right font-medium">≈ CAD</th>
-              <th className="px-3 py-2 text-right font-medium">≈ USD</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cash.map((c) => {
-              const cad = c.currency === "CAD" ? c.amount : c.amount * fx;
-              const usd = c.currency === "USD" ? c.amount : c.amount / fx;
-              return (
-                <tr key={c.id} className="border-t border-border/60">
-                  <td className="px-3 py-1.5 font-medium text-text-primary">
-                    {c.accountName ?? c.account}
-                    <button onClick={() => onRemove(c)} className="ml-2 text-[10px] text-losses hover:underline">
-                      remove
-                    </button>
+      {sortedPositions.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px] tabular-nums">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-text-secondary">
+                <th className="px-3.5 py-1.5 font-medium">Symbol</th>
+                <th className="hidden px-3.5 py-1.5 font-medium md:table-cell">Description</th>
+                <th className="px-3.5 py-1.5 text-right font-medium">Qty</th>
+                <th className="hidden px-3.5 py-1.5 text-right font-medium lg:table-cell">Book Value</th>
+                <th className="px-3.5 py-1.5 text-right font-medium">Market Value</th>
+                <th className="px-3.5 py-1.5 text-right font-medium">≈ CAD</th>
+                <th className="px-3.5 py-1.5 text-right font-medium">≈ USD</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedPositions.map((p) => (
+                <tr key={p.id} className="border-t border-border/40">
+                  <td className="px-3.5 py-1.5 font-medium text-text-primary">
+                    {p.ticker}
+                    {p.afterHours && <span className="ml-1.5 text-[10px] text-warning">AH</span>}
                   </td>
-                  <td className="hidden px-3 py-1.5 text-text-secondary md:table-cell">
-                    {ownerLabel(c.ownerType, c.ownerName) ?? "—"}
+                  <td className="hidden px-3.5 py-1.5 text-text-secondary md:table-cell">
+                    {p.companyName ?? "—"}
+                    {p.currency === "USD" && isCad && p.price != null && (
+                      <span className="ml-1.5 text-[11px] text-text-secondary/70">· US${qty(p.price)}</span>
+                    )}
                   </td>
-                  <td className="px-3 py-1.5 text-right">
-                    <Pill>{c.currency}</Pill>
+                  <td className="px-3.5 py-1.5 text-right text-text-primary">{qty(p.shares)}</td>
+                  <td className="hidden px-3.5 py-1.5 text-right text-text-secondary lg:table-cell">{money(p.costBasis)}</td>
+                  <td className="px-3.5 py-1.5 text-right text-text-primary">
+                    {money(isCad ? p.cadMarketValue : p.usdMarketValue)}
                   </td>
-                  <td className="px-3 py-1.5 text-right text-text-primary">{money(c.amount)}</td>
-                  <td className="px-3 py-1.5 text-right text-text-primary">{money(cad)}</td>
-                  <td className="px-3 py-1.5 text-right text-text-primary">{money(usd)}</td>
+                  <td className="px-3.5 py-1.5 text-right text-text-primary">{money(p.cadMarketValue)}</td>
+                  <td className="px-3.5 py-1.5 text-right text-text-primary">{money(p.usdMarketValue)}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-accent/40 bg-accent/5 font-semibold text-text-primary">
-              <td className="px-3 py-2" colSpan={4}>
-                Total cash
-              </td>
-              <td className="px-3 py-2 text-right">{money(totCad)}</td>
-              <td className="px-3 py-2 text-right">{money(totUsd)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,13 +20,25 @@ export function HoldingsTreemap() {
     };
   }, []);
 
-  const data = (snap?.positions ?? [])
-    .map((p) => ({
-      symbol: p.ticker,
-      value: p.cadMarketValue ?? p.marketValue ?? 0,
-      changePct: p.dayPnlPercent ?? p.totalPnlPercent ?? 0,
-    }))
-    .filter((d) => d.value > 0);
+  // Aggregate by ticker first — the same symbol can be held across several accounts (e.g. NVDA in
+  // both a TFSA and an RRSP), and without this each account-position rendered its own same-labelled
+  // tile, showing as duplicates. One tile per distinct symbol: value summed, day-change value-weighted
+  // so a big lot's move dominates a token-sized lot's.
+  const bySymbol = new Map<string, { value: number; weightedChange: number }>();
+  for (const p of snap?.positions ?? []) {
+    const value = p.cadMarketValue ?? p.marketValue ?? 0;
+    if (value <= 0) continue;
+    const changePct = p.dayPnlPercent ?? p.totalPnlPercent ?? 0;
+    const entry = bySymbol.get(p.ticker) ?? { value: 0, weightedChange: 0 };
+    entry.value += value;
+    entry.weightedChange += changePct * value;
+    bySymbol.set(p.ticker, entry);
+  }
+  const data = [...bySymbol.entries()].map(([symbol, { value, weightedChange }]) => ({
+    symbol,
+    value,
+    changePct: value > 0 ? weightedChange / value : 0,
+  }));
   const changeBySymbol = new Map(data.map((d) => [d.symbol, d.changePct]));
 
   // Render callback (not a component) closing over changeBySymbol, so each cell colours by today's
