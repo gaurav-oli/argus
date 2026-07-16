@@ -4,6 +4,8 @@ import com.argus.portfolio.AccountMeta;
 import com.argus.portfolio.AccountMetaRepository;
 import com.argus.portfolio.Position;
 import com.argus.portfolio.PositionRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -13,33 +15,78 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Builds the investor-profile sentence that grounds the portfolio chat (Story 7.2/7.5, FR-31),
- * derived from the user's ACTUAL accounts rather than a hardcoded string. Residency and home currency
- * are configurable ({@code argus.investor.*}); the account-type mix, whether a corporation is held,
- * and the currencies of held securities are read live from {@link AccountMeta} + {@link Position}. When
- * nothing has been imported yet it falls back to a sensible generic description. A persisted, fully
- * user-editable profile (risk tolerance, goals) is the remaining part of Story 7.5.
+ * Builds the investor-profile sentence that grounds the portfolio chat (Story 7.2/7.5, FR-31), derived
+ * from the user's ACTUAL accounts PLUS a persisted, user-editable profile (Story 7.6). Residency and home
+ * currency come from the saved profile when set, else the {@code argus.investor.*} config defaults; the
+ * account-type mix, whether a corporation is held, and the currencies of held securities are read live
+ * from {@link AccountMeta} + {@link Position}; risk tolerance, financial goal, and the target (amount +
+ * date) come from the {@link InvestorProfile} row. When nothing has been imported or saved it falls back
+ * to a sensible generic description, so pre-7.6 behavior is unchanged until the user edits their profile.
  */
 @Service
 public class InvestorProfileService {
 
 	private final AccountMetaRepository accountMeta;
 	private final PositionRepository positions;
-	private final String residency;
-	private final String homeCurrency;
+	private final InvestorProfileRepository profiles;
+	private final String configResidency;
+	private final String configHomeCurrency;
 
 	public InvestorProfileService(AccountMetaRepository accountMeta, PositionRepository positions,
-			@Value("${argus.investor.residency:Canadian}") String residency,
-			@Value("${argus.investor.home-currency:CAD}") String homeCurrency) {
+			InvestorProfileRepository profiles,
+			@Value("${argus.investor.residency:Canadian}") String configResidency,
+			@Value("${argus.investor.home-currency:CAD}") String configHomeCurrency) {
 		this.accountMeta = accountMeta;
 		this.positions = positions;
-		this.residency = residency;
-		this.homeCurrency = homeCurrency;
+		this.profiles = profiles;
+		this.configResidency = configResidency;
+		this.configHomeCurrency = configHomeCurrency;
 	}
 
-	/** A one-paragraph investor profile grounded in the current accounts, for the LLM context. */
+	/** The saved profile, or a fresh empty one when nothing has been persisted yet (never null). */
+	@Transactional(readOnly = true)
+	public InvestorProfile current() {
+		return profiles.findSingleton().orElseGet(InvestorProfile::new);
+	}
+
+	/** Get-or-create then overwrite the profile fields and persist (Story 7.6 PUT). */
+	@Transactional
+	public InvestorProfile save(RiskTolerance riskTolerance, String financialGoal, BigDecimal targetAmount,
+			LocalDate targetDate, String residency, String homeCurrency, String notes) {
+		InvestorProfile p = profiles.findSingleton().orElseGet(InvestorProfile::new);
+		p.setRiskTolerance(riskTolerance);
+		p.setFinancialGoal(financialGoal);
+		p.setTargetAmount(targetAmount);
+		p.setTargetDate(targetDate);
+		p.setResidency(residency);
+		p.setHomeCurrency(homeCurrency);
+		p.setNotes(notes);
+		return profiles.save(p);
+	}
+
+	/** Effective residency: the saved profile's value when set, else the config default. */
+	@Transactional(readOnly = true)
+	public String residency() {
+		String saved = current().getResidency();
+		return saved != null && !saved.isBlank() ? saved.trim() : configResidency;
+	}
+
+	/** Effective home currency: the saved profile's value when set, else the config default. */
+	@Transactional(readOnly = true)
+	public String homeCurrency() {
+		String saved = current().getHomeCurrency();
+		return saved != null && !saved.isBlank() ? saved.trim().toUpperCase() : configHomeCurrency;
+	}
+
+	/** A one-paragraph investor profile grounded in the current accounts + saved profile, for the LLM. */
 	@Transactional(readOnly = true)
 	public String describe() {
+		InvestorProfile profile = current();
+		String residency = profile.getResidency() != null && !profile.getResidency().isBlank()
+				? profile.getResidency().trim() : configResidency;
+		String homeCurrency = profile.getHomeCurrency() != null && !profile.getHomeCurrency().isBlank()
+				? profile.getHomeCurrency().trim().toUpperCase() : configHomeCurrency;
+
 		List<AccountMeta> accounts = accountMeta.findAll();
 
 		Set<String> accountTypes = new TreeSet<>();
@@ -91,6 +138,34 @@ public class InvestorProfileService {
 				b.append(" (US withholding tax on US-listed dividends)");
 			}
 			b.append('.');
+		}
+
+		// User-set profile (Story 7.6) — only what has been filled in.
+		if (profile.getRiskTolerance() != null) {
+			b.append(" Risk tolerance: ").append(profile.getRiskTolerance().label()).append('.');
+		}
+		if (profile.getFinancialGoal() != null && !profile.getFinancialGoal().isBlank()) {
+			b.append(" Goal: ").append(profile.getFinancialGoal().trim());
+			if (!profile.getFinancialGoal().trim().endsWith(".")) {
+				b.append('.');
+			}
+		}
+		if (profile.getTargetAmount() != null || profile.getTargetDate() != null) {
+			b.append(" Target:");
+			if (profile.getTargetAmount() != null) {
+				b.append(' ').append(homeCurrency).append(' ')
+						.append(profile.getTargetAmount().toPlainString());
+			}
+			if (profile.getTargetDate() != null) {
+				b.append(" by ").append(profile.getTargetDate());
+			}
+			b.append('.');
+		}
+		if (profile.getNotes() != null && !profile.getNotes().isBlank()) {
+			b.append(" Preferences: ").append(profile.getNotes().trim());
+			if (!profile.getNotes().trim().endsWith(".")) {
+				b.append('.');
+			}
 		}
 		return b.toString();
 	}

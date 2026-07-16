@@ -1,6 +1,9 @@
+---
+baseline_commit: df24c7e842c98f151f6587e13d3643d651a0cc1a
+---
 # Story 7.6: Persisted, user-editable investor profile
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -55,67 +58,67 @@ Tracker* — *"your financial goal is the destination; set target (amount + time
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Migration (AC: 2, 5)**
-  - [ ] Add `backend/src/main/resources/db/migration/V44__investor_profile.sql` (V44 is the next free
+- [x] **Task 1 — Migration (AC: 2, 5)**
+  - [x] Add `backend/src/main/resources/db/migration/V44__investor_profile.sql` (V44 is the next free
         version — V43 is latest). Single-row table `investor_profile` with `id smallint PRIMARY KEY DEFAULT 1
         CHECK (id = 1)`, nullable columns `risk_tolerance text`, `financial_goal text`, `target_amount
         numeric(18,2)`, `target_date date`, `residency text`, `home_currency text`, `notes text`,
         `updated_at timestamptz NOT NULL DEFAULT now()`. Seed the row with `INSERT ... (id) VALUES (1) ON
         CONFLICT DO NOTHING`. Header-comment style per V38/V4 (what/why + story ref). Do NOT reuse a version
         number; forward-only.
-- [ ] **Task 2 — Entity + repository (AC: 2, 5)**
-  - [ ] `com.argus.conversation.InvestorProfile` — mutable `@Entity @Table(name = "investor_profile")`,
+- [x] **Task 2 — Entity + repository (AC: 2, 5)**
+  - [x] `com.argus.conversation.InvestorProfile` — mutable `@Entity @Table(name = "investor_profile")`,
         `@Id private short id = SINGLETON_ID` (`static final short SINGLETON_ID = 1`), getters/setters,
         `updatedAt` stamped on write. Mirror `AppSettings` exactly (getters/setters, not a record).
-  - [ ] `com.argus.conversation.InvestorProfileRepository extends JpaRepository<InvestorProfile, Short>`
+  - [x] `com.argus.conversation.InvestorProfileRepository extends JpaRepository<InvestorProfile, Short>`
         with `default Optional<InvestorProfile> findSingleton()` (mirror `AppSettingsRepository`).
-  - [ ] Store `riskTolerance` as `String` in a small enum-like set validated at the controller (keep the DB
+  - [x] Store `riskTolerance` as `String` in a small enum-like set validated at the controller (keep the DB
         column `text` to stay migration-light); OR a `RiskTolerance` enum persisted as its `name()`. Prefer
         an enum in Java for type-safety, persisted as text.
-- [ ] **Task 3 — Wire into `InvestorProfileService` (AC: 3, 4, 5)** — READ THE FILE FIRST
-  - [ ] Inject `InvestorProfileRepository`. In `describe()`, load the singleton (get-or-create defaulted).
-  - [ ] **Residency/home currency:** use the profile's values when non-blank, else fall back to the injected
+- [x] **Task 3 — Wire into `InvestorProfileService` (AC: 3, 4, 5)** — READ THE FILE FIRST
+  - [x] Inject `InvestorProfileRepository`. In `describe()`, load the singleton (get-or-create defaulted).
+  - [x] **Residency/home currency:** use the profile's values when non-blank, else fall back to the injected
         `@Value("${argus.investor.residency:Canadian}")` / `home-currency:CAD` defaults. Keep the `@Value`
         fields as the fallback source — do not remove them.
-  - [ ] Append the user-set fields to the built sentence: risk tolerance ("risk tolerance: Growth"),
+  - [x] Append the user-set fields to the built sentence: risk tolerance ("risk tolerance: Growth"),
         financial goal, and target ("targeting C$X by YYYY-MM-DD") — only when present. Preserve all existing
         account-derived output and ordering; append after it.
-- [ ] **Task 4 — Canadian persona residency (AC: 4)**
-  - [ ] `CanadianContextService` hard-assumes a Canadian investor. Source residency from the profile: if the
+- [x] **Task 4 — Canadian persona residency (AC: 4)**
+  - [x] `CanadianContextService` hard-assumes a Canadian investor. Source residency from the profile: if the
         profile residency is non-Canadian, the Canadian-lens block should be suppressed or softened (a
         non-Canadian investor doesn't get TFSA/RRSP/withholding framing). MVP: read residency via
         `InvestorProfileService` (or a small shared accessor) and skip the TFSA/RRSP/withholding note when
         residency is not "Canadian". Keep the FX/CAD-equivalent line only when home currency is CAD.
-  - [ ] Do NOT break Story 7.5's `CanadianContextServiceTest` — extend it for the non-Canadian path.
-- [ ] **Task 5 — REST API (AC: 1, 2, 6)**
-  - [ ] `com.argus.conversation.InvestorProfileController` `@RestController @RequestMapping("/api/investor-profile")`
+  - [x] Do NOT break Story 7.5's `CanadianContextServiceTest` — extend it for the non-Canadian path.
+- [x] **Task 5 — REST API (AC: 1, 2, 6)**
+  - [x] `com.argus.conversation.InvestorProfileController` `@RestController @RequestMapping("/api/investor-profile")`
         (domain-namespaced like `NotificationPreferencesController` at `/api/notifications/preferences`, NOT
         under `/api/settings`). `GET` returns an `InvestorProfileView` record; `PUT` accepts an update record,
         validates (risk tolerance in the allowed set; target_amount ≥ 0; currency a 3-letter code), saves via
         a `@Transactional` service method (get-or-create → set fields → stamp `updatedAt` → save), returns the
         updated view (or 204 — match `SettingsController`'s choice; prefer returning the saved view for the
         frontend to reflect).
-  - [ ] Use DTO **records** for request/response (per Watchlist/Settings convention); entity stays mutable.
-- [ ] **Task 6 — Frontend (AC: 1, 2)**
-  - [ ] `frontend/src/lib/apiClient.ts`: add `InvestorProfile` interface + `getInvestorProfile()` /
+  - [x] Use DTO **records** for request/response (per Watchlist/Settings convention); entity stays mutable.
+- [x] **Task 6 — Frontend (AC: 1, 2)**
+  - [x] `frontend/src/lib/apiClient.ts`: add `InvestorProfile` interface + `getInvestorProfile()` /
         `putInvestorProfile(profile)` mirroring `getNotificationPrefs`/`putNotificationPrefs` (apiGet/apiPut,
         `credentials:"include"`).
-  - [ ] `frontend/src/features/profile/InvestorProfileSetting.tsx` — editable form: `useState` per field,
+  - [x] `frontend/src/features/profile/InvestorProfileSetting.tsx` — editable form: `useState` per field,
         `useEffect` load on mount (active-flag cleanup), async `save()` with `saving`/`savedAt`/`error` and
         the "✓ Saved" indicator (copy the shape of `NotificationPreferences.tsx`). Risk tolerance as a
         select/segmented control; goal/notes as text; target amount (number) + date; residency + home
         currency inputs.
-  - [ ] Mount it as a new `SettingsCard` on `frontend/src/app/(dashboard)/profile/page.tsx` (alongside
+  - [x] Mount it as a new `SettingsCard` on `frontend/src/app/(dashboard)/profile/page.tsx` (alongside
         Appearance/Security/Notifications), following how `NotificationsSetting` is embedded.
-- [ ] **Task 7 — Tests (AC: 3, 4, 5)**
-  - [ ] `InvestorProfileServiceTest` (new): with a stubbed repository — (a) a fully-populated profile appears
+- [x] **Task 7 — Tests (AC: 3, 4, 5)**
+  - [x] `InvestorProfileServiceTest` (new): with a stubbed repository — (a) a fully-populated profile appears
         in `describe()`; (b) a blank profile falls back to config residency/currency and matches today's
         output; (c) profile residency overrides the config default.
-  - [ ] Extend `CanadianContextServiceTest` for the non-Canadian residency path (Task 4).
-  - [ ] Backend `mvn -o compile test-compile` + the two tests green; frontend `tsc --noEmit` + `eslint` green
+  - [x] Extend `CanadianContextServiceTest` for the non-Canadian residency path (Task 4).
+  - [x] Backend `mvn -o compile test-compile` + the two tests green; frontend `tsc --noEmit` + `eslint` green
         on the changed files.
-- [ ] **Task 8 — Docs / bookkeeping**
-  - [ ] Update `InvestorProfileService`'s Javadoc (drop the "remaining part of Story 7.5" note now that it's
+- [x] **Task 8 — Docs / bookkeeping**
+  - [x] Update `InvestorProfileService`'s Javadoc (drop the "remaining part of Story 7.5" note now that it's
         done). Add a Mac-Mini validation bullet to `docs/mac-mini-validation.md` §13 (or a new §): edit the
         profile in the running app, confirm it persists across restart and that the portfolio chat visibly
         reflects the risk tolerance/goal.
@@ -212,10 +215,57 @@ Tracker* — *"your financial goal is the destination; set target (amount + time
 
 ### Agent Model Used
 
-_TBD by dev-story_
+claude-opus-4-8[1m] (bmad-dev-story)
 
 ### Debug Log References
 
+- Full backend `mvn -o test`: 363 tests, **0 failures**, 121 context-load **errors** — all
+  `@SpringBootTest`/`*IntegrationTest` classes failing on "Docker environment failed" (Testcontainers needs
+  Postgres/Docker, unavailable on the MacBook). Pre-existing environmental limitation, not introduced here.
+  MacBook verification gates used instead: `compile` + `test-compile` + all unit tests + `tsc`/`eslint`.
+- One test-expectation fix during dev: the non-Canadian suppression message itself contains the word "TFSA"
+  ("the Canadian TFSA/RRSP/RESP … lens does not apply"), so the initial `assertFalse(contains("TFSA"))`
+  failed; changed to assert the lens *facts* are absent (`!contains("15%")`, `!contains("eligible in")`).
+
 ### Completion Notes List
 
+- Single-row `investor_profile` entity (V44) added following the `AppSettings`/`NotificationPrefs` singleton
+  pattern (fixed id=1, DB `CHECK (id = 1)`, get-or-create, seed row).
+- `InvestorProfileService` now blends the persisted profile with the account-derived facts: residency/home
+  currency use the saved value when set, else the `argus.investor.*` config default (kept as fallback — no
+  regression); risk tolerance / goal / target / preferences are appended only when present. Added `current()`,
+  `save(...)`, and `residency()`/`homeCurrency()` accessors.
+- `CanadianContextService` (Story 7.5) made residency-aware: non-Canadian residency suppresses the
+  TFSA/RRSP/withholding lens; the CAD-equivalent FX line is emitted only when the home currency is CAD. Its
+  test grew from 4 → 6 cases; all pass.
+- REST at `/api/investor-profile` (GET/PUT, session-gated by the `/api/**` filter) with record DTOs and
+  validation (risk-tolerance enum, target ≥ 0, 3-letter currency).
+- Frontend: `getInvestorProfile`/`putInvestorProfile` in apiClient; new `InvestorProfileSetting.tsx` editable
+  card mounted on the Profile page (indexes renumbered).
+- Out of scope (per spec, unchanged): learned behavior patterns; active goal-tracker rerouting alerts.
+- Runtime persistence + grounding behavior is Mini-validated — see `docs/mac-mini-validation.md §14`.
+
 ### File List
+
+**Added**
+- `backend/src/main/resources/db/migration/V44__investor_profile.sql`
+- `backend/src/main/java/com/argus/conversation/InvestorProfile.java`
+- `backend/src/main/java/com/argus/conversation/InvestorProfileRepository.java`
+- `backend/src/main/java/com/argus/conversation/RiskTolerance.java`
+- `backend/src/main/java/com/argus/conversation/InvestorProfileController.java`
+- `backend/src/test/java/com/argus/conversation/InvestorProfileServiceTest.java`
+- `frontend/src/features/profile/InvestorProfileSetting.tsx`
+
+**Modified**
+- `backend/src/main/java/com/argus/conversation/InvestorProfileService.java`
+- `backend/src/main/java/com/argus/persona/CanadianContextService.java`
+- `backend/src/test/java/com/argus/persona/CanadianContextServiceTest.java`
+- `frontend/src/lib/apiClient.ts`
+- `frontend/src/app/(dashboard)/profile/page.tsx`
+- `docs/mac-mini-validation.md`
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-07-15 | Story 7.6 implemented: persisted user-editable investor profile (entity + V44 + API + Profile card), wired into portfolio-chat grounding and the residency-aware Canadian persona. Unit tests green (`InvestorProfileServiceTest` 5/5, `CanadianContextServiceTest` 6/6); integration tests deferred to the Mini (Docker). Status → review. |

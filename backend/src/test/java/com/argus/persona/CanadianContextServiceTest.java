@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.argus.conversation.InvestorProfileService;
 import com.argus.marketdata.FxRateService;
 import com.argus.portfolio.LivePortfolioService;
 import java.math.BigDecimal;
@@ -13,12 +14,20 @@ import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-/** The deterministic Canadian-lens facts that ground the Canadian persona (Story 7.5, FR-34). */
+/** The deterministic Canadian-lens facts that ground the Canadian persona (Stories 7.5 + 7.6). */
 class CanadianContextServiceTest {
 
 	private final FxRateService fx = mock(FxRateService.class);
 	private final LivePortfolioService livePortfolio = mock(LivePortfolioService.class);
-	private final CanadianContextService service = new CanadianContextService(fx, livePortfolio);
+	private final InvestorProfileService investorProfile = mock(InvestorProfileService.class);
+	private final CanadianContextService service =
+			new CanadianContextService(fx, livePortfolio, investorProfile);
+
+	{
+		// Default: a Canadian investor with a CAD home currency (Story 7.6 profile defaults).
+		when(investorProfile.residency()).thenReturn("Canadian");
+		when(investorProfile.homeCurrency()).thenReturn("CAD");
+	}
 
 	@Test
 	void usListedNameGetsCadEquivalentAndWithholdingNote() {
@@ -64,5 +73,30 @@ class CanadianContextServiceTest {
 
 		assertFalse(facts.contains("USD/CAD"), "no rate line when the rate is unavailable");
 		assertTrue(facts.contains("15%") && facts.contains("RRSP"), "tax facts are still present");
+	}
+
+	@Test
+	void nonCanadianResidencySuppressesTheCanadianLens() {
+		when(investorProfile.residency()).thenReturn("American");
+		when(livePortfolio.priceCurrency("NVDA")).thenReturn(Optional.of("USD"));
+
+		String facts = service.describe("NVDA", new BigDecimal("200.00"));
+
+		assertTrue(facts.contains("American"), "names the actual residency");
+		assertTrue(facts.contains("does not apply"), "the Canadian lens is suppressed");
+		assertFalse(facts.contains("15%"), "no US-withholding facts applied for a non-Canadian investor");
+		assertFalse(facts.contains("eligible in"), "no registered-account eligibility framing applied");
+	}
+
+	@Test
+	void nonCadHomeCurrencyDropsTheFxLineButKeepsEligibility() {
+		when(investorProfile.homeCurrency()).thenReturn("USD");
+		when(livePortfolio.priceCurrency("NVDA")).thenReturn(Optional.of("USD"));
+		when(fx.usdCadOn(any(LocalDate.class))).thenReturn(Optional.of(new BigDecimal("1.4200")));
+
+		String facts = service.describe("NVDA", new BigDecimal("200.00"));
+
+		assertFalse(facts.contains("USD/CAD"), "no CAD conversion when the home currency isn't CAD");
+		assertTrue(facts.contains("15%"), "still a Canadian resident → withholding note applies");
 	}
 }

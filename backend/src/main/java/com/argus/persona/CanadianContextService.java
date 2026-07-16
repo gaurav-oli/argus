@@ -1,5 +1,6 @@
 package com.argus.persona;
 
+import com.argus.conversation.InvestorProfileService;
 import com.argus.marketdata.FxRateService;
 import com.argus.portfolio.LivePortfolioService;
 import java.math.BigDecimal;
@@ -27,32 +28,45 @@ public class CanadianContextService {
 
 	private final FxRateService fx;
 	private final LivePortfolioService livePortfolio;
+	private final InvestorProfileService investorProfile;
 
-	public CanadianContextService(FxRateService fx, LivePortfolioService livePortfolio) {
+	public CanadianContextService(FxRateService fx, LivePortfolioService livePortfolio,
+			InvestorProfileService investorProfile) {
 		this.fx = fx;
 		this.livePortfolio = livePortfolio;
+		this.investorProfile = investorProfile;
 	}
 
 	/**
 	 * A short facts block for {@code ticker} to feed the Canadian persona. {@code priceTargetNative} is the
-	 * recommendation's price target in the ticker's own currency (may be null). Always returns usable text;
-	 * the CAD-equivalent line is included only when the name is US-listed and today's rate is available.
+	 * recommendation's price target in the ticker's own currency (may be null). The TFSA/RRSP + withholding
+	 * lens applies only to a Canadian-resident investor (from the saved profile, Story 7.6); for a
+	 * non-Canadian resident it is suppressed. The CAD-equivalent line is included only when the name is
+	 * US-listed, the investor's home currency is CAD, and today's rate is available.
 	 */
 	public String describe(String ticker, BigDecimal priceTargetNative) {
+		String residency = investorProfile.residency();
+		if (!"Canadian".equalsIgnoreCase(residency)) {
+			return "- Investor residency: " + residency + " — the Canadian TFSA/RRSP/RESP + US-withholding "
+					+ "lens does not apply; assess this against the investor's own tax regime.";
+		}
+
 		if (!isUsListed(ticker)) {
 			return "- Canadian-listed (CAD): no US dividend withholding tax; eligible in TFSA, RRSP, RESP "
 					+ "and non-registered accounts. Capital gains are sheltered in registered accounts.";
 		}
 
 		StringBuilder b = new StringBuilder();
-		Optional<BigDecimal> rate = fx.usdCadOn(LocalDate.now(TORONTO));
-		if (rate.isPresent()) {
-			b.append(String.format("- USD/CAD ≈ %.4f (Bank of Canada, latest).", rate.get()));
-			if (priceTargetNative != null) {
-				BigDecimal cad = priceTargetNative.multiply(rate.get()).setScale(2, RoundingMode.HALF_UP);
-				b.append(String.format(" Price target US$%.2f ≈ C$%s.", priceTargetNative, cad));
+		if ("CAD".equalsIgnoreCase(investorProfile.homeCurrency())) {
+			Optional<BigDecimal> rate = fx.usdCadOn(LocalDate.now(TORONTO));
+			if (rate.isPresent()) {
+				b.append(String.format("- USD/CAD ≈ %.4f (Bank of Canada, latest).", rate.get()));
+				if (priceTargetNative != null) {
+					BigDecimal cad = priceTargetNative.multiply(rate.get()).setScale(2, RoundingMode.HALF_UP);
+					b.append(String.format(" Price target US$%.2f ≈ C$%s.", priceTargetNative, cad));
+				}
+				b.append('\n');
 			}
-			b.append('\n');
 		}
 		b.append("- US-listed: eligible in TFSA, RRSP, RESP and non-registered accounts. US dividends carry "
 				+ "a 15% withholding tax (Canada–US treaty) — waived in an RRSP, but withheld and "

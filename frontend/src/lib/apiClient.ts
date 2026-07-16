@@ -867,6 +867,34 @@ export const getNotificationPrefs = (): Promise<NotificationPrefs> =>
 export const putNotificationPrefs = (prefs: NotificationPrefs): Promise<NotificationPrefs> =>
   apiPut<NotificationPrefs>("/api/notifications/preferences", prefs);
 
+// ---- Investor Profile (Story 7.6) ----
+
+/** Mirrors the backend `InvestorProfileController.InvestorProfileView` — the user-editable profile. */
+export interface InvestorProfile {
+  /** "CONSERVATIVE" | "BALANCED" | "GROWTH" | "AGGRESSIVE", or null when unset. */
+  riskTolerance: string | null;
+  financialGoal: string | null;
+  /** Destination amount in the home currency, or null. */
+  targetAmount: number | null;
+  /** ISO date (YYYY-MM-DD) or null. */
+  targetDate: string | null;
+  /** Overrides the argus.investor.residency config default when set. */
+  residency: string | null;
+  /** 3-letter code; overrides the argus.investor.home-currency default when set. */
+  homeCurrency: string | null;
+  notes: string | null;
+  updatedAt: string | null;
+}
+
+/** The editable fields (the PUT body); `updatedAt` is server-owned and not sent. */
+export type InvestorProfileUpdate = Omit<InvestorProfile, "updatedAt">;
+
+export const getInvestorProfile = (): Promise<InvestorProfile> =>
+  apiGet<InvestorProfile>("/api/investor-profile");
+
+export const putInvestorProfile = (profile: InvestorProfileUpdate): Promise<InvestorProfile> =>
+  apiPut<InvestorProfile>("/api/investor-profile", profile);
+
 // ---- Morning Briefing (Epic 8, FR-16) ----
 
 /** Mirrors the backend `BriefingController.BriefingView` record. */

@@ -6,6 +6,7 @@ import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionManager } from "@/features/auth/SessionManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 import { NotificationsSetting } from "@/features/notifications/NotificationsSetting";
+import { InvestorProfileSetting } from "@/features/profile/InvestorProfileSetting";
 import { PanicSettings } from "@/features/panic/PanicSettings";
 
 export default function ProfilePage() {
@@ -66,6 +67,20 @@ export default function ProfilePage() {
 
         <SettingsCard
           index={3}
+          title="Investor profile"
+          desc="Risk tolerance, goals, and preferences that ground Ask-AI and the personas."
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          }
+        >
+          <InvestorProfileSetting />
+        </SettingsCard>
+
+        <SettingsCard
+          index={4}
           title="Safety"
           desc="Panic mode and emergency controls."
           icon={
@@ -79,7 +94,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={4}
+          index={5}
           title="Active sessions"
           desc="Devices currently signed in to Argus."
           icon={

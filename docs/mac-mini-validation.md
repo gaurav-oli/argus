@@ -245,6 +245,24 @@ verdicts come from the local BIG model (gemma) — quality/format only observabl
       surface the US-listed withholding note (the safe default).
 [Source: Epic 7 personas; `com.argus.persona` (PersonaService, CanadianContextService), `RecommendationCards.tsx`]
 
+## 14. Persisted investor profile (Epic 7, Story 7.6)  ⏳ round-trip + grounding check on the Mini
+Built + unit-verified on the MacBook (`InvestorProfileServiceTest` 5/5, `CanadianContextServiceTest` 6/6,
+backend `compile`/`test-compile` green, frontend `tsc`/`eslint` green). Needs the running stack (Postgres +
+Flyway V44 + the local model) to exercise persistence and grounding:
+- [ ] **Migration:** `V44__investor_profile.sql` applies on boot; the `investor_profile` row (id=1) seeds.
+- [ ] **Edit + persist:** Profile → "Investor profile" — set risk tolerance, goal, target (amount + date),
+      residency, home currency, notes → Save shows "✓ Saved"; **reload and restart** the app and the values
+      are still there (single-row upsert).
+- [ ] **Chat grounding (FR-31):** with a profile saved, the portfolio chat's answers reflect the risk
+      tolerance / goal / target (i.e. `InvestorProfileService.describe()` now includes them). A blank profile
+      behaves exactly as before (config/derived defaults).
+- [ ] **Residency override (FR-34):** set residency to a non-Canadian value → the Canadian persona's context
+      block is suppressed ("does not apply"); set home currency to non-CAD → the CAD-equivalent FX line drops
+      but the residency-appropriate framing stays. Reset to Canadian/CAD → the full lens returns.
+- [ ] **Validation:** PUT rejects a negative target amount, a non-3-letter currency, and an unknown risk
+      tolerance (400); GET returns the current profile.
+[Source: Story 7.6; `com.argus.conversation` (InvestorProfile, InvestorProfileService, InvestorProfileController), `V44__investor_profile.sql`, `features/profile/InvestorProfileSetting.tsx`]
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._
