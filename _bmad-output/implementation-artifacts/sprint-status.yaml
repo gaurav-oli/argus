@@ -127,20 +127,20 @@ development_status:
   epic-8-retrospective: optional
 
   # Epic 9: Operations Dashboards
-  epic-9: in-progress
+  epic-9: done
   9-1-per-agent-status-panel: done          # snapshot + view + live /topic/agents WS; error/duration/next-run need per-run instrumentation (follow-up)
   9-2-agent-5-accuracy-tracking: done       # win-rate windows + taken/declined; avg-gains N/A (no P&L modeled)
   9-3-contribution-attribution: done        # signal-weight aggregation; PerformanceServiceTest green
   9-4-calibration-tracking: done            # probability-bin reliability; insufficient-sample labelling
   9-5-hardware-resource-monitor: done       # /api/ops/hardware (RAM/SSD/CPU via JVM MXBeans); real values on Mini; per-component RAM + days-to-full follow-up
   9-6-api-budget-tracker: done              # built in Epic 10 (BudgetController); per-agent/model breakdown is follow-up
-  9-7-data-freshness-backup-status: partial # freshness done (/api/ops/freshness + UI); backup status deferred (external SSD, Mini)
+  9-7-data-freshness-backup-status: done    # freshness (/api/ops/freshness + UI) AND backup-status half now built (BackupStatusService → Ops health card, e9c13c8); external-SSD runtime validation -> mac-mini-validation.md §10
   epic-9-retrospective: optional
 
   # Epic 10: Resilience, Backup & Budget
-  epic-10: in-progress
-  10-1-automated-incremental-backup: backlog   # Mini-dependent (external SSD + pg_dump scheduling)
-  10-2-backup-status-visibility: backlog        # depends on 10.1; Mini
+  epic-10: done
+  10-1-automated-incremental-backup: done   # built (e9c13c8): scripts/backup.sh (pg_dump 6h full + 15-min critical tables), install-backup-schedule.sh (launchd), BackupWatcher edge-triggered 🔴 disconnect / 🟡 stale alerts. External-SSD + launchd runtime validation -> mac-mini-validation.md §10
+  10-2-backup-status-visibility: done        # built (e9c13c8): BackupStatusService (filesystem-derived, no DB table) → OpsController → Ops "System health" card. Runtime validation -> mac-mini-validation.md §10
   10-3-recovery-runbook: done                   # /RECOVERY.md
   10-4-degraded-mode-coordinator-gap-3: done    # coordinator+probe+notify+catch-up+banner; PlatformModeServiceTest green. Per-agent pause gating is integration follow-up
   10-5-real-time-budget-tracking: done          # CostRecorder/CostEvent per call/agent/model; monthly reset (CostGovernor)

@@ -160,8 +160,8 @@ logic and need no Mini step. These need the running stack / real hardware:
       under load. Still null/follow-up: per-component RAM (Postgres/Redis/model resident), SSD days-to-full
       (needs growth history), Neural-Engine load (not exposed to the JVM).
 - [ ] **9.7 freshness:** `GET /api/ops/freshness` flags a source stale past its threshold — verify against
-      real agent cadences and tune thresholds if needed. **Backup status is NOT built** (needs the external
-      backup SSD + disk-mount check) — belongs with Epic 10, Story 10.3.
+      real agent cadences and tune thresholds if needed. **Backup status is now built** (`BackupStatusService`
+      feeds the Ops health card) but needs the external backup SSD to exercise — validated with 10.1/10.2 below.
 
 ## 9. Epic 10 — Resilience & budget  ⏳ confirm on the Mini
 Built + statically verified on the laptop (`PlatformModeServiceTest` passes; backend `test-compile`,
@@ -174,10 +174,12 @@ frontend `tsc`/`eslint` green). Needs the running stack / real outage / external
 - [ ] **10.6 Budget alerts:** drive paid spend across 70/80/95% and confirm `BudgetWatcher` pushes the
       NOTICE/WARNING/CRITICAL notifications once per escalation, and that ≥95% pauses cloud calls
       (`CostGovernor.allowPaidCall()` false → gateway stays local).
-- [ ] **10.1 / 10.2 Automated backup + status (NOT built):** implement on the Mini where the external SSD
-      exists — `pg_dump` every 6h + critical-table incremental every 15 min to the SSD, a 🔴 push on SSD
-      disconnect, and a backup-status endpoint (last success/size/health) feeding the Ops "System health"
-      card (the 9.7 backup half lands here too). **Paste-ready build steps:**
+- [ ] **10.1 / 10.2 Automated backup + status (BUILT on the laptop — validate on the Mini):** the code exists
+      (`scripts/backup.sh` = `pg_dump` 6h full + 15-min critical-tables; `scripts/install-backup-schedule.sh` =
+      launchd; `BackupWatcher` = 🔴 disconnect / 🟡 stale alerts; `BackupStatusService` → Ops "System health"
+      card). On the Mini with the external SSD mounted: run `install-backup-schedule.sh`, set `ARGUS_BACKUP_DIR`,
+      and confirm (a) full + critical dumps land on the SSD at cadence, (b) the Ops card shows last success/size,
+      (c) unplugging the SSD fires the 🔴 CRITICAL push once and recovery re-arms it. **Setup steps:**
       [`docs/backup-build-checklist.md`](backup-build-checklist.md).
 - [ ] **10.3 Recovery drill:** once backups exist, follow [`/RECOVERY.md`](../RECOVERY.md) end-to-end on a
       scratch volume and confirm the documented data-loss bounds hold.
