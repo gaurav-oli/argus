@@ -63,6 +63,51 @@ class DefaultModelGatewayTest {
 	}
 
 	@Test
+	void generateInvokesHaikuFallbackOnBlankResponse() {
+		// The local build can return HTTP 200 with empty content (Mini validation, 2026-07-16) —
+		// treated the same as a thrown exception, not silently returned to the caller.
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "fallback-response";
+		};
+
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+
+		assertEquals("fallback-response", gateway.generate("ping"));
+		assertEquals(1, fallbackCalls.get(), "Haiku fallback should be invoked exactly once on blank content");
+	}
+
+	@Test
+	void generateInvokesHaikuFallbackOnWhitespaceOnlyResponse() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "fallback-response";
+		};
+
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("   \n  "), fallback, gov(), props(1));
+
+		assertEquals("fallback-response", gateway.generate("ping"));
+		assertEquals(1, fallbackCalls.get());
+	}
+
+	@Test
+	void smallTierDoesNotFallBackOnBlankResponse() {
+		// Small tier (Agent 1/2/3 volume calls) propagates blank content as-is — no paid fallback,
+		// same posture as its existing exception behavior (smallTierDoesNotFallBackToHaiku).
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "fallback";
+		};
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+
+		assertEquals("", gateway.generate("ping", ModelTier.SMALL));
+		assertEquals(0, fallbackCalls.get());
+	}
+
+	@Test
 	void bigModelAccessIsSerialized() throws InterruptedException {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
 		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), props(1));

@@ -61,7 +61,15 @@ public class DefaultModelGateway implements ModelGateway {
 		return content;
 	}
 
-	/** Big-tier: serialized at concurrency 1 (Decision 1), Haiku fallback on failure. */
+	/**
+	 * Big-tier: serialized at concurrency 1 (Decision 1), Haiku fallback on failure <b>or on a blank
+	 * response</b>. The local build in prod can legitimately return HTTP 200 with empty content — a
+	 * known-bad GGUF/template combination (Mini validation, 2026-07-16) sometimes exhausts its entire
+	 * token budget on invisible/special tokens for a large grounded prompt, producing no usable text
+	 * even though the call itself "succeeded". Left unguarded, that reaches the user as a blank chat
+	 * bubble with no error. Treating blank the same as a thrown exception closes that gap using the
+	 * fallback path this method already has.
+	 */
 	private String generateBig(String prompt) {
 		boolean acquired = false;
 		try {
@@ -70,6 +78,11 @@ public class DefaultModelGateway implements ModelGateway {
 			long startNanos = System.nanoTime();
 			String content = chatClient.prompt().user(prompt).call().content();
 			long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
+			if (content == null || content.isBlank()) {
+				log.warn("Local model returned no usable content ({} ms, {} prompt chars) — "
+						+ "invoking Haiku fallback", durationMs, prompt.length());
+				return haikuFallback.generate(prompt);
+			}
 			log.info("model generate ok ({} ms)", durationMs);
 			return content;
 		}

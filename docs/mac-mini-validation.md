@@ -100,29 +100,39 @@ and a running Redis — none fully exercisable on the dev MacBook.
       `Web push 'Your morning briefing' delivered to 1 device(s)` — confirmed on your phone.
 - [ ] `GET /api/briefing/latest` → dashboard **BriefingCard** rendering — visual, needs the browser/device.
 - [ ] The **08:00 America/Toronto** cron firing unattended — needs an overnight observation.
-- [x] **ROOT-CAUSED 2026-07-16, mitigation shipped, not fully resolved.** Local-model calls
-      (briefing, portfolio chat, persona generation) were hanging 60–180s+ with **zero response**
-      (`HTTP 000`), reproduced fresh after a backend restart (rules out a stuck permit). Root cause,
-      confirmed with a raw Ollama call **bypassing the backend entirely**: the custom-imported
-      `gemma4` tags have no stop sequence, so generation is genuinely unbounded — a trivial 3-word
-      prompt ("Say hello") generated **556 tokens** of runaway fake-conversation before happening to
-      stop on its own; nothing bounds the worst case. **Shipped fix:** `spring.ai.ollama.chat.options.
-      num-predict` (new `ARGUS_MODEL_MAX_TOKENS`, default 1024) hard-caps generation — this
-      **converts the failure from unbounded/never-returns into a bounded, deterministic response**
-      every time (verified). **What it does NOT fix:** for the real, large production prompts
-      (full portfolio + investor profile + calendar grounding), the capped response can still come
-      back as `content: ""` — the model's token budget is being consumed without producing usable
-      visible text for prompts this size/shape, distinct from (and on top of) the raw stop-token bug.
-      A synthetic *smaller* multi-section prompt tested directly against Ollama **did** produce a
-      correct, well-grounded 782-token answer in 67s, so the model isn't fundamentally incapable —
-      something about the real prompt's actual size/formatting is triggering worse behavior than my
-      synthetic approximation. **Also found:** neither the backend nor the frontend has a safety net
-      for an empty local-model answer — it would currently reach the user as a blank chat bubble with
-      no error. Not fixed here (auto-falling-back to paid Haiku on empty/bad local output is a
-      cost/behavior decision, flagged for your call rather than wired in silently). **Practical
-      recommendation unchanged from §1's original decision:** Haiku escalation (§7, §13) is fast
-      (~5s) and reliable throughout all of this — keep leaning on it until the local model
-      is replaced (already the accepted long-term plan per §1 CORRECTION).
+- [x] **ROOT-CAUSED + RESOLVED 2026-07-16** (two-part fix; local model itself remains broken, but
+      the *user-visible* failure is gone). Local-model calls (briefing, portfolio chat, persona
+      generation) were hanging 60–180s+ with **zero response** (`HTTP 000`), reproduced fresh after a
+      backend restart (rules out a stuck permit). Root cause, confirmed with a raw Ollama call
+      **bypassing the backend entirely**: the custom-imported `gemma4` tags have no stop sequence —
+      a trivial 3-word prompt ("Say hello") generated **556 tokens** of runaway fake-conversation
+      before happening to stop on its own; nothing bounded the worst case.
+      **Fix 1 — bound generation:** `spring.ai.ollama.chat.options.num-predict` (new
+      `ARGUS_MODEL_MAX_TOKENS`, default 1024) converts unbounded/never-returns into a bounded,
+      deterministic response every time.
+      **Deeper finding:** for the real production prompt (5,051 chars / 2,187 tokens — full
+      portfolio + investor profile + calendar), the capped response still came back as `content:
+      ""`, and critically **`num_predict=1` also returned empty** — the model's very first generated
+      token is already invisible for this prompt shape, so no token-budget size could ever have
+      fixed it (confirmed directly against Ollama, isolating prompt-eval at a clean 19.5s — not the
+      bottleneck). A restart of the native Ollama service and a fresh reload did not change this.
+      **Fix 2 — the actual resolution:** `DefaultModelGateway.generateBig` now treats a blank/empty
+      response exactly like a thrown exception and automatically falls back to Haiku (extending the
+      *existing* fallback-on-failure pattern — not new cost-policy territory). **Verified live**
+      end-to-end through the real backend endpoint: local attempt burns ~108s producing nothing →
+      gateway detects the blank result → escalates to Haiku (~5s) → **real, correctly-grounded
+      answer delivered** (confirmed in logs: `Local model returned no usable content (107685 ms,
+      5015 prompt chars) — invoking Haiku fallback` → `event=haiku_escalation … costUsd=0.003516`).
+      366/366 tests pass (3 new, covering blank + whitespace-only local responses, and confirming
+      the small tier — high-frequency Agent 1/2/3 calls — deliberately does NOT auto-fallback, same
+      posture as its existing exception behavior).
+      **What's still open:** total latency for a doomed local attempt + Haiku fallback is ~113s —
+      correct but not fast. The local model itself is still broken for this prompt shape; only the
+      user-facing symptom (blank response) is fixed. A follow-up could shorten the wasted local
+      attempt (e.g. a much smaller `num-predict` just for the fail-fast case) but that needs more
+      evidence before tuning further. **Practical recommendation unchanged from §1's original
+      decision:** the local model remains unreliable for this prompt shape; Haiku is what actually
+      answers reliably, whether via `deeper:true` (fast, ~5s) or now automatically as the safety net.
 
 ## 4. General hardware/ops to confirm on the Mini
 - [x] FileVault ON (secrets at rest — NFR-3) — confirmed on the Mini 2026-06-21.
