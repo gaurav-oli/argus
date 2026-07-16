@@ -89,6 +89,18 @@ public class LivePortfolioService {
 		return java.util.Optional.ofNullable(pp == null ? null : pp.price());
 	}
 
+	/**
+	 * Currency of the latest live price for {@code ticker} ("USD" from Finnhub, "CAD" from the TSX feed),
+	 * if the ticker is currently priced — the honest signal of where a name is listed.
+	 */
+	public java.util.Optional<String> priceCurrency(String ticker) {
+		if (ticker == null) {
+			return java.util.Optional.empty();
+		}
+		PricePoint pp = prices.get(ticker.trim().toUpperCase());
+		return java.util.Optional.ofNullable(pp == null ? null : pp.currency());
+	}
+
 	/** Held tickers with no live price yet — candidates for a supplemental (e.g. TSX) price source. */
 	@Transactional(readOnly = true)
 	public java.util.Set<String> unpricedHeldTickers() {

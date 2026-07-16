@@ -41,13 +41,16 @@ public class PersonaService {
 	private final PersonaVerdictRepository verdicts;
 	private final RecommendationRepository recommendations;
 	private final RecommendationService recommendationService;
+	private final CanadianContextService canadianContext;
 
 	public PersonaService(ModelGateway gateway, PersonaVerdictRepository verdicts,
-			RecommendationRepository recommendations, RecommendationService recommendationService) {
+			RecommendationRepository recommendations, RecommendationService recommendationService,
+			CanadianContextService canadianContext) {
 		this.gateway = gateway;
 		this.verdicts = verdicts;
 		this.recommendations = recommendations;
 		this.recommendationService = recommendationService;
+		this.canadianContext = canadianContext;
 	}
 
 	/**
@@ -118,7 +121,8 @@ public class PersonaService {
 	}
 
 	private Map<Persona, PersonaVerdict> callModel(Recommendation rec) {
-		String raw = gateway.generate(prompt(rec)); // BIG (local) tier
+		String canadaFacts = canadianContext.describe(rec.getTicker(), rec.getPriceTarget());
+		String raw = gateway.generate(prompt(rec, canadaFacts)); // BIG (local) tier
 		JsonNode array = JSON.readTree(extractJsonArray(raw));
 		Map<Persona, PersonaVerdict> out = new EnumMap<>(Persona.class);
 		for (JsonNode node : array) {
@@ -137,7 +141,7 @@ public class PersonaService {
 		return out;
 	}
 
-	private static String prompt(Recommendation rec) {
+	private static String prompt(Recommendation rec, String canadaFacts) {
 		StringBuilder evidence = new StringBuilder();
 		for (RecommendationSignal s : rec.getSignals()) {
 			evidence.append("- ").append(s.getAgent()).append(" → ").append(s.getDirection())
@@ -152,16 +156,20 @@ public class PersonaService {
 				RECOMMENDATION: %s — %s (%.0f%% bullish, confidence %.0f%%)
 				EVIDENCE from the analysis agents:
 				%s
+				CANADIAN CONTEXT (verified facts — the canadian persona MUST use these, never invent figures):
+				%s
+
 				For EACH persona, choose a stance toward this recommendation — AGREE, DISAGREE, or CAUTION — \
-				and give ONE short sentence (max ~20 words) of reasoning in that persona's voice:
-				1. buffett — Warren Buffett: value, durable moats, long-term, circle of competence
-				2. lynch — Peter Lynch: growth at a reasonable price, know what you own
-				3. devils_advocate — argue the bear case and the risks, whatever the recommendation says
-				4. canadian — Canadian investor: TFSA/RRSP tax efficiency, CAD/USD, US withholding tax
+				and give reasoning in that persona's voice:
+				1. buffett — Warren Buffett: value, durable moats, long-term, circle of competence (≤20 words)
+				2. lynch — Peter Lynch: growth at a reasonable price, know what you own (≤20 words)
+				3. devils_advocate — argue the bear case and the risks, whatever the recommendation says (≤20 words)
+				4. canadian — Canadian investor: cite the CAD-equivalent figure AND the account-specific US \
+				withholding / TFSA-RRSP note from the CANADIAN CONTEXT above (≤35 words)
 
 				Respond with ONLY a JSON array, no prose, no markdown fences:
 				[{"persona":"buffett","stance":"AGREE","rationale":"..."}, {"persona":"lynch",...}, ...]
-				""".formatted(rec.getTicker(), rec.getDirection(), bull, conf, evidence);
+				""".formatted(rec.getTicker(), rec.getDirection(), bull, conf, evidence, canadaFacts);
 	}
 
 	/** Pull the JSON array out of a model response that may include prose or markdown fences. */
