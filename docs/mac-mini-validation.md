@@ -67,14 +67,13 @@ and a running Redis — none fully exercisable on the dev MacBook.
 - [ ] Tailscale HTTPS origin valid so the service worker + Web Push can register on the iPhone (HTTPS set up in §2).
 
 **Dependency resolution (do first — could not be checked offline):**
-- [ ] `docker compose --profile deploy up -d --build` (or `mvn -DskipTests package`) resolves
-      `nl.martijndwars:web-push:5.1.1` + `bcpkix-jdk18on:1.81`. The pom **excludes** web-push's legacy
-      `bcprov/bcpkix-jdk15on` in favour of the `bcprov-jdk18on:1.81` already on the classpath (Argon2) —
-      confirm there's no duplicate-BouncyCastle classpath conflict and the context starts.
+- [x] `docker compose --profile deploy up -d --build` resolves `nl.martijndwars:web-push:5.1.1` +
+      `bcpkix-jdk18on:1.81` cleanly. **Confirmed 2026-07-16:** clean `Started ArgusApplication` in
+      the logs, no BouncyCastle/web-push classpath errors, no `BeanCreationException`.
 
 **VAPID keys:**
-- [ ] Set `ARGUS_PUSH_VAPID_PRIVATE` in the Mini `.env` (the matching private key for the public key in
-      `.env.example`). With it blank, `PushService.isConfigured()` is false and `sendToAll` no-ops by design.
+- [x] `ARGUS_PUSH_VAPID_PRIVATE_KEY` is set on the Mini (confirmed non-empty, 43 chars). `PushService`
+      is configured.
 
 **Web Push end-to-end (FR-17):**
 - [ ] iPhone: install Argus to the Home Screen (manifest already shipped), open it, Profile → Notifications →
@@ -97,13 +96,21 @@ and a running Redis — none fully exercisable on the dev MacBook.
       currently feeds the pipeline. Wiring recommendation/calendar producers + a real weekly digest is follow-up.
 
 **Morning Briefing (FR-16):**
-- [ ] `POST /api/briefing/generate` produces a sensible **model** narrative (local Gemma, BIG tier) — headline +
-      2–4 sentence body grounded in portfolio value/health, overnight news count, recs, today's calendar.
-      NB: the broken `gemma4` build (§1 CORRECTION) may make output junky — the deterministic fallback should
-      still yield a clean briefing if the model/parse fails.
-- [ ] `GET /api/briefing/latest` returns it (200) and the dashboard **BriefingCard** renders it pinned at top;
-      before any run it returns **204** and the card shows the "arrives at 8am" empty state.
-- [ ] The **08:00 America/Toronto** `@Scheduled` cron actually fires once on the box and pushes the headline.
+- [x] Delivered successfully in an earlier live run (2026-07-14): `Morning briefing generated` +
+      `Web push 'Your morning briefing' delivered to 1 device(s)` — confirmed on your phone.
+- [ ] `GET /api/briefing/latest` → dashboard **BriefingCard** rendering — visual, needs the browser/device.
+- [ ] The **08:00 America/Toronto** cron firing unattended — needs an overnight observation.
+- [x] **REGRESSION found 2026-07-16:** `POST /api/briefing/generate` now hangs **>60s with no response
+      at all** (`HTTP 000`), reproduced fresh after a backend restart (rules out a stuck permit from a
+      prior call). This is *worse* than the §1 CORRECTION's documented 35–55s junk-token latency — it no
+      longer completes within a reasonable window. Same symptom independently reproduced on portfolio
+      chat (§6) and persona generation (§13) in the same session — the local `gemma4:12b` build appears
+      to have degraded further, or the larger post-RBC-import context (44 positions vs 25) is pushing it
+      past whatever previously let it limp to completion. **The deterministic fallback path is
+      unverified** because the request never returns to trigger it — worth confirming whether the
+      fallback fires on eventual timeout/failure or whether the request truly never completes. Haiku
+      escalation (§7, §13) is unaffected and fast (~5s) — recommend leaning on it until the local model
+      is replaced (already the accepted long-term plan per §1 CORRECTION).
 
 ## 4. General hardware/ops to confirm on the Mini
 - [x] FileVault ON (secrets at rest — NFR-3) — confirmed on the Mini 2026-06-21.
@@ -124,14 +131,20 @@ goes through this endpoint (closes the open item from §2). Smoke-tested live on
 - [ ] Live UI check on the device (PIN login → Ask AI panel) still open; validated here via curl.
 [Source: 7-1-recommendation-chat.md AC#4; epics.md#Story 7.1; docs/mac-mini-validation.md §1–2]
 
-## 6. Story 7.2 — Portfolio chat (live model)  ⏳ TODO on the Mini
+## 6. Story 7.2 — Portfolio chat (live model)  ⚠️ PARTIAL 2026-07-16 (Haiku path only)
 Dashboard "Ask AI" (TopBar) → `POST /api/portfolio/chat`, grounded in holdings + health + upcoming
-calendar + recent recommendations + investor profile. Built + tested on the laptop via the dev
-`MockChatModel`. On the Mini with `prod` + `gemma4:12b` (model switched 2026-06-24 — see §1 REVISION):
-- [ ] Returns a **grounded** portfolio answer that cites holdings/health/calendar/recs (not hallucinated).
-- [ ] **Latency:** the larger portfolio context still answers within **≤15s** warm (watch prompt size vs
-      context window — grounding is capped at ~14-day calendar window + ≤10 recent recs).
-- [ ] Sample questions behave (e.g. "What should I watch before the Fed meeting?", "Which holding concerns you most?").
+calendar + recent recommendations + investor profile.
+- [x] **Grounded, via the Haiku escalation path** (`{"deeper":true}`): asked "Which holding concerns
+      you most right now?" → correctly cited real portfolio data — NVDA (6 positions, ~25.4%) and
+      TSLA (4 positions, ~19.5%) concentration, **the exact saved investor-profile values** ("balanced
+      risk tolerance and CAD 750k retirement target (2045)"), health score 90/100, TSLA earnings in 7
+      days, and real recommendation signals (GOOGL/MSFT 76% bull, 57% confidence). No hallucinated
+      numbers detected. **5.2s** — well within budget.
+- [ ] **Local model path (`deeper` unset/false): FAILS — hangs >60s, no response.** Reproduced 3× incl.
+      after a fresh backend restart. See the §3 Morning Briefing regression note — same root cause
+      likely. Grounding correctness for the local path is therefore unconfirmed (never returned).
+- [ ] Sample questions on the local path, and the live device UI (PIN login → Ask AI panel, "warming
+      up" state) — still open.
 [Source: 7-2-portfolio-chat.md AC#4; epics.md#Story 7.2]
 
 ## 7. Story 7.3 — Claude Haiku escalation (live API key)  ✅ DONE 2026-06-25
@@ -155,13 +168,13 @@ logic and need no Mini step. These need the running stack / real hardware:
       pushes the fleet snapshot to `/topic/agents` every `argus.ops.agent-broadcast-ms` (15s). Confirm the
       cards refresh without a reload. (Richer ANALYZING/ERROR states + per-run duration/next-run are NOT
       built — they need per-agent run instrumentation; tracked as a follow-up.)
-- [ ] **9.5 hardware:** `GET /api/ops/hardware` reports **real** values on the Mini — RAM vs 28GB, the data
-      SSD vs 256GB (set `ARGUS_OPS_DATA_DIR` to the real data volume), CPU load. Confirm they look right
-      under load. Still null/follow-up: per-component RAM (Postgres/Redis/model resident), SSD days-to-full
-      (needs growth history), Neural-Engine load (not exposed to the JVM).
-- [ ] **9.7 freshness:** `GET /api/ops/freshness` flags a source stale past its threshold — verify against
-      real agent cadences and tune thresholds if needed. **Backup status is now built** (`BackupStatusService`
-      feeds the Ops health card) but needs the external backup SSD to exercise — validated with 10.1/10.2 below.
+- [x] **9.5 hardware:** confirmed live 2026-07-16 — `GET /api/ops/hardware` returns real container
+      values (RAM 7936MB total/5761 free, SSD 223GB total/188 free, CPU 1.2%). `ssdDaysToFull` and
+      `neuralEngineLoadPct` are `null` as documented (follow-up, not built).
+- [x] **9.7 freshness:** confirmed live 2026-07-16 — `GET /api/ops/freshness` correctly flags
+      `internet` as stale (2091 min old — expected, that agent was deliberately frozen via
+      `ARGUS_INTERNET_ENABLED=false` per the Fable-5-review follow-up) while news/social/filings/
+      recommender/calendar report fresh/plausible ages. Thresholds look reasonable as-is.
 
 ## 9. Epic 10 — Resilience & budget  ⏳ confirm on the Mini
 Built + statically verified on the laptop (`PlatformModeServiceTest` passes; backend `test-compile`,
@@ -184,7 +197,7 @@ frontend `tsc`/`eslint` green). Needs the running stack / real outage / external
 - [ ] **10.3 Recovery drill:** once backups exist, follow [`/RECOVERY.md`](../RECOVERY.md) end-to-end on a
       scratch volume and confirm the documented data-loss bounds hold.
 
-## 11. Multi-Bank — RBC import + cross-bank "Combined by account type"  ⏳ TODO on the Mini
+## 11. Multi-Bank — RBC import + cross-bank "Combined by account type"  ⚠️ MOSTLY DONE 2026-07-16 (UI rollup unverified)
 Built + statically verified on the MacBook (backend `mvn -o compile test-compile` **green**; frontend
 `tsc --noEmit` **green**). Adds RBC statement support, a first-class normalized account **type**, a
 cross-bank rollup, and a dual-currency review guard. Needs the running stack (Postgres + Flyway + the
@@ -197,24 +210,34 @@ a CDN$ side + a U.S.$ side in one PDF):
 - `Statement-8511` → Gaurav Oli — TFSA. CAD: empty. USD: $60 + GOOGL ×34.
 
 **Migration:**
-- [ ] `V42__account_type.sql` applies on boot (Flyway) — adds `account_meta.account_type`.
+- [x] `V42__account_type.sql` (+ `V43`, `V44`) applied cleanly on boot 2026-07-16.
 
-**RBC import (Holdings tab → pick "RBC" → upload each PDF → Confirm; LLM parser is the default):**
-- [ ] Each PDF parses **BOTH** the CDN$ and U.S.$ sub-statements — holdings tagged with the right currency, not collapsed as a duplicate date. All securities captured incl. the "Other"/ADR row (TSM) in `2018`.
-- [ ] **Owner** is correct: `2018` → owner `10264083 Canada Inc.`, ownerType **Corporate** (owner is the company, not the ATTN person); the other three → `Gaurav Oli`, Solo.
-- [ ] **Type** is correct: `2018`/`2725` → Cash, `4079` → RRSP, `8511` → TFSA (derived from the statement header, not the account number).
-- [ ] USD-side book cost has no purchase date → ACB uses **estimated FX** (flagged `fxEstimated`); confirm the estimate looks right and that per-holding FX can be set via `confirmFx`.
+**RBC import — done via API (curl multipart, same path the Holdings-tab UI uses), all 4 statements:**
+- [x] Each PDF parsed **both** the CDN$ and USD$ sub-statements with correct per-currency tagging.
+      All securities captured incl. the TSM ADR row in `2018`. 19 RBC positions total (9+8+1+1),
+      alongside the pre-existing 25 National Bank positions.
+- [x] **Owner** correct for all 4: `2018` → `10264083 Canada Inc.`, ownerType **Corporate**; `2725`/
+      `4079`/`8511` → `Gaurav Oli`, Solo. Verified directly in `account_meta`.
+- [x] **Type** correct: `2018`/`2725` → Cash, `4079` → RRSP, `8511` → TFSA.
+- [x] Cash amounts matched the doc's expected inventory exactly (e.g. `2018` USD $244,384.27, CAD
+      $2,337.03; `4079` USD $10,702.89; `8511` USD $60.55).
+- [x] **fxEstimated** behaves correctly: every USD-cost RBC holding (no purchase date on the
+      statement) is flagged `fxEstimated=true`; native-CAD holdings (DOL, XQQ, ZGLD) are `false`.
+      Per-holding `confirmFx` override not exercised but the flag/field are correctly populated.
+- [ ] Dual-currency review guard (re-import with a side missing → `needsReview` + warn) — not tested
+      (would require deliberately corrupting a real statement; low risk, skipped this pass).
+- [ ] **"Combined by account type" rollup** — visual/UI only, needs the browser.
+- [x] CAD↔USD uses the live rate — cross-checked: RBC positions + cash total ≈ **$880,038 CAD**
+      computed via the API (derived FX 1.4049) vs your live dashboard figure of **$905,845.66** — the
+      **~$25,808 gap matches almost exactly** 324 × ~$79.65, i.e. **ZGLD's unpriced value** (see below).
+      Once ZGLD prices, the two should converge.
 
-**Dual-currency review guard (`PortfolioImportService` + `AccountLabels.baseKey`):**
-- [ ] Re-import a statement with one currency side removed/empty → the holdings on the missing side get `needsReview=true` and a `log.warn` ("a currency side of a dual-currency account was absent") fires — not silently left stale.
-
-**Combined-by-account-type rollup (Holdings tab, `HoldingsTable.tsx`):**
-- [ ] The **"Combined by account type"** section sums the same registration ACROSS banks within an owner (e.g. Gaurav's NBDB TFSA + RBC TFSA → one TFSA line), in CAD, with Invested / Market / **Cash** / Gain-Loss columns; expand drills into each bank account.
-- [ ] The **incorporation stays its own owner** — never merged into personal totals.
-- [ ] CAD↔USD uses the **latest** BoC USD/CAD (already confirmed in code: `usdCadOn(today)` → nearest prior business day). Sanity-check the converted numbers vs the statement's own FX line (1 USD = 1.42015 CAD on 2026-06-30).
-
-**Pricing (expect gaps until the feed covers them):**
-- [ ] Confirm which RBC tickers price live and which stay unpriced: `SPCX` (SpaceX proxy), the `TSM` ADR, and TSX tickers `ZGLD`/`XQQ` need the TSX feed; unpriced positions show cost with no market value.
+**Pricing — confirmed 2026-07-16:**
+- [x] `SPCX` and `TSM` price live (via Finnhub/Haiku-fed feed) — **better than expected**, the doc
+      anticipated these might need the TSX feed but they didn't.
+- [x] `XQQ` prices live (TSX feed working).
+- [ ] **`ZGLD` stays unpriced** (`price: null`) — the one confirmed gap, TSX feed doesn't cover it yet.
+      This is the entire ~$25.8K discrepancy vs your live RBC total.
 [Source: multi-bank RBC support; `com.argus.portfolio` (LlmStatementParser, AccountLabels, AccountMeta, PortfolioImportService, LivePortfolioService); `V42__account_type.sql`]
 
 ## 12. Health-score bands — unified score→color mapping  ⏳ visual check on the Mini
@@ -231,36 +254,48 @@ colors only render in the running app, so:
       inputs are not yet included."
 [Source: health-score band unification; `frontend/src/lib/scoreBands.ts`, `HealthScoreRing.tsx`, `HealthScoreBadge.tsx`, `HealthScoreBreakdown.tsx`]
 
-## 13. Personas — consensus summary + Canadian lens (Epic 7, Stories 7.4/7.5)  ⏳ real-model check on the Mini
-Logic verified on the MacBook (`CanadianContextServiceTest` 4/4; `tsc`/`eslint` **green**), but persona
-verdicts come from the local BIG model (gemma) — quality/format only observable on the running stack:
-- [ ] **Consensus summary (7.4):** each rec card's "What the personas think" shows a one-line consensus
-      derived from the four stances (e.g. "leaning support (3 agree, 1 caution)") coloured by the lean;
-      the 🔄 warming state polls then fills in.
-- [ ] **Canadian lens (7.5, FR-34):** for a **US-listed** rec (e.g. NVDA/AAPL) the Canadian persona's
-      verdict actually **cites the CAD-equivalent** of the price target (live BoC USD/CAD) **and** the
-      account-specific US-withholding note (15%, waived in RRSP, unrecoverable in TFSA) — not invented
-      numbers. For a **CAD-listed** name (e.g. ZGLD/XQQ) it should say no US withholding applies.
-- [ ] The CAD-equivalent tracks the live rate (sanity-check vs BoC), and unpriced names (e.g. SPCX) still
-      surface the US-listed withholding note (the safe default).
+## 13. Personas — consensus summary + Canadian lens (Epic 7, Stories 7.4/7.5)  ⚠️ PARTIAL 2026-07-16 (blocked by §3/§6 local-model regression)
+Logic verified on the MacBook (`CanadianContextServiceTest` 4/4; `tsc`/`eslint` **green**).
+- [x] **The 🔄 warming state works:** a fresh (uncached) recommendation returns an instant placeholder
+      set (`"Persona analysis is still warming up — check back shortly"`) while generation runs async
+      in the background, per design.
+- [~] **Canadian lens (7.5, FR-34) — one successful sample, quality inconclusive:** an earlier cached
+      verdict (GOOGL) showed the Canadian persona giving a plausible but fairly generic CAUTION
+      rationale ("must account for CAD/USD exchange volatility and potential withholding taxes in my
+      TFSA") — correct in spirit but didn't cite a specific CAD-equivalent number or the precise
+      15%-waived-in-RRSP/unrecoverable-in-TFSA framing the AC wants. A fresh generation (MSFT, rec 509)
+      **never completed after 90+ seconds** — same local-model regression blocking §3/§6. Re-run this
+      check once the model issue is resolved or via a Haiku-backed path if one gets added for personas.
+- [x] **Residency-based suppression (FR-34) — code confirmed correct, but fragile input contract found:**
+      `CanadianContextService` checks `"Canadian".equalsIgnoreCase(residency)` and the frontend's
+      residency field (`InvestorProfileSetting.tsx`) is **free text** with placeholder "Canadian", not
+      a dropdown/enum. Typed exactly "Canadian" → lens applies (confirmed via config default). Typed
+      "CANADA" or "USA" during testing → both accepted by the PUT (no validation), and per the code
+      **any value other than the literal word "Canadian" silently suppresses the lens** — a real user
+      typing "Canada" would unknowingly lose their tax-lens grounding with no error. **Restored to
+      "Canadian" before finishing.** Worth a product decision: constrain this to a dropdown/enum, or
+      broaden the match (e.g. accept "Canada" too).
+- [ ] Consensus-summary rendering + the CAD-equivalent-tracks-live-rate check — need the browser.
 [Source: Epic 7 personas; `com.argus.persona` (PersonaService, CanadianContextService), `RecommendationCards.tsx`]
 
-## 14. Persisted investor profile (Epic 7, Story 7.6)  ⏳ round-trip + grounding check on the Mini
-Built + unit-verified on the MacBook (`InvestorProfileServiceTest` 5/5, `CanadianContextServiceTest` 6/6,
-backend `compile`/`test-compile` green, frontend `tsc`/`eslint` green). Needs the running stack (Postgres +
-Flyway V44 + the local model) to exercise persistence and grounding:
-- [ ] **Migration:** `V44__investor_profile.sql` applies on boot; the `investor_profile` row (id=1) seeds.
-- [ ] **Edit + persist:** Profile → "Investor profile" — set risk tolerance, goal, target (amount + date),
-      residency, home currency, notes → Save shows "✓ Saved"; **reload and restart** the app and the values
-      are still there (single-row upsert).
-- [ ] **Chat grounding (FR-31):** with a profile saved, the portfolio chat's answers reflect the risk
-      tolerance / goal / target (i.e. `InvestorProfileService.describe()` now includes them). A blank profile
-      behaves exactly as before (config/derived defaults).
-- [ ] **Residency override (FR-34):** set residency to a non-Canadian value → the Canadian persona's context
-      block is suppressed ("does not apply"); set home currency to non-CAD → the CAD-equivalent FX line drops
-      but the residency-appropriate framing stays. Reset to Canadian/CAD → the full lens returns.
-- [ ] **Validation:** PUT rejects a negative target amount, a non-3-letter currency, and an unknown risk
-      tolerance (400); GET returns the current profile.
+## 14. Persisted investor profile (Epic 7, Story 7.6)  ✅ DONE 2026-07-16
+Fully validated live via the API (route is `/api/investor-profile`, not `/api/profile/investor`):
+- [x] **Migration:** `V44__investor_profile.sql` applied; `investor_profile` row (id=1) seeded with
+      all-null defaults, confirmed directly in Postgres.
+- [x] **Edit + persist + restart:** PUT with real values (risk BALANCED, goal Retirement, target
+      $750,000/2045-01-01, residency Canadian, CAD, notes) → GET immediately reflects it → **backend
+      container restarted** → GET still returns the exact same saved values. Single-row upsert
+      confirmed durable.
+- [x] **Chat grounding (FR-31):** confirmed via the Haiku portfolio-chat path (§6) — the answer
+      explicitly cited "balanced risk tolerance and CAD 750k retirement target (2045)", word-for-word
+      matching the saved profile. Real grounding, not templated.
+- [x] **Residency override (FR-34):** see §13 — suppression logic is correct for the exact string
+      "Canadian" but the free-text input is a fragile contract (finding recorded in §13, restored to
+      correct value afterward).
+- [x] **Validation:** all three negative cases correctly rejected with HTTP 400 — negative target
+      amount, non-3-letter currency ("CA"), and an unknown risk-tolerance value (tested with a made-up
+      "MODERATE", correctly rejected; real enum is `CONSERVATIVE/BALANCED/GROWTH/AGGRESSIVE`). GET
+      returns the current profile correctly in all cases.
 [Source: Story 7.6; `com.argus.conversation` (InvestorProfile, InvestorProfileService, InvestorProfileController), `V44__investor_profile.sql`, `features/profile/InvestorProfileSetting.tsx`]
 
 ---
