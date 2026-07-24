@@ -147,3 +147,7 @@ development_status:
   10-5-real-time-budget-tracking: done          # CostRecorder/CostEvent per call/agent/model; monthly reset (CostGovernor)
   10-6-budget-alerts-auto-switch: done          # 95% auto-switch (allowPaidCall) + BudgetWatcher 70/80/95 alerts via NotificationService
   epic-10-retrospective: optional
+
+  # Epic 11: Phase 2 — Intelligence Layer (not yet PRD-expanded; stories scoped ad hoc as picked up)
+  epic-11: backlog
+  11-1-trade-journal: backlog   # F22. Scoping draft written 2026-07-24 (not yet validated/approved for dev) — see 11-1-trade-journal.md
