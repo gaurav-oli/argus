@@ -87,7 +87,15 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!res.ok) {
     throw await toApiError(res);
   }
-  return (await res.json()) as T;
+  // A 204 or otherwise empty body would throw inside res.json() (Epic 1 hardening backlog —
+  // Story 1.6). No current GET endpoint returns one, but apiGet is the shared path for nearly
+  // every read in this file, so guarding it here — matching the pattern apiPost/apiPut already
+  // use — is cheap insurance against a future endpoint that legitimately has nothing to return.
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /**
@@ -604,7 +612,13 @@ export const getBreakingAlerts = (): Promise<BreakingAlertItem[]> =>
 
 // ---- Economic calendar / Agent 7 (Epic 5) ----
 
-/** An upcoming calendar event; `quietPeriod` (CLEAR|NOTE|QUIET) is set only for earnings (Story 5.3). */
+/**
+ * A calendar event — upcoming (`daysUntil` >= 0) or recently reported (`daysUntil` < 0, last 30
+ * days by default), latest to oldest by event date. `quietPeriod` (CLEAR|NOTE|QUIET) is set only
+ * for upcoming earnings (Story 5.3). `epsActual`/`epsEstimate`/`epsSurprisePercent` are set only
+ * once an earnings event has reported. `logoUrl` is null when nothing's cached for the ticker (or
+ * the event has no ticker, e.g. a Fed event).
+ */
 export interface UpcomingEvent {
   id: number;
   type: string;
@@ -613,10 +627,25 @@ export interface UpcomingEvent {
   eventDate: string;
   daysUntil: number;
   quietPeriod: string | null;
+  epsActual: number | null;
+  epsEstimate: number | null;
+  epsSurprisePercent: number | null;
+  logoUrl: string | null;
 }
 
 export const getUpcomingEvents = (): Promise<UpcomingEvent[]> =>
   apiGet<UpcomingEvent[]>("/api/calendar/upcoming");
+
+/**
+ * Batch ticker -> logo URL lookup (misses simply omitted from the response — the caller falls
+ * back to an initial-letter icon). Backed by the same cache Agent 7's ingest warms, so it never
+ * triggers a fresh external fetch on the read path.
+ */
+export const getCompanyLogos = (tickers: string[]): Promise<Record<string, string>> => {
+  const distinct = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))];
+  if (distinct.length === 0) return Promise.resolve({});
+  return apiGet<Record<string, string>>(`/api/market/logos?tickers=${encodeURIComponent(distinct.join(","))}`);
+};
 
 // ---- Recommendations / Agent 5 (Epic 6) ----
 
