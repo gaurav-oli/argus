@@ -1,9 +1,12 @@
 package com.argus.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import com.argus.common.BadRequestException;
+import com.argus.common.PayloadTooLargeException;
 import com.argus.cost.CostEventRepository;
 import com.argus.cost.CostGovernor;
 import java.time.Duration;
@@ -24,7 +27,11 @@ import org.springframework.ai.chat.prompt.Prompt;
 class DefaultModelGatewayTest {
 
 	private static ModelGatewayProperties props(int concurrency) {
-		return new ModelGatewayProperties(concurrency, Duration.ofMinutes(10), "gemma3:27b", "unused");
+		return propsWithTimeout(concurrency, Duration.ofMinutes(10));
+	}
+
+	private static ModelGatewayProperties propsWithTimeout(int concurrency, Duration callTimeout) {
+		return new ModelGatewayProperties(concurrency, callTimeout, Duration.ofMinutes(10), "gemma3:27b", "unused");
 	}
 
 	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
@@ -170,6 +177,83 @@ class DefaultModelGatewayTest {
 			// small tier propagates failure rather than paying for a Haiku fallback
 		}
 		assertEquals(0, fallbackCalls.get(), "small tier must never invoke the paid Haiku fallback");
+	}
+
+	@Test
+	void constructorRejectsNonPositiveConcurrency() {
+		assertThrows(IllegalArgumentException.class,
+				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(0)));
+		assertThrows(IllegalArgumentException.class,
+				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(-1)));
+	}
+
+	@Test
+	void generateRejectsNullOrBlankPrompt() {
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
+
+		assertThrows(BadRequestException.class, () -> gateway.generate(null));
+		assertThrows(BadRequestException.class, () -> gateway.generate("   "));
+		assertThrows(BadRequestException.class, () -> gateway.escalate(""));
+	}
+
+	@Test
+	void generateRejectsOversizedPrompt() {
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
+		String huge = "x".repeat(50_001);
+
+		assertThrows(PayloadTooLargeException.class, () -> gateway.generate(huge));
+	}
+
+	@Test
+	void generateFallsBackToHaikuWhenModelCallHangsPastTheTimeout() {
+		// The crux of the hardening fix: previously an unbounded permits.acquire() + no call timeout
+		// meant a genuinely stuck model call held the single permit forever and starved every queued
+		// caller. Now the caller gets an answer (via Haiku) within the configured timeout regardless —
+		// the abandoned background call is left to finish on its own (3s, well past the 200ms timeout
+		// below) rather than forcibly cancelled (Spring AI's synchronous ChatClient has no cancel hook).
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "fallback-response";
+		};
+		DefaultModelGateway gateway = new DefaultModelGateway(
+				new HangingChatModel(Duration.ofSeconds(3)), fallback, gov(), propsWithTimeout(1, Duration.ofMillis(200)));
+
+		long start = System.nanoTime();
+		String result = gateway.generate("ping");
+		long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+		assertEquals("fallback-response", result);
+		assertEquals(1, fallbackCalls.get());
+		assertTrue(elapsedMs < 2500, "caller should get an answer near the ~200ms timeout, not wait for the 3s hang; took " + elapsedMs + "ms");
+		assertEquals(1, gateway.availablePermits(), "permit must be released even when the underlying call is abandoned, not just when it completes");
+	}
+
+	/** A ChatModel whose call() blocks for {@code hangFor} before returning — simulates a genuinely
+	 * stuck/slow call (as opposed to FailingChatModel's immediate throw or MockChatModel's instant
+	 * blank response) to exercise the call-timeout path specifically. */
+	private static final class HangingChatModel implements ChatModel {
+		private final Duration hangFor;
+
+		HangingChatModel(Duration hangFor) {
+			this.hangFor = hangFor;
+		}
+
+		@Override
+		public ChatResponse call(Prompt prompt) {
+			try {
+				Thread.sleep(hangFor.toMillis());
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return new ChatResponse(List.of(new Generation(new AssistantMessage("too-late"))));
+		}
+
+		@Override
+		public ChatOptions getDefaultOptions() {
+			return ChatOptions.builder().build();
+		}
 	}
 
 	/** A ChatModel whose call() always throws, to exercise the fallback path. */
