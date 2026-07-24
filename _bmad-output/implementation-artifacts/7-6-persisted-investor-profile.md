@@ -3,7 +3,7 @@ baseline_commit: df24c7e842c98f151f6587e13d3643d651a0cc1a
 ---
 # Story 7.6: Persisted, user-editable investor profile
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

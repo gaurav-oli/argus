@@ -153,7 +153,7 @@ goes through this endpoint (closes the open item from §2). Smoke-tested live on
 - [ ] Live UI check on the device (PIN login → Ask AI panel) still open; validated here via curl.
 [Source: 7-1-recommendation-chat.md AC#4; epics.md#Story 7.1; docs/mac-mini-validation.md §1–2]
 
-## 6. Story 7.2 — Portfolio chat (live model)  ⚠️ PARTIAL 2026-07-16 (Haiku path only)
+## 6. Story 7.2 — Portfolio chat (live model)  ✅ DONE 2026-07-23
 Dashboard "Ask AI" (TopBar) → `POST /api/portfolio/chat`, grounded in holdings + health + upcoming
 calendar + recent recommendations + investor profile.
 - [x] **Grounded, via the Haiku escalation path** (`{"deeper":true}`): asked "Which holding concerns
@@ -162,11 +162,27 @@ calendar + recent recommendations + investor profile.
       risk tolerance and CAD 750k retirement target (2045)"), health score 90/100, TSLA earnings in 7
       days, and real recommendation signals (GOOGL/MSFT 76% bull, 57% confidence). No hallucinated
       numbers detected. **5.2s** — well within budget.
-- [ ] **Local model path (`deeper` unset/false): FAILS — hangs >60s, no response.** Reproduced 3× incl.
-      after a fresh backend restart. See the §3 Morning Briefing regression note — same root cause
-      likely. Grounding correctness for the local path is therefore unconfirmed (never returned).
-- [ ] Sample questions on the local path, and the live device UI (PIN login → Ask AI panel, "warming
-      up" state) — still open.
+- [x] **Local model path (`deeper` unset/false): no longer hangs.** Re-validated 2026-07-22 after the
+      two model-gateway fixes (`num-predict` cap + blank-response auto-fallback, 2026-07-15/16). The
+      local model still burns its full token budget on invisible junk tokens for this prompt size and
+      returns blank at **~115s**, but `DefaultModelGateway` now catches that and falls through to Haiku
+      automatically — total round trip **~112s**, ending in a correct, well-grounded answer (TSLA 18.43%
+      concentration + earnings-today flag + health score 90/100 + sector weighting, all verified against
+      real DB state). **Net: the infinite-hang bug is fixed, but the practical latency on this path is
+      still ~112s** (local-model timeout + Haiku), far past the 15s budget — every local-path answer is
+      effectively "wait ~2 minutes for Haiku to answer anyway" until the gemma4 build itself is fixed
+      (tracked separately, §1/§5). Re-confirmed the explicit Haiku path separately at **4.7s**.
+- [x] **Live device UI check — DONE 2026-07-23.** Real browser automation (Playwright) against the
+      actual deployed URL (`https://leannas-mac-mini.taila43287.ts.net`, not localhost/curl): entered
+      the real PIN, clicked the real "Unlock" button, landed on the real dashboard, clicked the real
+      "Ask AI" button, typed a real question ("What should I watch in my portfolio today?"), clicked
+      "Send", and got back a real grounded answer (specific earnings dates, health score 90/100,
+      bull/bear signals with confidence, a data-quality note on unconfirmed FX positions) with the
+      "Get deeper analysis (Claude Haiku)" escalation link present. Zero console/page errors through
+      the whole flow. The `ChatPanel.tsx` centering/scroll fix (flex-centered + `min-h-0`) plus the
+      later portal fix (both panels were being clipped inside `TopBar`'s `backdrop-filter` containing
+      block) and the `--color-*` CSS-variable inheritance fix are all confirmed working together in
+      the real browser, not just asserted from code review.
 [Source: 7-2-portfolio-chat.md AC#4; epics.md#Story 7.2]
 
 ## 7. Story 7.3 — Claude Haiku escalation (live API key)  ✅ DONE 2026-06-25
@@ -178,8 +194,15 @@ escalation enabled"). `POST /api/recommendations/1/chat` with `deeper:true`:
       outputTokens=321 costUsd=0.001873` — exact at $1/$5 per MTok.
 - [x] **Sanitized context** — only 268 input tokens, no exact dollar amounts (escalate path uses the
       `sanitized=true` grounding; portfolio was empty here regardless).
-- [ ] **On-failure fallback** (local model *errors* → Haiku) not force-tested yet; the explicit
-      "deeper analysis" escalation (the main path) is confirmed. No-key → clean 503 was verified earlier.
+- [x] **Fallback-on-blank-response confirmed 2026-07-22** (see §6): a genuinely blank local-model
+      response now reliably falls through to `haikuFallback.generate()` and returns a correct answer,
+      cost-logged the same as the explicit path. This is the fallback's most likely real-world trigger
+      per the code comment in `DefaultModelGateway#generateBig`.
+- [ ] **Fallback-on-thrown-exception** (local model *errors*, as opposed to returning blank) still not
+      force-tested — would require deliberately breaking the local Ollama process, which wasn't done
+      this pass since it's shared/live infrastructure. Same fallback call (`haikuFallback.generate`) as
+      the now-confirmed blank-response branch, so risk is low, but not directly observed. No-key → clean
+      503 was verified earlier.
 [Source: 7-3-haiku-escalation.md AC#4/#6; epics.md#Story 7.3]
 
 ## 8. Epic 9 — Ops dashboards (9.1 live, 9.5 hardware, 9.7 freshness)  ⏳ confirm on the Mini
