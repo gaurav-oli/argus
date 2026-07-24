@@ -22,14 +22,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                         handler) from re-running its side effects
  * @param maxDeliveryAttempts a message that has already been delivered this many times (Redis's
  *                         own XPENDING delivery count, not a separately-tracked counter) is no
- *                         longer reclaimed — it stays pending permanently instead. Without this
- *                         cap, a message that fails the same way every time (a poison/undecodable
- *                         record, an envelope version this build will never understand, or a
- *                         handler bug that always throws) gets reclaimed and redispatched on
- *                         essentially every tick forever once it first goes idle, hammering Redis
- *                         and the handler indefinitely instead of settling into the same
- *                         "quarantined, visible for inspection" state a first-time poison record
- *                         already gets.
+ *                         longer reclaimed — it is moved to a dead-letter stream
+ *                         ({@code {streamKey}:dlq}) and acknowledged off the original stream
+ *                         instead. Without this cap, a message that fails the same way every time
+ *                         (a poison/undecodable record, an envelope version this build will never
+ *                         understand, or a handler bug that always throws) gets reclaimed and
+ *                         redispatched on essentially every tick forever once it first goes idle,
+ *                         hammering Redis and the handler indefinitely instead of settling into a
+ *                         terminal, inspectable state.
  */
 @ConfigurationProperties("argus.agent")
 public record AgentProperties(

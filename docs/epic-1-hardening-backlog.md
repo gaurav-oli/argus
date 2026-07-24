@@ -47,9 +47,31 @@ All four items below — **FIXED 2026-07-24**, implemented together in `AgentRun
 - ~~**Unbounded stream growth.**~~ `AgentEventPublisher.publish()` now XADDs with `MAXLEN ~ 10000` (approximate trimming).
 - ~~**Envelope `version` not validated.**~~ `dispatch()` now rejects (logs + leaves pending, same "quarantined for manual inspection" convention as an undecodable record) any envelope whose `version` doesn't match `AgentEventPublisher.ENVELOPE_VERSION`.
 - **Idempotency (dedupe by `eventId`)** was added as part of this same pass, beyond what was originally scoped here: a Redis key (`argus:agent:{name}:dedup:{eventId}`, TTL `argus.agent.dedupe-ttl-hours`, default 24h) marked after a successful `handle()` — not before, so a crash mid-handling still gets fully retried by the reclaim path — skips re-running side effects if a reclaim races a slow-but-successful original handler.
-- **Retry/DLQ beyond the delivery-attempt cap** remains out of scope — an exhausted message stays permanently pending (quarantined) for manual inspection rather than being moved to a dedicated dead-letter stream.
+- ~~**Retry/DLQ beyond the delivery-attempt cap.**~~ — **FIXED 2026-07-24.** An exhausted message
+  (poison/undecodable record, unsupported envelope version, or a handler bug that always throws — all
+  three converge on the same exhausted-delivery-count path) no longer stays pending forever. Once
+  `reclaimPending()` sees `totalDeliveryCount >= maxDeliveryAttempts`, it claims the message one last
+  time, writes it (with failure metadata: original stream, agent, delivery-attempt count,
+  dead-lettered-at timestamp) onto a per-agent dead-letter stream (`{streamKey}:dlq`, same `MAXLEN ~
+  10000` approximate-trim convention as `AgentEventPublisher`), and acknowledges it off the original
+  stream — freeing the PEL while leaving a durable, inspectable record instead of an invisible
+  permanently-pending entry. No automated retry-from-DLQ exists (out of scope — nothing here can know
+  whether the root cause was actually fixed); requeuing a DLQ entry back onto its source stream
+  remains a manual/operator action.
 
-Verified: unit tests (delivery-cap logic) + 5 new/updated real-Redis Testcontainers integration tests (`AgentRuntimeIntegrationTest` — normal dispatch, handler-failure-leaves-pending, crash-recovery-reclaim-and-retry, dedup-skips-a-redelivery, unsupported-version-is-quarantined) + the full backend suite, all green. Live-validated post-deploy: the reclaim mechanism immediately picked up a **genuinely orphaned production message that had been pending for 28+ days** (from before this fix existed) and began correctly draining it and 53 similar backlog entries, with zero errors and no reclaim-storm log spam. The live agent-fleet status endpoint confirmed all agents remained ACTIVE with real, distinct activity post-deploy (not collapsed to a single signal).
+Verified: unit tests (delivery-cap logic) + 6 real-Redis Testcontainers integration tests
+(`AgentRuntimeIntegrationTest` — normal dispatch, handler-failure-leaves-pending,
+crash-recovery-reclaim-and-retry, dedup-skips-a-redelivery, unsupported-version-is-quarantined,
+**exhausted-message-is-dead-lettered-and-acknowledged**) + the full 379-test backend suite, all green.
+Live-validated post-deploy: consumer-group health checked across all 4 production streams
+(`XINFO GROUPS`) showed 0 pending everywhere and real ingestion activity continuing normally, no
+regressions. The specific dead-letter code path itself was proven against real Redis via the new
+integration test rather than a live production exhaustion event — the previously-orphaned messages
+this same session's earlier Agent Runtime fix found (28+ days pending, 53 backlog entries) had
+already fully drained by the time this fix deployed, so there was nothing left in production actually
+sitting at the exhaustion threshold to observe live; forcing one would require waiting out prod's
+5-minute `pel-reclaim-idle-ms` five times over (~25 minutes) for no material additional confidence
+beyond the real-Redis integration test.
 
 ## From Story 1.6 — REST + WebSocket
 - ~~**WebSocket origin is wide open**~~ — **FIXED 2026-07-23.** `WebSocketConfig` now reuses `WebProperties.allowedOrigins()` (`argus.web.allowed-origins` / `ARGUS_WEB_ALLOWED_ORIGINS`), the same env-configurable list `CorsConfig` already validates against, instead of `setAllowedOriginPatterns("*")`. Verified both directions: `StompRoundTripIntegrationTest#handshakeFromDisallowedOriginIsRejected` (new) confirms a forged `Origin` header is rejected; the real production frontend's WS connection (`wss://leannas-mac-mini.taila43287.ts.net/ws`) was confirmed still working live post-deploy via a real browser session (frame received, zero console errors).

@@ -2,7 +2,9 @@ package com.argus.agent;
 
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,6 +15,7 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -45,11 +48,29 @@ import org.springframework.stereotype.Component;
  * redispatches it through the normal {@link #dispatch} path, which also now dedupes by
  * {@code eventId} so a reclaim racing a slow-but-successful original handler doesn't re-run its
  * side effects, and rejects an envelope whose {@code version} this build doesn't understand.
+ *
+ * <p>Dead-lettering (Epic 1 hardening backlog — Story 1.5, "Retry/DLQ beyond the delivery-attempt
+ * cap"): a message that exhausts {@code maxDeliveryAttempts} previously stayed pending forever —
+ * quarantined but invisible except via raw {@code XPENDING}, and accumulating in the PEL on a 24/7
+ * Mini indefinitely. {@link #reclaimPending} now claims it one last time, moves it (with failure
+ * metadata) onto a per-agent dead-letter stream ({@code {streamKey}:dlq}), and acknowledges it off
+ * the original stream — freeing the PEL while leaving a durable, inspectable record of what failed
+ * and why. This covers all three "fails the same way every time" cases (poison/undecodable record,
+ * unsupported envelope version, a handler bug that always throws) since each converges on the same
+ * exhausted-delivery-count path. Manually requeuing a dead-lettered message back onto its source
+ * stream remains a manual/operator action (e.g. {@code XADD} from the DLQ entry) — no automated
+ * retry-from-DLQ exists, since nothing here can know whether the root cause has actually been fixed.
  */
 @Component
 public class AgentRuntime {
 
 	private static final Logger log = LoggerFactory.getLogger(AgentRuntime.class);
+
+	/** Same approximate-trim convention as {@link AgentEventPublisher} — bounds worst-case DLQ
+	 * memory if a source misbehaves and floods it, without an exact trim on every write. */
+	private static final long DLQ_MAX_STREAM_LENGTH = 10_000;
+	private static final XAddOptions DLQ_TRIM_OPTIONS =
+			XAddOptions.maxlen(DLQ_MAX_STREAM_LENGTH).approximateTrimming(true);
 
 	private final StringRedisTemplate redis;
 	private final EventEnvelopeCodec codec;
@@ -153,16 +174,16 @@ public class AgentRuntime {
 			if (m.getTotalDeliveryCount() >= properties.maxDeliveryAttempts()) {
 				// Exhausted: this message fails the same way every time (poison record, an envelope
 				// version this build will never understand, a handler bug that always throws) — stop
-				// reclaiming it so it doesn't get hammered forever, same "quarantined" end state a
-				// first-time poison record already settles into, just reached via a different path.
-				// Logged once (exhaustedLogged), not on every subsequent tick it's re-evaluated —
-				// it'll stay idle-and-pending indefinitely once given up on, so an unguarded log here
-				// would otherwise repeat forever.
+				// reclaiming it and move it to the dead-letter stream instead of leaving it pending
+				// (and growing the PEL) forever. Logged once (exhaustedLogged) even though
+				// deadLetter() normally removes it from the PEL on the same tick — defends against a
+				// failed dead-letter attempt (e.g. a Redis hiccup) being re-evaluated next tick without
+				// repeating the "giving up" log every time.
 				if (exhaustedLogged.add(agent.name() + '|' + m.getIdAsString())) {
-					log.error("Agent '{}': message {} exceeded {} delivery attempts — giving up, left pending "
-									+ "permanently for manual inspection",
+					log.error("Agent '{}': message {} exceeded {} delivery attempts — moving to dead-letter stream",
 							agent.name(), m.getIdAsString(), properties.maxDeliveryAttempts());
 				}
+				deadLetter(agent, m, idleThreshold);
 				continue;
 			}
 			log.warn("Agent '{}': reclaiming message {} idle {} (attempt {}/{}) — likely left pending by a "
@@ -175,6 +196,46 @@ public class AgentRuntime {
 				dispatch(agent, record);
 			}
 		}
+	}
+
+	/** Claims an exhausted message one last time (to retrieve its content — {@link PendingMessage}
+	 * carries only metadata), writes it to {@code {streamKey}:dlq} with failure metadata, and
+	 * acknowledges it off the original stream. Best-effort: if claiming or the DLQ write fails (e.g.
+	 * a Redis hiccup), the message is simply left pending and re-evaluated next tick rather than
+	 * risking a silent data loss (claim-then-ack-fails would otherwise drop it with no DLQ record). */
+	private void deadLetter(Agent agent, PendingMessage pending, Duration idleThreshold) {
+		List<MapRecord<String, Object, Object>> claimed;
+		try {
+			claimed = redis.opsForStream().claim(
+					agent.streamKey(), agent.consumerGroup(), agent.name(), idleThreshold, pending.getId());
+		}
+		catch (Exception ex) {
+			log.warn("Agent '{}': failed to claim exhausted message {} for dead-lettering (will retry next tick)",
+					agent.name(), pending.getIdAsString(), ex);
+			return;
+		}
+		for (MapRecord<String, Object, Object> record : claimed) {
+			try {
+				Map<String, String> dlqFields = new LinkedHashMap<>(toStringMap(record.getValue()));
+				dlqFields.put("_dlqOriginalStream", agent.streamKey());
+				dlqFields.put("_dlqOriginalId", record.getId().toString());
+				dlqFields.put("_dlqAgent", agent.name());
+				dlqFields.put("_dlqDeliveryAttempts", String.valueOf(pending.getTotalDeliveryCount()));
+				dlqFields.put("_dlqDeadLetteredAt", Instant.now().toString());
+				redis.opsForStream().add(dlqStreamKey(agent), dlqFields, DLQ_TRIM_OPTIONS);
+				redis.opsForStream().acknowledge(agent.streamKey(), agent.consumerGroup(), record.getId());
+				log.error("Agent '{}': message {} moved to dead-letter stream '{}' after {} delivery attempts",
+						agent.name(), record.getId(), dlqStreamKey(agent), pending.getTotalDeliveryCount());
+			}
+			catch (Exception ex) {
+				log.warn("Agent '{}': failed to dead-letter claimed message {} (left pending, will retry next tick)",
+						agent.name(), record.getId(), ex);
+			}
+		}
+	}
+
+	private static String dlqStreamKey(Agent agent) {
+		return agent.streamKey() + ":dlq";
 	}
 
 	private void pollAgent(Agent agent) {
