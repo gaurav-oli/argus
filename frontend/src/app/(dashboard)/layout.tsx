@@ -24,20 +24,24 @@ export default function DashboardLayout({
     <AuthGate>
       <PanicProvider>
       <PrivacyProvider>
-        <AmbientBackground />
-        <div className="flex h-dvh overflow-hidden">
-          <Sidebar />
+        {/* Private Bank Editorial (approved 2026-07-22) — the whole shell, not just Home, re-skins
+            via the same CSS-variable mechanism that powers light/dark mode. See globals.css. */}
+        <div className="editorial-theme">
+          <AmbientBackground />
+          <div className="flex h-dvh overflow-hidden">
+            <Sidebar />
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TopBar />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <TopBar />
 
-            <div className="flex min-h-0 flex-1">
-              <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
-              <RightPanel />
+              <div className="flex min-h-0 flex-1">
+                <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+                <RightPanel />
+              </div>
+
+              <BottomStrip />
+              <BottomNav />
             </div>
-
-            <BottomStrip />
-            <BottomNav />
           </div>
         </div>
       </PrivacyProvider>

@@ -3,6 +3,7 @@
 import { ApiError, type ChatMessage } from "@/lib/apiClient";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** Mirror of the backend per-message cap (ChatValidation.MAX_MESSAGE_CHARS). */
 const MAX_MESSAGE_CHARS = 4000;
@@ -133,18 +134,32 @@ export function ChatPanel({
   // question (otherwise it would deepen a stale question while the new one sits unsent).
   const canDeepen = !pending && !input.trim() && last?.role === "assistant" && !last.viaHaiku;
 
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
+  // Portalled straight to <body>: the trigger button can live anywhere (TopBar's glass-chrome
+  // header, a MotionCard mid-animation, etc.), and any of those ancestors using backdrop-filter,
+  // filter, transform, perspective, or will-change:transform makes itself the containing block
+  // for a `position: fixed` descendant instead of the viewport — so without the portal this panel
+  // would render "fixed" relative to a 64px header bar and collapse into an unusable sliver.
+  return createPortal(
+    <div
+      className="fixed inset-0 z-40 overflow-y-auto bg-black/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Top-anchored, not vertically centered: a centered flex/grid item combined with
+          `overflow: auto` traps any overflow equally on both sides, and a scroll container can
+          only reveal the positive-direction side — so the input row at the bottom could become
+          permanently unreachable once the panel is taller than the visible area (e.g. a mobile
+          keyboard shrinking the viewport). Anchoring from the top instead means the panel always
+          flows normally from a reachable point, so scrolling the backdrop always reaches the rest. */}
       <motion.div
         role="dialog"
         aria-label={subtitle ? `${title} — ${subtitle}` : title}
+        onClick={(e) => e.stopPropagation()}
         initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: "spring", stiffness: 220, damping: 26 }}
-        className="fixed left-1/2 top-1/2 z-50 flex max-h-[80dvh] w-[min(36rem,92vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_24px_60px_-24px_rgba(2,6,23,0.7)]"
+        className="mx-auto mt-[6dvh] flex max-h-[84dvh] w-[min(36rem,92vw)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_24px_60px_-24px_rgba(2,6,23,0.7)]"
       >
-        <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-text-primary">{title}</span>
             {subtitle && (
@@ -158,7 +173,7 @@ export function ChatPanel({
           </button>
         </header>
 
-        <div ref={threadRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+        <div ref={threadRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
           {messages.length === 0 && !pending && (
             <p className="text-sm text-text-secondary">{emptyStateText}</p>
           )}
@@ -177,7 +192,7 @@ export function ChatPanel({
           )}
         </div>
 
-        <div className="flex items-end gap-2 border-t border-border px-4 py-3">
+        <div className="flex shrink-0 items-end gap-2 border-t border-border px-4 py-3">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -196,7 +211,8 @@ export function ChatPanel({
           </button>
         </div>
       </motion.div>
-    </>
+    </div>,
+    document.body,
   );
 }
 

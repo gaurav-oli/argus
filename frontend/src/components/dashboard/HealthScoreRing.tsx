@@ -1,21 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useReducedMotion } from "motion/react";
-import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { getHealthScore, type HealthScoreResult } from "@/lib/apiClient";
 import { healthBand } from "@/lib/scoreBands";
-import { useMounted } from "@/lib/useMounted";
 
 /**
- * Portfolio "health score" as an animated radial gauge (Story 3.8, /api/portfolio/health-score)
- * with the real score counting up in the centre. Colour + band label shift by score.
+ * Portfolio "health score" (Story 3.8, /api/portfolio/health-score) — a plain typographic
+ * reading rather than a gauge: the score counting up beside its band label. Colour shifts by
+ * score band.
  */
 export function HealthScoreRing() {
-  const mounted = useMounted();
-  const reduce = useReducedMotion();
   const [health, setHealth] = useState<HealthScoreResult | null>(null);
 
   useEffect(() => {
@@ -28,46 +24,22 @@ export function HealthScoreRing() {
 
   const score = health?.score ?? 0;
   const band = healthBand(score);
-  const label = band.label;
-  const color = band.colorVar;
-  const data = [{ name: "score", value: score, fill: color }];
 
   return (
     <div className="flex h-full flex-col">
       <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Health Score</h3>
 
-      <div className="relative mt-2 flex-1">
-        {mounted && (
-          <ResponsiveContainer width="100%" height="100%" minHeight={150}>
-            <RadialBarChart innerRadius="74%" outerRadius="100%" data={data} startAngle={220} endAngle={-40}>
-              <defs>
-                <linearGradient id="healthGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.6} />
-                  <stop offset="100%" stopColor={color} stopOpacity={1} />
-                </linearGradient>
-              </defs>
-              <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-              <RadialBar
-                dataKey="value"
-                cornerRadius={20}
-                background={{ fill: "var(--chart-grid)" }}
-                fill="url(#healthGrad)"
-                isAnimationActive={!reduce}
-                animationDuration={1400}
-                animationEasing="ease-out"
-              />
-            </RadialBarChart>
-          </ResponsiveContainer>
-        )}
-
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <Sensitive className="pointer-events-auto text-4xl font-bold">
-            <AnimatedNumber value={score} className="font-mono text-4xl font-bold text-text-primary tabular-nums" />
+      <div className="mt-2 flex flex-1 flex-col justify-center">
+        <div className="flex items-baseline gap-2.5">
+          <Sensitive className="text-5xl font-normal">
+            <AnimatedNumber
+              value={score}
+              className="font-serif-editorial text-5xl font-normal text-text-primary"
+            />
           </Sensitive>
-          <span className="mt-0.5 text-xs font-medium" style={{ color }}>
-            {label}
-          </span>
+          <span className="text-base text-text-secondary">· {band.label}</span>
         </div>
+        <div className="mt-4 h-px w-full" style={{ backgroundColor: `color-mix(in srgb, ${band.colorVar} 45%, transparent)` }} />
       </div>
     </div>
   );

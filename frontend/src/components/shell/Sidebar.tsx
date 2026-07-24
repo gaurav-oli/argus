@@ -19,7 +19,7 @@ export function Sidebar() {
           style={{ boxShadow: "0 0 12px var(--color-accent), 0 0 4px var(--color-accent)" }}
           aria-hidden
         />
-        <span className="font-display text-lg font-bold tracking-tight text-text-primary">
+        <span className="font-serif-editorial text-lg font-normal tracking-tight text-text-primary">
           Argus
         </span>
       </div>

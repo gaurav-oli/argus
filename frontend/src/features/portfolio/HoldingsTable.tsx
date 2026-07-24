@@ -1,8 +1,11 @@
 "use client";
 
+import { BankIcon } from "@/components/ui/BankIcon";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import {
   getCash,
+  getCompanyLogos,
   getPortfolioValue,
   setCash,
   type CashBalanceView,
@@ -90,6 +93,22 @@ export function HoldingsTable() {
     return p && p.usdMarketValue ? (p.cadMarketValue ?? 0) / p.usdMarketValue : 1.42;
   }, [positions]);
 
+  // Keyed on the sorted-distinct-ticker string (not `positions` itself) so a live price tick over
+  // /topic/portfolio — which re-creates the array every time but rarely changes the ticker set —
+  // doesn't re-fetch logos on every update.
+  const [logos, setLogos] = useState<Record<string, string>>({});
+  const tickerKey = useMemo(() => [...new Set(positions.map((p) => p.ticker))].sort().join(","), [positions]);
+  useEffect(() => {
+    if (!tickerKey) return;
+    let active = true;
+    getCompanyLogos(tickerKey.split(","))
+      .then((m) => active && setLogos((prev) => ({ ...prev, ...m })))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [tickerKey]);
+
   const owners = useMemo(() => groupByOwner(positions, cash), [positions, cash]);
   const visibleOwners = useMemo(
     () => (selectedOwner === "all" ? owners : owners.filter((o) => o.key === selectedOwner)),
@@ -128,7 +147,7 @@ export function HoldingsTable() {
 
       <div className="flex flex-col gap-4">
         {visibleOwners.map((o, i) => (
-          <OwnerPanel key={o.key} owner={o} fx={fx} index={i} onRemoveCash={removeCash} />
+          <OwnerPanel key={o.key} owner={o} fx={fx} index={i} onRemoveCash={removeCash} logos={logos} />
         ))}
       </div>
     </div>
@@ -270,7 +289,7 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
                         <div className="flex flex-wrap gap-1">
                           {r.institutions.length > 0
                             ? r.institutions.map((inst) => (
-                                <Pill key={inst} muted>
+                                <Pill key={inst} muted icon={<BankIcon institution={inst} size={12} />}>
                                   {inst}
                                 </Pill>
                               ))
@@ -293,7 +312,13 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
                           <tr key={a.key} className="border-t border-border/40 bg-surface text-[13px]">
                             <td className="px-3 py-1.5 pl-8 text-text-secondary">{a.accountName}</td>
                             <td className="hidden px-3 py-1.5 sm:table-cell">
-                              {a.institution ? <Pill muted>{a.institution}</Pill> : <span className="text-text-secondary">—</span>}
+                              {a.institution ? (
+                                <Pill muted icon={<BankIcon institution={a.institution} size={12} />}>
+                                  {a.institution}
+                                </Pill>
+                              ) : (
+                                <span className="text-text-secondary">—</span>
+                              )}
                             </td>
                             <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.invested)}</td>
                             <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.market)}</td>
@@ -326,11 +351,13 @@ function OwnerPanel({
   fx,
   index,
   onRemoveCash,
+  logos,
 }: {
   owner: OwnerGroup;
   fx: number;
   index: number;
   onRemoveCash: (c: CashBalanceView) => void;
+  logos: Record<string, string>;
 }) {
   let ownerCad = 0;
   let ownerUsd = 0;
@@ -366,7 +393,7 @@ function OwnerPanel({
 
       <div className="flex flex-col gap-3">
         {owner.accounts.map((a) => (
-          <AccountCard key={a.key} account={a} fx={fx} onRemoveCash={onRemoveCash} />
+          <AccountCard key={a.key} account={a} fx={fx} onRemoveCash={onRemoveCash} logos={logos} />
         ))}
       </div>
     </MotionCard>
@@ -383,10 +410,12 @@ function AccountCard({
   account,
   fx,
   onRemoveCash,
+  logos,
 }: {
   account: AccountGroup;
   fx: number;
   onRemoveCash: (c: CashBalanceView) => void;
+  logos: Record<string, string>;
 }) {
   const t = accountTotals(account, fx);
   const isCad = account.currency === "CAD";
@@ -400,7 +429,11 @@ function AccountCard({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-semibold text-text-primary">{account.accountName}</span>
           <Pill>{account.currency}</Pill>
-          {account.institution && <Pill muted>{account.institution}</Pill>}
+          {account.institution && (
+            <Pill muted icon={<BankIcon institution={account.institution} size={12} />}>
+              {account.institution}
+            </Pill>
+          )}
         </div>
         <div className="text-right">
           <div className="font-mono text-[13px] font-semibold tabular-nums text-text-primary">
@@ -456,8 +489,16 @@ function AccountCard({
               {sortedPositions.map((p) => (
                 <tr key={p.id} className="border-t border-border/40">
                   <td className="px-3.5 py-1.5 font-medium text-text-primary">
-                    {p.ticker}
-                    {p.afterHours && <span className="ml-1.5 text-[10px] text-warning">AH</span>}
+                    <span className="flex items-center gap-2">
+                      <CompanyIcon
+                        ticker={p.ticker}
+                        logoUrl={logos[p.ticker]}
+                        title={p.companyName ?? p.ticker}
+                        size={20}
+                      />
+                      {p.ticker}
+                      {p.afterHours && <span className="text-[10px] text-warning">AH</span>}
+                    </span>
                   </td>
                   <td className="hidden px-3.5 py-1.5 text-text-secondary md:table-cell">
                     {p.companyName ?? "—"}
@@ -482,13 +523,14 @@ function AccountCard({
   );
 }
 
-function Pill({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+function Pill({ children, muted, icon }: { children: React.ReactNode; muted?: boolean; icon?: React.ReactNode }) {
   return (
     <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
         muted ? "bg-elevated text-text-secondary" : "bg-accent/10 text-accent"
       }`}
     >
+      {icon}
       {children}
     </span>
   );

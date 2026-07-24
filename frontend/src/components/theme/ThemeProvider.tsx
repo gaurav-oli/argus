@@ -1,49 +1,23 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useContext } from "react";
 
-type Theme = "light" | "dark";
+type Theme = "dark";
 
 type ThemeContextValue = {
   theme: Theme;
-  toggle: () => void;
-  setTheme: (t: Theme) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-/** Storage key + the inline script (see ThemeScript) must agree. */
-const STORAGE_KEY = "argus-theme";
-
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  root.classList.toggle("dark", theme === "dark");
-  root.style.colorScheme = theme;
-}
-
+/**
+ * The app is a single fixed dark palette (Private Bank Editorial, 2026-07-22) — there is no
+ * light variant and no toggle. This context now exists only so existing consumers (e.g.
+ * PortfolioChart, which re-reads CSS vars keyed off `theme`) don't need to change; `theme` is
+ * always "dark".
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Read the theme the no-FOUC script already applied to <html> (lazy initializer,
-  // so no setState-in-effect). Server renders the "dark" default; the client
-  // reconciles to the real value on first render (<html> has suppressHydrationWarning).
-  const [theme, setThemeState] = useState<Theme>(() =>
-    typeof document !== "undefined" && !document.documentElement.classList.contains("dark") ? "light" : "dark",
-  );
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    applyTheme(t);
-    try {
-      localStorage.setItem(STORAGE_KEY, t);
-    } catch {
-      /* private mode / storage disabled — theme still applies for the session */
-    }
-  }, []);
-
-  const toggle = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
-
-  return <ThemeContext.Provider value={{ theme, toggle, setTheme }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ theme: "dark" }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {
@@ -53,11 +27,15 @@ export function useTheme() {
 }
 
 /**
- * Inline, render-blocking script: sets the theme class BEFORE first paint so
- * there is no light→dark flash. Defaults to dark (the premium default) unless
- * the user previously chose light. Injected in <head> via layout.tsx.
+ * Inline, render-blocking script: forces the dark class + color-scheme BEFORE first paint, so
+ * there's no flash and no dependency on stored state. Previously this read a `localStorage`
+ * theme preference from the old light/dark toggle (removed 2026-07-22) — a stale "light" value
+ * left over from that toggle would still set `color-scheme: light`, which native form controls
+ * (select dropdowns, the date picker) follow independently of the app's own CSS, rendering them
+ * with light/white chrome against the otherwise-dark app. Also clears that stale key so it can't
+ * resurface if the toggle or a light variant ever comes back. Injected in <head> via layout.tsx.
  */
 export function ThemeScript() {
-  const js = `(function(){try{var q=new URLSearchParams(location.search).get('theme');var t=q==='light'||q==='dark'?q:localStorage.getItem('${STORAGE_KEY}');if(t!=='light'){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}else{document.documentElement.style.colorScheme='light';}}catch(e){document.documentElement.classList.add('dark');}})();`;
+  const js = `(function(){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';try{localStorage.removeItem('argus-theme');}catch(e){}})();`;
   return <script dangerouslySetInnerHTML={{ __html: js }} />;
 }

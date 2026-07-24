@@ -2,6 +2,7 @@
 
 import { getHealthScoreHistory, type HealthPoint, type HealthScoreResult } from "@/lib/apiClient";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** Tiny inline sparkline (no charting lib for a ~30-point line). Scores are 0–100. */
 function Sparkline({ points }: { points: HealthPoint[] }) {
@@ -54,7 +55,11 @@ export function HealthScoreBreakdown({ result, onClose }: { result: HealthScoreR
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />
+      {/* Portalled: this badge lives in TopBar's glass-chrome header, whose backdrop-filter makes
+          it the containing block for `position: fixed` descendants — without the portal, this
+          click-away catcher would only cover the 64px header strip instead of the full viewport,
+          so clicking anywhere else on the page wouldn't dismiss the popover. */}
+      {createPortal(<div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />, document.body)}
       <div
         role="dialog"
         aria-label="Health score breakdown"

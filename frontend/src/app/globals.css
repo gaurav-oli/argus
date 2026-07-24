@@ -194,6 +194,122 @@ body {
   50% { transform: translate3d(-6%, -5%, 0) scale(1); }
 }
 
+/* ====================================================================================
+ * Private Bank Editorial — the app's design language (approved 2026-07-22, rolled out
+ * app-wide). Scoped under `.editorial-theme`, applied once on the dashboard shell
+ * (layout.tsx) so every route inherits it. Reuses the same "swap the variable set"
+ * mechanism the light/dark themes already use, so nested components (cards, chart colors,
+ * badges) re-skin for free without per-component edits. Quiet and rule-based on purpose:
+ * no card fills, no glow, no glass — a thin gold hairline rule stands in for a card
+ * border, generous whitespace, a serif display face for numerals and headings.
+ * ==================================================================================== */
+.editorial-theme {
+  /* Cinematic Glass's ambient drift blobs don't fit this quiet, flat language — switch
+     them off; the soft top-light wash right below (driven by --color-accent) stays. */
+  --glow-1: transparent;
+  --glow-2: transparent;
+  --glow-3: transparent;
+
+  --c-background: #0b0f1a;
+  --c-surface: #0b0f1a;
+  --c-elevated: #0b0f1a;
+  --c-border: rgba(201, 162, 75, 0.28);
+  --c-accent: #c9a24b;
+  --c-gains: #3f7a5e;
+  --c-losses: #b3503f;
+  --c-warning: #b3833f;
+  --c-text-primary: #f2ede1;
+  --c-text-secondary: #a9a394;
+
+  /* Tailwind's `bg-surface`/`text-text-primary`/etc. utilities read `--color-*`, which the
+   * `@theme` block aliases to `--c-*` — but ONLY at :root. A custom property's `var()` is
+   * resolved once, by whichever element declares it; descendants that never redeclare
+   * `--color-*` themselves just inherit :root's already-computed (pre-editorial) value, no
+   * matter what `--c-*` says lower in the tree. Redeclaring the aliases here, referencing the
+   * `--c-*` values just set above on this SAME element, is what actually makes every plain
+   * Tailwind color utility under `.editorial-theme` pick up the new palette — not just `.glass`
+   * (which has its own explicit override below). Without this block, bare `bg-surface` /
+   * `border-border` / `text-text-primary` usages (e.g. ChatPanel) silently keep rendering the
+   * old Cinematic Glass colors.
+   */
+  --color-background: var(--c-background);
+  --color-surface: var(--c-surface);
+  --color-elevated: var(--c-elevated);
+  --color-border: var(--c-border);
+  --color-accent: var(--c-accent);
+  --color-gains: var(--c-gains);
+  --color-losses: var(--c-losses);
+  --color-warning: var(--c-warning);
+  --color-text-primary: var(--c-text-primary);
+  --color-text-secondary: var(--c-text-secondary);
+
+  --accent-2: #c9a24b;
+  --glass-bg: transparent;
+  --glass-border: rgba(201, 162, 75, 0.28);
+  --glass-sheen: rgba(201, 162, 75, 0.4);
+  --chrome-bg: rgba(11, 15, 26, 0.85);
+  --hairline: rgba(201, 162, 75, 0.24);
+  --hover-wash: rgba(201, 162, 75, 0.05);
+
+  --chart-accent: #c9a24b;
+  --chart-gains: #3f7a5e;
+  --chart-losses: #b3503f;
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-axis: #a9a394;
+
+  --cat-1: #c9a24b;
+  --cat-2: #3f7a5e;
+  --cat-3: #b3503f;
+  --cat-4: #5b7a9e;
+  --cat-5: #7a9e95;
+  --cat-6: #6b6558;
+
+  color-scheme: dark;
+  position: relative;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+.editorial-theme .font-serif-editorial {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-feature-settings: "ss01";
+}
+
+/* Flat, rule-based panels instead of filled/bordered cards — a thin gold top rule stands
+ * in for a card boundary, everything else is whitespace. */
+.editorial-theme :is(.rounded-full, .rounded-2xl, .rounded-xl, .rounded-lg, .rounded-md, .rounded) {
+  border-radius: 2px;
+}
+.editorial-theme .glass {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+}
+.editorial-theme .glass::after {
+  display: none;
+}
+.editorial-theme .glass-interactive:hover {
+  border-top-color: var(--c-accent);
+  box-shadow: none;
+}
+/* Section labels: small-caps gold, letter-spaced — no "> " prompt affectation this time. */
+.editorial-theme h3,
+.editorial-theme h4 {
+  letter-spacing: 0.14em;
+  color: var(--c-accent);
+}
+
+@keyframes rule-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.rule-draw {
+  transform-origin: left;
+  animation: rule-draw 0.7s ease-out both;
+}
+
 /* Respect the OS "reduce motion" setting — kills the skeleton pulse, theme
  * cross-fade, and all transitions/animations for motion-sensitive users. */
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,3 @@
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LogoutButton } from "@/features/auth/LogoutButton";
@@ -12,28 +11,11 @@ import { PanicSettings } from "@/features/panic/PanicSettings";
 export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader eyebrow="Account" title="Profile" subtitle="Appearance, security, sessions, and safety controls." />
+      <PageHeader eyebrow="Account" title="Profile" subtitle="Security, sessions, and safety controls." />
 
       <div className="flex flex-col gap-4">
         <SettingsCard
           index={0}
-          title="Appearance"
-          desc="Switch between the dark and light themes."
-          icon={
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-            </svg>
-          }
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-secondary">Theme</span>
-            <ThemeToggle />
-          </div>
-        </SettingsCard>
-
-        <SettingsCard
-          index={1}
           title="Security"
           desc="Session timeout and biometric unlock."
           icon={
@@ -52,7 +34,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={2}
+          index={1}
           title="Notifications"
           desc="Push alerts and your morning briefing."
           icon={
@@ -66,7 +48,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={3}
+          index={2}
           title="Investor profile"
           desc="Risk tolerance, goals, and preferences that ground Ask-AI and the personas."
           icon={
@@ -80,7 +62,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={4}
+          index={3}
           title="Safety"
           desc="Panic mode and emergency controls."
           icon={
@@ -94,7 +76,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={5}
+          index={4}
           title="Active sessions"
           desc="Devices currently signed in to Argus."
           icon={

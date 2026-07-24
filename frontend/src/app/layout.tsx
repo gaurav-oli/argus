@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, ThemeScript } from "@/components/theme/ThemeProvider";
 
@@ -17,6 +17,14 @@ const jetbrainsMono = JetBrains_Mono({
 // Display face for headings + hero numerals — the Cinematic Glass design language.
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
+  subsets: ["latin"],
+});
+
+// Private Bank Editorial skin (Home page trial) — a soft high-contrast display serif with
+// optical sizing, used for the big numerals and headings on that page only.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  style: ["normal", "italic"],
   subsets: ["latin"],
 });
 
@@ -43,7 +51,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable} ${fraunces.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

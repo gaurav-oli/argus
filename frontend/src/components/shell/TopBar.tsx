@@ -1,6 +1,5 @@
 "use client";
 
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { PortfolioChat } from "@/features/conversation/PortfolioChat";
 import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
@@ -11,8 +10,8 @@ import { useEffect, useState } from "react";
 
 /**
  * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and the real total value
- * KPI (Story 3.4, /api/portfolio/value), a global "Ask AI" portfolio-chat launcher (Story 7.2),
- * tap-to-reveal privacy (FR-36), and the theme switch. Sensitive values are masked until revealed.
+ * KPI (Story 3.4, /api/portfolio/value), a global "Ask AI" portfolio-chat launcher (Story 7.2), and
+ * tap-to-reveal privacy (FR-36). Sensitive values are masked until revealed.
  */
 export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
@@ -32,7 +31,7 @@ export function TopBar() {
     <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">
       <div className="flex items-center gap-2 lg:hidden">
         <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" aria-hidden />
-        <span className="text-lg font-bold tracking-tight">Argus</span>
+        <span className="font-serif-editorial text-lg font-normal tracking-tight">Argus</span>
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-5 lg:gap-6">
@@ -41,8 +40,8 @@ export function TopBar() {
           <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
             Total Value
           </span>
-          <Sensitive className="text-lg font-bold text-text-primary">
-            <span className="font-mono text-lg font-bold tabular-nums text-text-primary">
+          <Sensitive className="text-lg font-normal text-text-primary">
+            <span className="font-serif-editorial text-lg font-normal text-text-primary">
               {usdOrDash(totalValue)}
             </span>
           </Sensitive>
@@ -54,7 +53,6 @@ export function TopBar() {
           Ask AI
         </button>
         <PrivacyToggle />
-        <ThemeToggle />
       </div>
 
       {chatOpen && <PortfolioChat onClose={() => setChatOpen(false)} />}
