@@ -3,6 +3,7 @@ package com.argus.agent;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -16,6 +17,13 @@ import org.springframework.stereotype.Component;
 public class AgentEventPublisher {
 
 	static final int ENVELOPE_VERSION = 1;
+
+	/** Approximate cap (Epic 1 hardening backlog — Story 1.5). Without one, a stream grows forever
+	 * on a 24/7 Mini; {@code ~} (approximate trimming) is a cheap O(1)-ish trim Redis does lazily
+	 * rather than an exact trim on every write. 10k is generous headroom over normal volume while
+	 * still bounding worst-case memory if a source misbehaves and floods a stream. */
+	private static final long MAX_STREAM_LENGTH = 10_000;
+	private static final XAddOptions TRIM_OPTIONS = XAddOptions.maxlen(MAX_STREAM_LENGTH).approximateTrimming(true);
 
 	private final StringRedisTemplate redis;
 	private final EventEnvelopeCodec codec;
@@ -33,6 +41,6 @@ public class AgentEventPublisher {
 				Instant.now(),
 				ENVELOPE_VERSION,
 				payload == null ? Map.of() : payload);
-		return redis.opsForStream().add(streamKey, codec.toMap(envelope));
+		return redis.opsForStream().add(streamKey, codec.toMap(envelope), TRIM_OPTIONS);
 	}
 }
