@@ -1,9 +1,10 @@
 # Epic 1 — Hardening Backlog
 
-Real findings from the code review of the Epic 1 skeleton stories (1.4–1.6) that
-are **out of scope for the skeleton** and were deliberately deferred. All six ACs
-of each story passed; these are robustness/security items to pick up when the
-relevant feature/hardening work lands. Captured here so they aren't lost.
+**CLOSED 2026-07-24.** Real findings from the code review of the Epic 1 skeleton stories (1.4–1.6)
+that were **out of scope for the skeleton** and deliberately deferred. All six ACs of each story
+passed; these were robustness/security items picked up afterward. Every item is now either fixed
+(with tests + a live/functional verification) or explicitly accepted as deferred-by-design (the one
+cosmetic item below) — nothing here is still an open TODO.
 
 ## From Story 1.4 — Model Gateway
 - ~~**No call/acquire timeout.**~~ — **FIXED 2026-07-23.** `permits.acquire()` (unbounded) is now
@@ -77,6 +78,6 @@ beyond the real-Redis integration test.
 - ~~**WebSocket origin is wide open**~~ — **FIXED 2026-07-23.** `WebSocketConfig` now reuses `WebProperties.allowedOrigins()` (`argus.web.allowed-origins` / `ARGUS_WEB_ALLOWED_ORIGINS`), the same env-configurable list `CorsConfig` already validates against, instead of `setAllowedOriginPatterns("*")`. Verified both directions: `StompRoundTripIntegrationTest#handshakeFromDisallowedOriginIsRejected` (new) confirms a forged `Origin` header is rejected; the real production frontend's WS connection (`wss://leannas-mac-mini.taila43287.ts.net/ws`) was confirmed still working live post-deploy via a real browser session (frame received, zero console errors).
 - ~~**`wsClient` robustness.**~~ — **FIXED 2026-07-23.** `ready` now rejects (instead of hanging forever) on `onStompError`, `onWebSocketError`, `onWebSocketClose`, or a 15s connect timeout (`CONNECT_TIMEOUT_MS`); `onConnect` calls `subscription?.unsubscribe()` before re-subscribing on reconnect, closing the leak. Verified against the real `@stomp/stompjs` library (not a mock): a genuinely unreachable address rejected in 27ms via `onWebSocketError`, and a black-holed address (`192.0.2.1`, TEST-NET-1) correctly rejected at the 3000ms timeout boundary. Live-validated post-deploy via a real Playwright browser session against the production frontend — the deployed bundle opened `wss://leannas-mac-mini.taila43287.ts.net/ws`, received a live frame, and stayed connected with zero console errors.
 - ~~**`apiClient` empty-body / content-type.**~~ — **FIXED 2026-07-23.** `apiGet` was the one remaining gap (`apiPost`/`apiPut`/DELETE call sites already guarded); it now checks for a 204 status or `content-length: 0` before parsing, matching the pattern the other verbs already used. Verified against a real Node HTTP server: confirmed the fix returns `undefined` for both a 204 and a 200-with-empty-body response without throwing, parses a normal JSON body correctly, and reproduced the pre-fix regression (`Unexpected end of JSON input`) to prove this is a genuine fix. The error-path `problem+json` parsing already had try/catch protection against non-JSON bodies, so no change was needed there.
-- **Demo payload contract.** The 1.6 STOMP demo publishes a raw `String` while `wsClient` expects JSON — align the real push payloads to JSON (typed) as live topics are built.
+- **Demo payload contract — ACCEPTED, not fixed.** The 1.6 STOMP demo publishes a raw `String` while `wsClient` expects JSON. Left as-is by design: it's a mismatch in a throwaway demo topic, not a real push payload — every actual production topic already publishes JSON via `AgentEventPublisher`. Fixing the demo itself has no user-facing effect and would just be busywork; if it's ever confusing, delete the demo topic rather than "fix" it.
 
-_All items above are tracked; none block Epic 1 completion. Hardware-only validation lives in `docs/mac-mini-validation.md`._
+_Backlog closed 2026-07-24 — all items fixed or explicitly accepted. Hardware-only validation lives in `docs/mac-mini-validation.md`._
