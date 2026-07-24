@@ -16,14 +16,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
  * Builds the dashboard Live Alerts feed (Epic 9) from real agent output — replacing the old mock
- * feed. Composes three sources into one tiered, time-ordered list: Stranger Danger warnings
- * (Agent 4), upcoming calendar events within a week (Agent 7), and the freshest recommendations
- * (Agent 5). Read-only; computed on demand.
+ * feed. Composes three sources into one time-ordered list: Stranger Danger warnings (Agent 4),
+ * upcoming calendar events within a week (Agent 7), and the freshest recommendations (Agent 5).
+ * Read-only; computed on demand.
  */
 @Service
 public class AlertFeedService {
@@ -34,7 +33,6 @@ public class AlertFeedService {
 	private static final int STRANGER_WINDOW_DAYS = 7;
 	private static final int MAX_RECENT_RECS = 3;
 	private static final int MAX_ALERTS = 8;
-	private static final Map<String, Integer> TIER_RANK = Map.of("critical", 0, "warning", 1, "info", 2);
 
 	private final StrangerAlertRepository stranger;
 	private final CalendarEventRepository calendar;
@@ -47,7 +45,7 @@ public class AlertFeedService {
 		this.recommendations = recommendations;
 	}
 
-	/** The current alerts, most severe + most recent first, capped to a tidy feed length. */
+	/** The current alerts, latest to oldest, capped to a tidy feed length. */
 	public List<AlertView> live() {
 		List<AlertView> out = new ArrayList<>();
 		LocalDate today = LocalDate.now(TORONTO);
@@ -81,9 +79,7 @@ public class AlertFeedService {
 						pct(r.getBullProbability()) + " bull · " + pct(r.getConfidence()) + " confidence",
 						"Recommender", r.getTicker(), r.getCreatedAt())));
 
-		out.sort(Comparator
-				.comparingInt((AlertView a) -> TIER_RANK.getOrDefault(a.tier(), 9))
-				.thenComparing(AlertView::time, Comparator.nullsLast(Comparator.reverseOrder())));
+		out.sort(Comparator.comparing(AlertView::time, Comparator.nullsLast(Comparator.reverseOrder())));
 		return out.size() > MAX_ALERTS ? out.subList(0, MAX_ALERTS) : out;
 	}
 

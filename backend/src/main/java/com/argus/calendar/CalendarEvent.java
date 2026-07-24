@@ -44,18 +44,43 @@ public class CalendarEvent {
 	@Column(name = "ingested_at", nullable = false)
 	private Instant ingestedAt = Instant.now();
 
+	/** Null until the report lands; populated (and re-saved) once Finnhub has actual EPS. */
+	@Column(name = "eps_actual")
+	private Double epsActual;
+
+	@Column(name = "eps_estimate")
+	private Double epsEstimate;
+
+	@Column(name = "eps_surprise_percent")
+	private Double epsSurprisePercent;
+
 	protected CalendarEvent() {
 		// JPA
 	}
 
 	public CalendarEvent(CalendarEventType type, String ticker, String title, LocalDate eventDate,
 			String source, String externalId) {
+		this(type, ticker, title, eventDate, source, externalId, null, null, null);
+	}
+
+	public CalendarEvent(CalendarEventType type, String ticker, String title, LocalDate eventDate,
+			String source, String externalId, Double epsActual, Double epsEstimate, Double epsSurprisePercent) {
 		this.type = type;
 		this.ticker = ticker;
 		this.title = title;
 		this.eventDate = eventDate;
 		this.source = source;
 		this.externalId = externalId;
+		this.epsActual = epsActual;
+		this.epsEstimate = epsEstimate;
+		this.epsSurprisePercent = epsSurprisePercent;
+	}
+
+	/** Backfills the earnings result once Finnhub has it (Agent 7 revisits recent past dates). */
+	public void updateEarningsResult(Double epsActual, Double epsEstimate, Double epsSurprisePercent) {
+		this.epsActual = epsActual;
+		this.epsEstimate = epsEstimate;
+		this.epsSurprisePercent = epsSurprisePercent;
 	}
 
 	public Long getId() {
@@ -84,5 +109,17 @@ public class CalendarEvent {
 
 	public String getExternalId() {
 		return externalId;
+	}
+
+	public Double getEpsActual() {
+		return epsActual;
+	}
+
+	public Double getEpsEstimate() {
+		return epsEstimate;
+	}
+
+	public Double getEpsSurprisePercent() {
+		return epsSurprisePercent;
 	}
 }

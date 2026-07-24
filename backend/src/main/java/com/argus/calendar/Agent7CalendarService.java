@@ -5,6 +5,7 @@ import com.argus.intelligence.KnownUniverse;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Service;
  * from every configured {@link CalendarSource} (Finnhub earnings, Fed RSS), deduplicates against
  * what's stored, and persists them. Per-event and per-source failures are isolated so one bad item
  * or flaky source never aborts the run; a duplicate within a run is dropped before the DB sees it.
+ * Also keeps the {@link CompanyLogoService} cache warm for every ticker touched by this run
+ * (held tickers + any new event ticker, e.g. a fresh IPO symbol) so the calendar UI has an icon
+ * ready without a per-request external call.
  */
 @Service
 public class Agent7CalendarService {
@@ -25,12 +29,14 @@ public class Agent7CalendarService {
 	private final List<CalendarSource> sources;
 	private final CalendarEventRepository events;
 	private final KnownUniverse universe;
+	private final Optional<CompanyLogoService> companyLogos;
 
 	public Agent7CalendarService(List<CalendarSource> sources, CalendarEventRepository events,
-			KnownUniverse universe) {
+			KnownUniverse universe, Optional<CompanyLogoService> companyLogos) {
 		this.sources = sources;
 		this.events = events;
 		this.universe = universe;
+		this.companyLogos = companyLogos;
 	}
 
 	/** Daily run at 06:00 America/New_York. Never throws out of the scheduler. */
@@ -73,15 +79,42 @@ public class Agent7CalendarService {
 			}
 		}
 		log.info("Agent 7 calendar: {} fetched, {} new across {} source(s)", raws.size(), stored, sources.size());
+
+		companyLogos.ifPresent(service -> {
+			try {
+				Set<String> logoTickers = new HashSet<>(held);
+				for (RawEvent raw : raws) {
+					if (raw.ticker() != null) {
+						logoTickers.add(raw.ticker());
+					}
+				}
+				service.ensureCached(logoTickers);
+			} catch (RuntimeException ex) {
+				log.warn("Company logo cache warm-up failed: {}", ex.getMessage());
+			}
+		});
+
 		return stored;
 	}
 
+	/**
+	 * Stores a genuinely new event, or — for a date already stored — backfills its earnings result
+	 * once Finnhub has one (the row was ingested before it reported; {@link FinnhubEarningsSource}
+	 * revisits recent past dates so this catches up without a second pass). Only counts toward the
+	 * "new events" return value on first insert.
+	 */
 	private boolean store(RawEvent raw) {
-		if (events.existsBySourceAndExternalId(raw.source(), raw.externalId())) {
+		Optional<CalendarEvent> existing = events.findBySourceAndExternalId(raw.source(), raw.externalId());
+		if (existing.isPresent()) {
+			if (raw.epsActual() != null) {
+				CalendarEvent event = existing.get();
+				event.updateEarningsResult(raw.epsActual(), raw.epsEstimate(), raw.epsSurprisePercent());
+				events.save(event);
+			}
 			return false;
 		}
 		events.save(new CalendarEvent(raw.type(), raw.ticker(), raw.title(), raw.eventDate(),
-				raw.source(), raw.externalId()));
+				raw.source(), raw.externalId(), raw.epsActual(), raw.epsEstimate(), raw.epsSurprisePercent()));
 		return true;
 	}
 

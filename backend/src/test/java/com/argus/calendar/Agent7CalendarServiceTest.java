@@ -15,6 +15,7 @@ import com.argus.calendar.CalendarSource.RawEvent;
 import com.argus.intelligence.KnownUniverse;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +36,7 @@ class Agent7CalendarServiceTest {
 	}
 
 	private Agent7CalendarService service(List<CalendarSource> sources) {
-		return new Agent7CalendarService(sources, events, universe);
+		return new Agent7CalendarService(sources, events, universe, Optional.empty());
 	}
 
 	@Test
@@ -57,11 +58,34 @@ class Agent7CalendarServiceTest {
 		CalendarSource src = mock(CalendarSource.class);
 		when(src.name()).thenReturn("finnhub-earnings");
 		when(src.fetch(any())).thenReturn(List.of(earnings("AAPL", "2026-07-30")));
-		when(events.existsBySourceAndExternalId("finnhub-earnings", "EARNINGS:AAPL:2026-07-30"))
-				.thenReturn(true);
+		CalendarEvent existing = new CalendarEvent(CalendarEventType.EARNINGS, "AAPL", "AAPL earnings",
+				LocalDate.parse("2026-07-30"), "finnhub-earnings", "EARNINGS:AAPL:2026-07-30");
+		when(events.findBySourceAndExternalId("finnhub-earnings", "EARNINGS:AAPL:2026-07-30"))
+				.thenReturn(java.util.Optional.of(existing));
 
 		assertEquals(0, service(List.of(src)).ingestOnce());
 		verify(events, never()).save(any());
+	}
+
+	@Test
+	void backfillsEarningsResultOnRevisit() {
+		heldAapl();
+		CalendarSource src = mock(CalendarSource.class);
+		when(src.name()).thenReturn("finnhub-earnings");
+		RawEvent reported = new RawEvent(CalendarEventType.EARNINGS, "AAPL", "AAPL earnings",
+				LocalDate.parse("2026-07-30"), "finnhub-earnings", "EARNINGS:AAPL:2026-07-30",
+				1.64, 1.57, 4.46);
+		when(src.fetch(any())).thenReturn(List.of(reported));
+		CalendarEvent existing = new CalendarEvent(CalendarEventType.EARNINGS, "AAPL", "AAPL earnings",
+				LocalDate.parse("2026-07-30"), "finnhub-earnings", "EARNINGS:AAPL:2026-07-30");
+		when(events.findBySourceAndExternalId("finnhub-earnings", "EARNINGS:AAPL:2026-07-30"))
+				.thenReturn(java.util.Optional.of(existing));
+
+		assertEquals(0, service(List.of(src)).ingestOnce());
+		verify(events, times(1)).save(existing);
+		assertEquals(1.64, existing.getEpsActual());
+		assertEquals(1.57, existing.getEpsEstimate());
+		assertEquals(4.46, existing.getEpsSurprisePercent());
 	}
 
 	@Test

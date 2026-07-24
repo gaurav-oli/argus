@@ -33,12 +33,14 @@ public class FinnhubEarningsSource implements CalendarSource {
 
 	private final String apiKey;
 	private final int lookaheadDays;
+	private final int lookbackDays;
 	private final FinnhubRest finnhub;
 
 	public FinnhubEarningsSource(@Value("${argus.finnhub.api-key}") String apiKey,
 			CalendarProperties props, FinnhubRest finnhub) {
 		this.apiKey = apiKey;
 		this.lookaheadDays = props.lookaheadDays();
+		this.lookbackDays = props.earningsLookbackDays();
 		this.finnhub = finnhub;
 	}
 
@@ -52,8 +54,12 @@ public class FinnhubEarningsSource implements CalendarSource {
 		if (heldTickers == null || heldTickers.isEmpty()) {
 			return List.of();
 		}
-		LocalDate from = LocalDate.now();
-		LocalDate to = from.plusDays(lookaheadDays);
+		LocalDate today = LocalDate.now();
+		// Re-covers the recent past too (not just today() → today()+lookahead) so a date that was
+		// ingested before it reported gets revisited once Finnhub has actual/estimate EPS for it —
+		// see Agent7CalendarService#store, which updates the existing row rather than skipping it.
+		LocalDate from = today.minusDays(lookbackDays);
+		LocalDate to = today.plusDays(lookaheadDays);
 		List<RawEvent> out = new ArrayList<>();
 		for (String ticker : heldTickers) {
 			out.addAll(fetchTicker(ticker, from, to));
@@ -78,13 +84,25 @@ public class FinnhubEarningsSource implements CalendarSource {
 					continue;
 				}
 				LocalDate eventDate = LocalDate.parse(date);
+				Double epsActual = nullableDouble(n, "epsActual");
+				Double epsEstimate = nullableDouble(n, "epsEstimate");
+				Double epsSurprisePercent = (epsActual != null && epsEstimate != null && epsEstimate != 0)
+						? (epsActual - epsEstimate) / Math.abs(epsEstimate) * 100
+						: null;
 				out.add(new RawEvent(CalendarEventType.EARNINGS, symbol, symbol + " earnings",
-						eventDate, NAME, "EARNINGS:" + symbol + ":" + date));
+						eventDate, NAME, "EARNINGS:" + symbol + ":" + date,
+						epsActual, epsEstimate, epsSurprisePercent));
 			}
 			return out;
 		} catch (RuntimeException ex) {
 			log.warn("Finnhub earnings parse failed for {}: {}", ticker, ex.getMessage());
 			return List.of();
 		}
+	}
+
+	/** Finnhub returns JSON null (not a missing field) for EPS values not yet reported. */
+	private static Double nullableDouble(JsonNode row, String field) {
+		JsonNode v = row.path(field);
+		return (v.isMissingNode() || v.isNull()) ? null : v.asDouble();
 	}
 }

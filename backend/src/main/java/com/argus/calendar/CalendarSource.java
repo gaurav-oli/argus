@@ -20,8 +20,19 @@ public interface CalendarSource {
 	 */
 	List<RawEvent> fetch(Collection<String> heldTickers);
 
-	/** A raw event before persistence. {@code externalId} is the source's stable id (for dedup). */
+	/**
+	 * A raw event before persistence. {@code externalId} is the source's stable id (for dedup).
+	 * {@code epsActual}/{@code epsEstimate}/{@code epsSurprisePercent} are only ever non-null for
+	 * already-reported {@code EARNINGS} rows from {@link FinnhubEarningsSource}; every other source
+	 * passes null for all three.
+	 */
 	record RawEvent(CalendarEventType type, String ticker, String title, LocalDate eventDate,
-			String source, String externalId) {
+			String source, String externalId, Double epsActual, Double epsEstimate, Double epsSurprisePercent) {
+
+		/** Convenience for sources with no earnings-result data (Fed, IPO). */
+		public RawEvent(CalendarEventType type, String ticker, String title, LocalDate eventDate,
+				String source, String externalId) {
+			this(type, ticker, title, eventDate, source, externalId, null, null, null);
+		}
 	}
 }
