@@ -205,6 +205,46 @@ class DefaultModelGatewayTest {
 	}
 
 	@Test
+	void haikuFailureAfterPrimaryFailureIsNotRetriedAndPropagates() {
+		// Error-contract fix: a real Haiku failure (bad key, Anthropic outage) must surface as its
+		// own exception, not get caught by the primary-model catch-all and silently retried against
+		// Haiku a second time (which would double-bill and mislabel the log as "primary failed").
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			throw new ModelGatewayException("Haiku is down");
+		};
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(1, fallbackCalls.get(), "a failing Haiku fallback must be invoked exactly once, never retried");
+	}
+
+	@Test
+	void haikuFailureAfterBlankPrimaryResponseIsNotRetriedAndPropagates() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			throw new ModelGatewayException("Haiku is down");
+		};
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(1, fallbackCalls.get(), "a failing Haiku fallback must be invoked exactly once, never retried");
+	}
+
+	@Test
+	void permitIsReleasedEvenWhenHaikuFallbackFails() {
+		HaikuFallback fallback = prompt -> {
+			throw new ModelGatewayException("Haiku is down");
+		};
+		DefaultModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(1, gateway.availablePermits(), "permit must be released before the fallback call, not leaked on fallback failure");
+	}
+
+	@Test
 	void generateFallsBackToHaikuWhenModelCallHangsPastTheTimeout() {
 		// The crux of the hardening fix: previously an unbounded permits.acquire() + no call timeout
 		// meant a genuinely stuck model call held the single permit forever and starved every queued

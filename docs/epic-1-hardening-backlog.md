@@ -19,7 +19,24 @@ relevant feature/hardening work lands. Captured here so they aren't lost.
   (2.0s round trip, correct grounded answer). The abandoned background call on a timeout isn't
   forcibly cancelled (Spring AI's synchronous `ChatClient` has no cancel hook) — documented as an
   accepted gap in `DefaultModelGateway`'s Javadoc.
-- **Fallback masks all `RuntimeException`s into a stub string.** Today the Haiku fallback is a stub, so any model error returns a placeholder the caller can't distinguish from a real answer. Revisit the error contract (`ModelGatewayException` vs fallback) when the real Anthropic Haiku fallback is implemented. _(Note: the real `AnthropicHaikuFallback` has since been implemented and live-validated — this item's precondition is met, but the error-contract revisit itself hasn't been done; still open.)_
+- ~~**Fallback masks all `RuntimeException`s into a stub string.**~~ — **FIXED 2026-07-24.** The real
+  `AnthropicHaikuFallback` was already in place, but revisiting `generateBig()`'s error contract
+  surfaced a genuine bug it created: every `haikuFallback.generate(prompt)` call (permit-timeout,
+  primary-failure, blank-content) sat *inside* the same `try` whose `catch (RuntimeException ex)`
+  was meant only for the primary model. A real Haiku failure (bad key, Anthropic outage, rate-limit)
+  got re-caught by that same clause, mislabeled in the logs as `"Primary model failed"`, and silently
+  retried against Haiku a **second time** — double billing, double latency, and the real failure only
+  surfaced if both calls failed. `generateBig()` is restructured so the permit is released and each
+  fallback call happens strictly outside any try/catch that could recapture it — a Haiku failure now
+  propagates as its own `ModelGatewayException` (→ 503) on the first and only attempt. Verified with
+  3 new unit tests (`haikuFailureAfterPrimaryFailureIsNotRetriedAndPropagates`,
+  `haikuFailureAfterBlankPrimaryResponseIsNotRetriedAndPropagates`,
+  `permitIsReleasedEvenWhenHaikuFallbackFails`) plus the full 378-test backend suite, all green.
+  Live-validated against the deployed backend: a normal ask (golden path, 69s local-model round trip)
+  and a direct Haiku escalation (2.0s) both returned correct grounded answers; a real production
+  blank-response-from-the-local-model event was also observed live (129s local timeout → single
+  correctly-attributed Haiku fallback call, real answer returned, cost recorded once) — direct
+  confirmation the exact bug this fix closes doesn't recur in practice.
 - ~~**No `@Min`/validation on `concurrency`** (0/negative bricks the gateway) and **no null/empty/oversized prompt validation**.~~ — **FIXED 2026-07-23.** `DefaultModelGateway`'s constructor now throws `IllegalArgumentException` for `concurrency < 1` (fails loudly at startup instead of silently bricking every BIG-tier call), backed by a unit test; `ModelGatewayProperties.concurrency` also carries `@Min(1)` for documentation/discoverability. `generate()`/`escalate()` now reject a null/blank prompt (`BadRequestException` → 400) or one over 50,000 characters (`PayloadTooLargeException` → 413) before it ever reaches the semaphore or Haiku — both reusing the app's existing exception types rather than inventing new ones.
 
 ## From Story 1.5 — Agent Runtime + Redis Streams

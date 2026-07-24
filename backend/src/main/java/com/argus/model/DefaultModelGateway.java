@@ -112,40 +112,48 @@ public class DefaultModelGateway implements ModelGateway {
 	 * {@code ChatClient} doesn't expose an interruptible handle) — it's left to finish or fail on its
 	 * own and its result is discarded. That's an accepted gap: the goal here is bounding how long a
 	 * caller (and everyone queued behind it) waits, not killing the underlying HTTP request.
+	 *
+	 * <p><b>Error contract:</b> every {@code haikuFallback.generate(prompt)} call below happens
+	 * outside the {@code try} that catches the primary model's {@code RuntimeException} — a real
+	 * Haiku failure (bad API key, Anthropic outage, rate-limit) must propagate as its own
+	 * {@link ModelGatewayException} (→ 503 at the edge) instead of being re-caught by the same
+	 * catch-all and silently retried against Haiku a second time. An earlier version nested every
+	 * fallback call inside that one try/catch, so a Haiku failure got mislabeled in the logs as
+	 * "Primary model failed" and paid for a second Haiku call before the real error ever surfaced.
 	 */
 	private String generateBig(String prompt) {
-		boolean acquired = false;
+		boolean acquired;
 		try {
 			acquired = permits.tryAcquire(callTimeout.toMillis(), TimeUnit.MILLISECONDS);
-			if (!acquired) {
-				log.warn("Timed out after {} waiting for the model permit (still held by another call) — "
-						+ "invoking Haiku fallback", callTimeout);
-				return haikuFallback.generate(prompt);
-			}
-			long startNanos = System.nanoTime();
-			String content = callWithTimeout(prompt);
-			long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
-			if (content == null || content.isBlank()) {
-				log.warn("Local model returned no usable content ({} ms, {} prompt chars) — "
-						+ "invoking Haiku fallback", durationMs, prompt.length());
-				return haikuFallback.generate(prompt);
-			}
-			log.info("model generate ok ({} ms)", durationMs);
-			return content;
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			throw new ModelGatewayException("Interrupted while awaiting model permit", ex);
 		}
+		if (!acquired) {
+			log.warn("Timed out after {} waiting for the model permit (still held by another call) — "
+					+ "invoking Haiku fallback", callTimeout);
+			return haikuFallback.generate(prompt);
+		}
+		String content;
+		long startNanos = System.nanoTime();
+		try {
+			content = callWithTimeout(prompt);
+		}
 		catch (RuntimeException ex) {
+			permits.release();
 			log.warn("Primary model failed — invoking Haiku fallback", ex);
 			return haikuFallback.generate(prompt);
 		}
-		finally {
-			if (acquired) {
-				permits.release();
-			}
+		long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
+		permits.release();
+		if (content == null || content.isBlank()) {
+			log.warn("Local model returned no usable content ({} ms, {} prompt chars) — "
+					+ "invoking Haiku fallback", durationMs, prompt.length());
+			return haikuFallback.generate(prompt);
 		}
+		log.info("model generate ok ({} ms)", durationMs);
+		return content;
 	}
 
 	/** Races the real model call against {@link #callTimeout}; a timeout is treated as a failure
