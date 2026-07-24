@@ -58,7 +58,7 @@ public class RecommendationController {
 
 	@PostMapping("/{id}/decision")
 	public void decide(@PathVariable Long id, @RequestBody DecisionBody body) {
-		confirmation.confirm(id, body.decision(), body.reasoning());
+		confirmation.confirm(id, body.decision(), body.reasoning(), body.entryPrice(), body.positionSize());
 	}
 
 	/** Black Swan state is not modeled yet (Epic 10) — always false; the cap is wired for when it is. */
@@ -66,7 +66,9 @@ public class RecommendationController {
 		return false;
 	}
 
-	public record DecisionBody(Decision decision, String reasoning) {
+	/** {@code entryPrice}/{@code positionSize} are optional (Story 11.1, F22) — meaningful only for a
+	 * TAKEN decision; the client omits or sends null for either when not reported. */
+	public record DecisionBody(Decision decision, String reasoning, BigDecimal entryPrice, BigDecimal positionSize) {
 	}
 
 	/** The weather-style card: direction, probabilities, confidence (Black-Swan-capped), badge, signals. */

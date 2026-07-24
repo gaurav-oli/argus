@@ -678,12 +678,21 @@ export interface RecommendationCard {
 export const getRecommendations = (): Promise<RecommendationCard[]> =>
   apiGet<RecommendationCard[]>("/api/recommendations");
 
+/** {@code entryPrice}/{@code positionSize} are optional (Story 11.1, F22) — meaningful only when
+ * `decision` is TAKEN; omit for DECLINED. */
 export const decideRecommendation = (
   id: number,
   decision: "TAKEN" | "DECLINED",
   reasoning: string,
+  entryPrice?: number | null,
+  positionSize?: number | null,
 ): Promise<void> =>
-  apiPost(`/api/recommendations/${id}/decision`, { decision, reasoning });
+  apiPost(`/api/recommendations/${id}/decision`, {
+    decision,
+    reasoning,
+    entryPrice: entryPrice ?? null,
+    positionSize: positionSize ?? null,
+  });
 
 // ---- Ask AI / Conversation (Epic 7, Story 7.1) ----
 
@@ -1096,6 +1105,61 @@ export interface RegretView {
 
 export const getRegret = (): Promise<RegretView> =>
   apiGet<RegretView>("/api/recommendations/regret");
+
+// ---- Trade Journal (Story 11.1, F22) ----
+
+/** One journal row — mirrors `JournalService.JournalEntryView`. `outcome` is PENDING until a
+ * matching paper leg closes; `outcomeReturnPct` is null while pending. */
+export interface JournalEntryView {
+  decisionId: number;
+  recommendationId: number;
+  ticker: string;
+  direction: string;
+  decision: "TAKEN" | "DECLINED";
+  decidedAt: string;
+  outcome: "WIN" | "LOSS" | "PENDING";
+  outcomeReturnPct: number | null;
+}
+
+export interface JournalSignalDetail {
+  agent: string;
+  direction: string;
+  weight: number | null;
+  rationale: string;
+}
+
+export interface JournalPersonaVerdictDetail {
+  persona: string;
+  key: string;
+  stance: string;
+  rationale: string;
+}
+
+/** The frozen FR-15 rationale snapshot plus entry details and the same outcome as the list view. */
+export interface JournalDetailView {
+  decisionId: number;
+  recommendationId: number;
+  ticker: string;
+  direction: string;
+  bullProbability: number | null;
+  bearProbability: number | null;
+  confidence: number | null;
+  decision: "TAKEN" | "DECLINED";
+  reasoning: string | null;
+  decidedAt: string;
+  entryPrice: number | null;
+  positionSize: number | null;
+  signals: JournalSignalDetail[];
+  personaVerdicts: JournalPersonaVerdictDetail[];
+  outcome: "WIN" | "LOSS" | "PENDING";
+  outcomeReturnPct: number | null;
+}
+
+export const getJournal = (): Promise<JournalEntryView[]> =>
+  apiGet<JournalEntryView[]>("/api/journal");
+
+export const getJournalEntry = (decisionId: number): Promise<JournalDetailView> =>
+  apiGet<JournalDetailView>(`/api/journal/${decisionId}`);
 
 /** One closed simulated position in the Investor's book (FR-11 follow-up). */
 export interface ClosedTradeView {

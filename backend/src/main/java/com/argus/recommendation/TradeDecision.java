@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -49,15 +50,31 @@ public class TradeDecision {
 	@Column(name = "outcome_at")
 	private Instant outcomeAt;
 
+	/** Optional, user-reported at Take time (Story 11.1, F22). Never set for a Declined decision.
+	 * Null on every row written before this story — the journal must render that as "not recorded",
+	 * not zero. */
+	@Column(name = "entry_price")
+	private BigDecimal entryPrice;
+
+	@Column(name = "position_size")
+	private BigDecimal positionSize;
+
 	protected TradeDecision() {
 		// JPA
 	}
 
 	public TradeDecision(Long recommendationId, Decision decision, String reasoning, String snapshot) {
+		this(recommendationId, decision, reasoning, snapshot, null, null);
+	}
+
+	public TradeDecision(Long recommendationId, Decision decision, String reasoning, String snapshot,
+			BigDecimal entryPrice, BigDecimal positionSize) {
 		this.recommendationId = recommendationId;
 		this.decision = decision;
 		this.reasoning = reasoning;
 		this.snapshot = snapshot;
+		this.entryPrice = entryPrice;
+		this.positionSize = positionSize;
 	}
 
 	/** Record the realized outcome once (idempotent — a set outcome is not overwritten). */
@@ -88,7 +105,19 @@ public class TradeDecision {
 		return snapshot;
 	}
 
+	public Instant getDecidedAt() {
+		return decidedAt;
+	}
+
 	public Outcome getOutcome() {
 		return outcome;
+	}
+
+	public BigDecimal getEntryPrice() {
+		return entryPrice;
+	}
+
+	public BigDecimal getPositionSize() {
+		return positionSize;
 	}
 }

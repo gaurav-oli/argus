@@ -3,13 +3,13 @@ baseline_commit: d7eb1b9
 ---
 # Story 11.1: Trade Journal (F22)
 
-Status: backlog
+Status: done
 
-<!-- Scoping draft — not yet reviewed/approved for dev. Produced 2026-07-24 per user request
-     ("start scoping the Trade Journal"), ahead of the Phase-2 PRD expansion pass the PRD itself
-     calls for ("F16-F29 ... will receive full FR expansion in a PRD update pass before Phase 2
-     architecture begins"). This story stands alone rather than waiting for that pass, scoped
-     narrowly to F22 only. -->
+<!-- Scoped and implemented same-day, 2026-07-24, per two direct user requests ("start scoping the
+     Trade Journal", then "start implementing Story 11.1") — ahead of the Phase-2 PRD expansion pass
+     the PRD itself calls for ("F16-F29 ... will receive full FR expansion in a PRD update pass
+     before Phase 2 architecture begins"). This story stands alone rather than waiting for that
+     pass, scoped narrowly to F22 only. -->
 
 ## Story
 
@@ -106,67 +106,67 @@ outcome is consistent with the aggregate stat card the user already sees today.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Extend `TradeDecision` for entry price/size (AC: 1)**
-  - [ ] Add nullable `entryPrice numeric(18,4)` and `positionSize numeric(18,4)` columns via
+- [x] **Task 1 — Extend `TradeDecision` for entry price/size (AC: 1)**
+  - [x] Add nullable `entryPrice numeric(18,4)` and `positionSize numeric(18,4)` columns via
         `backend/src/main/resources/db/migration/V47__trade_decision_entry_details.sql` (V47 is next
         free — V46 is latest). Forward-only, header comment per convention.
-  - [ ] Add matching fields + getters to `TradeDecision.java`; extend its constructor or add a
+  - [x] Add matching fields + getters to `TradeDecision.java`; extend its constructor or add a
         setter-style "confirm details" method — decide based on whether `TradeConfirmationService`
         should accept them at `confirm()` time (AC 1 implies yes, in the same call).
-  - [ ] Extend `RecommendationController.DecisionBody` with optional `entryPrice`/`positionSize`
+  - [x] Extend `RecommendationController.DecisionBody` with optional `entryPrice`/`positionSize`
         (nullable `BigDecimal`), threaded through to `TradeConfirmationService.confirm(...)`.
-- [ ] **Task 2 — Persona verdicts in the snapshot (AC: 2)**
-  - [ ] Inject `PersonaService` into `TradeConfirmationService`; in `snapshot()`, replace the
+- [x] **Task 2 — Persona verdicts in the snapshot (AC: 2)**
+  - [x] Inject `PersonaService` into `TradeConfirmationService`; in `snapshot()`, replace the
         hardcoded `List.of()` with `personaService.verdictsFor(rec.getId())` mapped to the same shape
         `PersonaController.PersonaView` uses (persona, key, lens, stance, rationale) — cache-only read,
         must not trigger `PersonaService`'s model-generation path.
-  - [ ] Confirm `verdictsFor` is safe to call synchronously inside `TradeConfirmationService.confirm()`
+  - [x] Confirm `verdictsFor` is safe to call synchronously inside `TradeConfirmationService.confirm()`
         (read the method fully — Dev Notes below flag this as the one risk to verify before coding).
-- [ ] **Task 3 — List/detail read endpoints (AC: 3, 4, 6, 7)**
-  - [ ] `TradeDecisionRepository`: add `findAllByOrderByDecidedAtDesc(Pageable)` (or a `Page<>`-free
+- [x] **Task 3 — List/detail read endpoints (AC: 3, 4, 6, 7)**
+  - [x] `TradeDecisionRepository`: add `findAllByOrderByDecidedAtDesc(Pageable)` (or a `Page<>`-free
         `List<>` variant if pagination is deferred — decide against expected volume; MVP is
         single-user with a low decision cadence, a simple capped list may be enough for V1).
-  - [ ] New `JournalController` (or extend `RecommendationController` — pick based on whether journal
+  - [x] New `JournalController` (or extend `RecommendationController` — pick based on whether journal
         entries are conceptually recommendation-scoped or their own resource; lean toward a new
         `com.argus.recommendation.JournalController` at `/api/journal` since it's a distinct read
         surface over `TradeDecision`, not a recommendation sub-resource like `/personas` is).
-  - [ ] `GET /api/journal` → list view DTO (id, ticker, direction, decision, decidedAt, outcome —
+  - [x] `GET /api/journal` → list view DTO (id, ticker, direction, decision, decidedAt, outcome —
         derive outcome the same way `regret()` does: closed paper-leg average return → win/loss/null).
-  - [ ] `GET /api/journal/{decisionId}` → detail view DTO: full parsed snapshot + entry price/size +
+  - [x] `GET /api/journal/{decisionId}` → detail view DTO: full parsed snapshot + entry price/size +
         the same per-entry outcome/comparison data as AC 5. Reuse `PerformanceService`'s
         closed-paper-leg lookup logic rather than duplicating it — consider extracting a small shared
         helper (`outcomeFor(recommendationId)`) if `PerformanceService` and the new controller/service
         both need it.
-- [ ] **Task 4 — Frontend: Trade Journal page (AC: 3, 4, 5)**
-  - [ ] `frontend/src/lib/apiClient.ts`: `JournalEntry`/`JournalDetail` interfaces + `getJournal()` /
+- [x] **Task 4 — Frontend: Trade Journal page (AC: 3, 4, 5)**
+  - [x] `frontend/src/lib/apiClient.ts`: `JournalEntry`/`JournalDetail` interfaces + `getJournal()` /
         `getJournalEntry(id)`, mirroring the `RecommendationCard`/`getRecommendations` pattern.
-  - [ ] New `frontend/src/features/journal/TradeJournal.tsx` — list (AC 3) + expand-to-detail (AC 4),
+  - [x] New `frontend/src/features/journal/TradeJournal.tsx` — list (AC 3) + expand-to-detail (AC 4),
         each entry showing the comparison (AC 5). Follow the existing card/list visual language
         (`AgentPerformance.tsx`'s `RegretCard` for the comparison framing, `RecommendationCards.tsx`
         for the signal-breakdown rendering — don't invent a new visual pattern).
-  - [ ] **Placement decision (flagged for review, not yet made):** the nav is deliberately capped at
+  - [x] **Placement decision (flagged for review, not yet made):** the nav is deliberately capped at
         5 top-level destinations (`navItems.ts` comment: "Single source of truth for the 5 primary
         destinations"). Recommend mounting the journal as a new section on the existing **Agents**
         page (next to the aggregate Regret card it complements) rather than adding a 6th nav item or
         a new top-level route. Confirm this placement before Task 4 UI work starts.
-- [ ] **Task 5 — Extend the "Taken" confirmation form (AC: 1)**
-  - [ ] `RecommendationCards.tsx`'s `decide()` currently uses `window.prompt()` for reasoning only.
+- [x] **Task 5 — Extend the "Taken" confirmation form (AC: 1)**
+  - [x] `RecommendationCards.tsx`'s `decide()` currently uses `window.prompt()` for reasoning only.
         Taking a trade needs a small real form (entry price + shares, both optional) instead of a
         second `prompt()` call — a minimal inline expand, not a new modal system, consistent with the
         existing card's compactness.
-- [ ] **Task 6 — Tests (AC: all)**
-  - [ ] `TradeConfirmationServiceTest`: entry price/size persist when provided and stay null when
+- [x] **Task 6 — Tests (AC: all)**
+  - [x] `TradeConfirmationServiceTest`: entry price/size persist when provided and stay null when
         omitted; snapshot includes real persona verdicts when cached, empty list when not (mock
         `PersonaService`).
-  - [ ] New `JournalControllerTest`/`JournalServiceTest` (naming TBD by Task 3's controller-vs-service
+  - [x] New `JournalControllerTest`/`JournalServiceTest` (naming TBD by Task 3's controller-vs-service
         split): list ordering, outcome derivation matches `regret()`'s existing win/loss logic,
         detail view returns the full snapshot including entry price/size.
-  - [ ] Frontend: `tsc --noEmit` + `eslint` on all changed files (no test harness in this frontend
+  - [x] Frontend: `tsc --noEmit` + `eslint` on all changed files (no test harness in this frontend
         project, per established convention — see [[epic-1-hardening-status]] and prior story notes).
-- [ ] **Task 7 — Docs / bookkeeping**
-  - [ ] Update `TradeConfirmationService`'s class Javadoc to drop the "Persona verdicts ... are an
+- [x] **Task 7 — Docs / bookkeeping**
+  - [x] Update `TradeConfirmationService`'s class Javadoc to drop the "Persona verdicts ... are an
         empty seam for now" note.
-  - [ ] Add a Mac-Mini validation bullet to `docs/mac-mini-validation.md` once implemented (this repo
+  - [x] Add a Mac-Mini validation bullet to `docs/mac-mini-validation.md` once implemented (this repo
         has no local-model-dependent path here — the journal itself needs no Mini-only validation,
         but confirm end-to-end against the live paper-trade close data as the other Epic 9 stat cards
         did).
@@ -268,8 +268,82 @@ Task 4).
 - [Source: frontend/src/components/shell/navItems.ts] — 5-destination nav constraint driving the placement recommendation
 - [Source: _bmad-output/implementation-artifacts/7-6-persisted-investor-profile.md] — template this story file follows
 
+## Dev Agent Record
+
+### Debug Log References
+
+- Confirmed the one flagged risk before coding (Task 2): `PersonaService.verdictsFor` is NOT
+  cache-only — it triggers background generation and returns a transient "still warming up"
+  placeholder when nothing is cached, which would have been baked permanently into the immutable
+  snapshot. Added a genuine cache-only accessor, `PersonaService.cachedVerdictsFor`, instead of
+  calling `verdictsFor` directly.
+- `TradeConfirmationService.confirm(...)`'s signature changed (2 new trailing params); updated all
+  3 existing call sites (`RecommendationController`, 3 tests in `TradeConfirmationIntegrationTest`)
+  rather than adding an overload, since every call site needed updating anyway and a 5-arg overload
+  alongside a 3-arg one would have been redundant.
+- `snapshot(...)` had to move from `private static` to a private instance method once it needed
+  `this.personas` — caught immediately by the compiler, not a design ambiguity.
+- `TradeDecision` had no `getDecidedAt()` getter despite the field existing since Story 6.7 — added
+  it; the journal list/detail views both needed it and nothing in the existing codebase had needed
+  it before.
+- One test-writing bug caught before it shipped: `JournalServiceIntegrationTest`'s helper for a
+  closed paper leg initially used a guessed `SimulatedTrade` constructor/`close()` signature; fixed
+  by reading the actual entity (7-arg constructor incl. `benchmarkEntry`, `close(exit, benchmarkExit)`
+  — passing null for both falls back to the absolute-return win/loss path, which is what the test
+  wanted).
+
+### Completion Notes List
+
+- All 7 tasks complete. 388/388 backend tests green (12 new: 4 in `TradeConfirmationIntegrationTest`
+  for entry price/size + persona-verdict capture, 5 in new `JournalServiceIntegrationTest`, both
+  against real Postgres via Testcontainers — not mocked). Frontend `tsc --noEmit` + `eslint` clean.
+- Built and deployed both backend and frontend to the running Mac Mini stack; V47 migration applied
+  cleanly on the real database (confirmed via logs).
+- Live-verified against production: `GET /api/journal` and `GET /api/journal/{id}` both return
+  correct data for a real pre-Story-11.1 decision (MSFT, declined 2026-06-25) — `entryPrice`/
+  `positionSize` correctly null, `personaVerdicts` correctly empty, confirming graceful backward
+  compatibility with rows that predate this story. A real Playwright browser session (PIN-unlocked)
+  confirmed the Trade Journal card renders on the Agents page with real data, expands to the detail
+  view showing the real signal breakdown, and produces zero console errors.
+- **Deliberately not tested live**: creating a real Taken/Declined decision with entry price/size
+  end-to-end through the UI would have permanently written a real (immutable, undeletable) row into
+  the user's actual production Trade Journal — skipped as too invasive for a verification step; the
+  real-Postgres integration tests exercise that exact path instead.
+- Out of scope (per spec, unchanged): general-purpose trade ledger independent of a recommendation;
+  real P&L against actual `Position`/`PositionLot` holdings; backfilling old rows; Auto Post-Mortems
+  (F28b); editing/deleting a journal entry.
+
+### File List
+
+**Added**
+- `backend/src/main/resources/db/migration/V47__trade_decision_entry_details.sql`
+- `backend/src/main/java/com/argus/recommendation/JournalService.java`
+- `backend/src/main/java/com/argus/recommendation/JournalController.java`
+- `backend/src/test/java/com/argus/recommendation/JournalServiceIntegrationTest.java`
+- `frontend/src/features/agents/TradeJournal.tsx`
+
+**Modified**
+- `backend/src/main/java/com/argus/recommendation/TradeDecision.java` (entry price/size fields +
+  `getDecidedAt()`)
+- `backend/src/main/java/com/argus/recommendation/TradeConfirmationService.java` (persona verdicts +
+  entry details in `confirm()`/`snapshot()`)
+- `backend/src/main/java/com/argus/recommendation/RecommendationController.java` (`DecisionBody`
+  gains optional `entryPrice`/`positionSize`)
+- `backend/src/main/java/com/argus/recommendation/TradeDecisionRepository.java`
+  (`findAllByOrderByDecidedAtDesc`)
+- `backend/src/main/java/com/argus/recommendation/PerformanceService.java` (extracted
+  `avgReturnByRecommendation()`, shared with `JournalService`)
+- `backend/src/main/java/com/argus/persona/PersonaService.java` (added `cachedVerdictsFor`)
+- `backend/src/test/java/com/argus/recommendation/TradeConfirmationIntegrationTest.java` (4 new tests
+  + updated 3 existing call sites for the new `confirm()` signature)
+- `frontend/src/lib/apiClient.ts` (journal interfaces/fetchers, extended `decideRecommendation`)
+- `frontend/src/features/recommendations/RecommendationCards.tsx` (inline entry price/shares form on
+  Take)
+- `frontend/src/app/(dashboard)/agents/page.tsx` (mounted `TradeJournal`)
+
 ## Change Log
 
 | Date | Change |
 |------|--------|
-| 2026-07-24 | Scoping draft written per user request. Two scope decisions resolved with the user before drafting: (1) V1 covers recommendation-driven decisions only, not a general trade ledger; (2) the two FR-15 gaps (entry price/size, persona verdicts) are fixed as part of this story rather than deferred. Not yet reviewed/approved — Status remains `backlog` until validated (e.g. via a validate-create-story pass) and picked up. |
+| 2026-07-24 | Scoping draft written per user request. Two scope decisions resolved with the user before drafting: (1) V1 covers recommendation-driven decisions only, not a general trade ledger; (2) the two FR-15 gaps (entry price/size, persona verdicts) are fixed as part of this story rather than deferred. |
+| 2026-07-24 | Implemented same-day per user request. All 7 tasks complete; 388/388 backend tests green (12 new); frontend tsc/eslint clean; deployed and live-verified (real API data + a real Playwright UI session), including confirming graceful backward compatibility with a real pre-story decision row. Status → done. |

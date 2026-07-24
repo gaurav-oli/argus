@@ -74,14 +74,25 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // Taking a trade opens a small inline entry-price/shares form (Story 11.1, F22) instead of
+  // deciding immediately — both optional, so a blank Confirm behaves exactly like before.
+  const [takingOpen, setTakingOpen] = useState(false);
+  const [entryPrice, setEntryPrice] = useState("");
+  const [positionSize, setPositionSize] = useState("");
   const bull = Math.round(card.bullProbability * 100);
   const decided = card.status === "TAKEN" || card.status === "DECLINED";
 
-  async function decide(decision: "TAKEN" | "DECLINED") {
+  async function decide(decision: "TAKEN" | "DECLINED", entry?: string, shares?: string) {
     const reasoning = window.prompt(`Why are you ${decision === "TAKEN" ? "taking" : "passing on"} ${card.ticker}?`) ?? "";
     setBusy(true);
     try {
-      await decideRecommendation(card.id, decision, reasoning);
+      await decideRecommendation(
+        card.id,
+        decision,
+        reasoning,
+        entry && entry.trim() !== "" ? Number(entry) : null,
+        shares && shares.trim() !== "" ? Number(shares) : null,
+      );
       onDecided(card.id);
     } catch {
       setBusy(false);
@@ -173,9 +184,9 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
 
       <PersonaTakes recId={card.id} />
 
-      {!decided && (
+      {!decided && !takingOpen && (
         <div className="flex gap-2">
-          <button disabled={busy} onClick={() => decide("TAKEN")}
+          <button disabled={busy} onClick={() => setTakingOpen(true)}
             className="rounded bg-gains/15 px-3 py-1.5 text-xs font-medium text-gains disabled:opacity-50">
             I took it
           </button>
@@ -183,6 +194,40 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
             className="rounded bg-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary disabled:opacity-50">
             I&apos;ll pass
           </button>
+        </div>
+      )}
+
+      {!decided && takingOpen && (
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background/50 p-3">
+          <p className="text-[11px] text-text-secondary">Entry price and shares are optional — for your Trade Journal.</p>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              inputMode="decimal"
+              placeholder="Entry price"
+              value={entryPrice}
+              onChange={(e) => setEntryPrice(e.target.value)}
+              className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              placeholder="Shares"
+              value={positionSize}
+              onChange={(e) => setPositionSize(e.target.value)}
+              className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => decide("TAKEN", entryPrice, positionSize)}
+              className="rounded bg-gains/15 px-3 py-1.5 text-xs font-medium text-gains disabled:opacity-50">
+              Confirm
+            </button>
+            <button disabled={busy} onClick={() => setTakingOpen(false)}
+              className="rounded bg-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary disabled:opacity-50">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

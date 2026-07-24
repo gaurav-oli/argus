@@ -168,11 +168,7 @@ public class PerformanceService {
 		if (all.isEmpty()) {
 			return new RegretView(bucket(List.of()), bucket(List.of()), null);
 		}
-		// recommendation → average closed-leg return (vs SPY when available).
-		Map<Long, Double> avgReturnByRec = simulatedTrades.findByStatus(SimulatedTrade.Status.CLOSED).stream()
-				.filter(t -> t.getRecommendationId() != null)
-				.collect(Collectors.groupingBy(SimulatedTrade::getRecommendationId,
-						Collectors.averagingDouble(PerformanceService::tradeReturn)));
+		Map<Long, Double> avgReturnByRec = avgReturnByRecommendation();
 
 		List<Double> taken = new ArrayList<>();
 		List<Double> declined = new ArrayList<>();
@@ -188,6 +184,18 @@ public class PerformanceService {
 		Double gap = (takenB.avgReturnPct() == null || declinedB.avgReturnPct() == null) ? null
 				: round2(declinedB.avgReturnPct() - takenB.avgReturnPct());
 		return new RegretView(takenB, declinedB, gap);
+	}
+
+	/** Recommendation → average closed-paper-leg return (vs-SPY excess when benchmarked, absolute
+	 * otherwise) — the same per-recommendation outcome derivation {@link #regret()} buckets, shared
+	 * with the Trade Journal (Story 11.1) so a journal entry's outcome never disagrees with this
+	 * aggregate figure. Absent from the map when a recommendation has no closed paper legs yet. */
+	@Transactional(readOnly = true)
+	public Map<Long, Double> avgReturnByRecommendation() {
+		return simulatedTrades.findByStatus(SimulatedTrade.Status.CLOSED).stream()
+				.filter(t -> t.getRecommendationId() != null)
+				.collect(Collectors.groupingBy(SimulatedTrade::getRecommendationId,
+						Collectors.averagingDouble(PerformanceService::tradeReturn)));
 	}
 
 	private static double tradeReturn(SimulatedTrade t) {

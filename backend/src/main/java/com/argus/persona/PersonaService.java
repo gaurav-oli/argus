@@ -94,6 +94,15 @@ public class PersonaService {
 		return transientFallback(recommendationId);
 	}
 
+	/** Cache-only read for freezing whatever's already known into an immutable snapshot (Story 11.1,
+	 * F22) — unlike {@link #verdictsFor}, this never triggers background generation and never returns
+	 * the transient "still warming up" placeholder text, since that text would otherwise get baked
+	 * permanently into a snapshot that can never be corrected once verdicts do finish generating.
+	 * Simply empty when nothing is cached yet. */
+	public List<PersonaVerdict> cachedVerdictsFor(Long recommendationId) {
+		return verdicts.findByRecommendationIdOrderByPersona(recommendationId);
+	}
+
 	// Serialized: the big model is single-concurrency anyway, and this collapses duplicate
 	// generation when several cards request the same rec at once.
 	private synchronized List<PersonaVerdict> generate(Long recommendationId) {
