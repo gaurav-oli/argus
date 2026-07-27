@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -10,6 +11,7 @@ import {
   type JournalDetailView,
   type JournalEntryView,
 } from "@/lib/apiClient";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,6 +33,8 @@ export function TradeJournal() {
     };
   }, []);
 
+  const logos = useCompanyLogos(useMemo(() => (entries ?? []).map((e) => e.ticker), [entries]));
+
   return (
     <MotionCard index={4} interactive={false} className="flex flex-col gap-4">
       <SectionHead
@@ -44,7 +48,7 @@ export function TradeJournal() {
       ) : (
         <ul className="flex flex-col divide-y divide-border/60">
           {entries.map((e) => (
-            <JournalRow key={e.decisionId} entry={e} />
+            <JournalRow key={e.decisionId} entry={e} logoUrl={logos[e.ticker]} />
           ))}
         </ul>
       )}
@@ -52,7 +56,7 @@ export function TradeJournal() {
   );
 }
 
-function JournalRow({ entry }: { entry: JournalEntryView }) {
+function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: string | undefined }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<JournalDetailView | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -72,6 +76,7 @@ function JournalRow({ entry }: { entry: JournalEntryView }) {
     <li className="py-3">
       <button onClick={toggle} className="flex w-full items-center justify-between gap-3 text-left">
         <div className="flex items-center gap-2">
+          <CompanyIcon ticker={entry.ticker} logoUrl={logoUrl} title={entry.ticker} size={20} />
           <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
           <span
             className={cn(

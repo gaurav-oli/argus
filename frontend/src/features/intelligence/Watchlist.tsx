@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   addWatchlist,
@@ -9,6 +9,8 @@ import {
   removeWatchlist,
   type WatchlistEntry,
 } from "@/lib/apiClient";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
 
 /**
  * Watchlist — the universe beyond your holdings. Adding a ticker widens what the agents cover, so
@@ -66,6 +68,8 @@ export function Watchlist() {
       setError("Couldn't remove that ticker.");
     }
   }
+
+  const logos = useCompanyLogos(useMemo(() => (entries ?? []).map((e) => e.ticker), [entries]));
 
   async function onDiscover() {
     if (discovering) return;
@@ -145,6 +149,7 @@ export function Watchlist() {
               className="flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-border/[0.15] px-2.5 py-1.5"
               title={e.note ?? undefined}
             >
+              <CompanyIcon ticker={e.ticker} logoUrl={logos[e.ticker]} title={e.ticker} size={18} />
               <span className="font-mono text-sm font-semibold text-text-primary">{e.ticker}</span>
               {e.source === "DISCOVERED" && (
                 <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent">

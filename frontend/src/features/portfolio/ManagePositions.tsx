@@ -10,7 +10,9 @@ import {
   type AuditEntry,
   type Position,
 } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
+import { useEffect, useMemo, useState } from "react";
 
 const input = "rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-text-primary";
 
@@ -47,6 +49,8 @@ export function ManagePositions() {
   useEffect(() => {
     refresh();
   }, []);
+
+  const logos = useCompanyLogos(useMemo(() => positions.map((p) => p.ticker), [positions]));
 
   async function run(action: () => Promise<unknown>, fail: string) {
     setError(null);
@@ -143,7 +147,8 @@ export function ManagePositions() {
         <ul className="flex flex-col gap-2">
           {positions.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2">
-              <span className="text-sm text-text-primary">
+              <span className="flex items-center gap-1.5 text-sm text-text-primary">
+                <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
                 <span className="font-medium">{p.ticker}</span>{" "}
                 {editId === p.id ? (
                   <span className="inline-flex items-center gap-1">

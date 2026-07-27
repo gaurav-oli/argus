@@ -11,13 +11,18 @@ import {
   type SignalView,
 } from "@/lib/apiClient";
 import { RecommendationChat } from "@/features/conversation/RecommendationChat";
+import { Carousel } from "@/components/ui/Carousel";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useEffect, useState } from "react";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * Probability Forecast Cards (Epic 6 — Agent 5). Weather-style cards from /api/recommendations:
  * direction, a bull/bear probability bar, confidence (with the Black-Swan cap), 7-agent signal dots,
  * an expandable diagnostic (Story 6.2), and Taken/Declined actions that snapshot the decision (6.7).
+ * Rendered in a horizontal M3-style carousel rather than a stacked grid, so N recommendations don't
+ * push the rest of the Intelligence page down the more Agent 5 issues.
  */
 export function RecommendationCards() {
   const [cards, setCards] = useState<Card[] | null>(null);
@@ -35,6 +40,8 @@ export function RecommendationCards() {
       active = false;
     };
   }, []);
+
+  const logos = useCompanyLogos(useMemo(() => (cards ?? []).map((c) => c.ticker), [cards]));
 
   if (cards === null) {
     return (
@@ -61,16 +68,30 @@ export function RecommendationCards() {
           </p>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {cards.map((c) => (
-          <ForecastCard key={c.id} card={c} onDecided={(id) => setCards((cs) => cs?.filter((x) => x.id !== id) ?? null)} />
-        ))}
-      </div>
+      <Carousel
+        items={cards}
+        keyOf={(c) => c.id}
+        renderItem={(c) => (
+          <ForecastCard
+            card={c}
+            logoUrl={logos[c.ticker]}
+            onDecided={(id) => setCards((cs) => cs?.filter((x) => x.id !== id) ?? null)}
+          />
+        )}
+      />
     </section>
   );
 }
 
-function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number) => void }) {
+function ForecastCard({
+  card,
+  logoUrl,
+  onDecided,
+}: {
+  card: Card;
+  logoUrl: string | undefined;
+  onDecided: (id: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -110,6 +131,7 @@ function ForecastCard({ card, onDecided }: { card: Card; onDecided: (id: number)
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
+            <CompanyIcon ticker={card.ticker} logoUrl={logoUrl} title={card.ticker} size={24} />
             <span className="text-lg font-bold text-text-primary">{card.ticker}</span>
             <span className={`text-sm font-semibold ${card.direction === "BULLISH" ? "text-gains" : "text-losses"}`}>
               {card.direction === "BULLISH" ? "▲ Bullish" : "▼ Bearish"}

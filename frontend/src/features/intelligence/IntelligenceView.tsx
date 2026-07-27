@@ -19,9 +19,11 @@ import { RecommendationCards } from "@/features/recommendations/RecommendationCa
 import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { riskColorClass } from "@/lib/scoreBands";
-import { useEffect, useState } from "react";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * Intelligence view (Epic 4 — Agent 1). Surfaces the news feed with sentiment/relevance (Stories
@@ -54,6 +56,19 @@ export function IntelligenceView() {
     };
   }, []);
 
+  // One shared batch fetch (not one per section) for every ticker shown anywhere on this page.
+  const allTickers = useMemo(
+    () => [
+      ...(strangers ?? []).map((a) => a.ticker),
+      ...(social ?? []).map((t) => t.ticker),
+      ...(insider ?? []).map((x) => x.ticker),
+      ...(buzz ?? []).map((t) => t.ticker),
+      ...(news ?? []).flatMap((n) => n.tickers),
+    ],
+    [strangers, social, insider, buzz, news],
+  );
+  const logos = useCompanyLogos(allTickers);
+
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
@@ -66,18 +81,18 @@ export function IntelligenceView() {
       <BreakingAlerts />
       <RecommendationCards />
       <Watchlist />
-      {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} />}
-      <SocialSection items={social} />
-      <InsiderSection items={insider} />
-      <WebBuzzSection items={buzz} />
-      <NewsSection items={news} />
+      {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} logos={logos} />}
+      <SocialSection items={social} logos={logos} />
+      <InsiderSection items={insider} logos={logos} />
+      <WebBuzzSection items={buzz} logos={logos} />
+      <NewsSection items={news} logos={logos} />
       <SourceSection items={sources} />
       </div>
     </div>
   );
 }
 
-function SocialSection({ items }: { items: TickerSentiment[] | null }) {
+function SocialSection({ items, logos }: { items: TickerSentiment[] | null; logos: Record<string, string> }) {
   if (items === null) {
     return (
       <Card title="Social sentiment · Agent 2">
@@ -104,6 +119,7 @@ function SocialSection({ items }: { items: TickerSentiment[] | null }) {
           const bullPct = scored === 0 ? 50 : Math.round((t.bullish / scored) * 100);
           return (
             <li key={t.ticker} className="flex items-center gap-3">
+              <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={20} />
               <span className="w-14 shrink-0 font-mono text-sm font-semibold text-text-primary">{t.ticker}</span>
               <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[var(--hairline)]">
                 <div className="h-full bg-gains" style={{ width: `${bullPct}%` }} />
@@ -123,7 +139,7 @@ function SocialSection({ items }: { items: TickerSentiment[] | null }) {
   );
 }
 
-function InsiderSection({ items }: { items: InsiderActivity[] | null }) {
+function InsiderSection({ items, logos }: { items: InsiderActivity[] | null; logos: Record<string, string> }) {
   if (items === null) {
     return (
       <Card title="Insider activity · Agent 4">
@@ -148,6 +164,7 @@ function InsiderSection({ items }: { items: InsiderActivity[] | null }) {
       <ul className="flex flex-col divide-y divide-border/50">
         {items.slice(0, 12).map((x, i) => (
           <li key={i} className="flex items-center gap-3 py-2 text-sm">
+            <CompanyIcon ticker={x.ticker} logoUrl={logos[x.ticker]} title={x.ticker} size={18} />
             <span className="w-12 shrink-0 font-mono font-semibold text-text-primary">{x.ticker}</span>
             <span
               className="w-14 shrink-0 text-xs font-semibold uppercase"
@@ -168,7 +185,7 @@ function InsiderSection({ items }: { items: InsiderActivity[] | null }) {
   );
 }
 
-function WebBuzzSection({ items }: { items: TickerBuzz[] | null }) {
+function WebBuzzSection({ items, logos }: { items: TickerBuzz[] | null; logos: Record<string, string> }) {
   if (items === null) {
     return (
       <Card title="Web buzz · Agent 3">
@@ -198,6 +215,7 @@ function WebBuzzSection({ items }: { items: TickerBuzz[] | null }) {
       <ul className="flex flex-col divide-y divide-border/50">
         {items.slice(0, 10).map((t) => (
           <li key={t.ticker} className="flex items-center gap-3 py-2 text-sm">
+            <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
             <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
             <span className="min-w-0 flex-1 text-text-secondary">
               {t.hnStories > 0 ? (
@@ -286,7 +304,7 @@ function mood(g: NewsGroup): { symbol: string; label: string; color: string } {
   return { symbol: "–", label: "neutral", color: "var(--color-text-secondary)" };
 }
 
-function NewsSection({ items }: { items: NewsItem[] | null }) {
+function NewsSection({ items, logos }: { items: NewsItem[] | null; logos: Record<string, string> }) {
   if (items === null) {
     return (
       <Card title="News & Signals">
@@ -323,14 +341,14 @@ function NewsSection({ items }: { items: NewsItem[] | null }) {
       </p>
       <div className="flex flex-col gap-4">
         {groups.map((g) => (
-          <NewsGroupRow key={g.ticker} group={g} />
+          <NewsGroupRow key={g.ticker} group={g} logoUrl={logos[g.ticker]} />
         ))}
       </div>
     </Card>
   );
 }
 
-function NewsGroupRow({ group }: { group: NewsGroup }) {
+function NewsGroupRow({ group, logoUrl }: { group: NewsGroup; logoUrl: string | undefined }) {
   const m = mood(group);
   const shown = group.items.slice(0, MAX_PER_GROUP);
   const extra = group.items.length - shown.length;
@@ -339,6 +357,7 @@ function NewsGroupRow({ group }: { group: NewsGroup }) {
     <div>
       <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-1.5">
         <div className="flex items-center gap-2">
+          {isTicker && <CompanyIcon ticker={group.ticker} logoUrl={logoUrl} title={group.ticker} size={18} />}
           <span
             className={
               isTicker
@@ -413,14 +432,17 @@ function SourceSection({ items }: { items: SourceCredibilityItem[] | null }) {
   );
 }
 
-function StrangerSection({ alerts }: { alerts: StrangerAlertItem[] }) {
+function StrangerSection({ alerts, logos }: { alerts: StrangerAlertItem[]; logos: Record<string, string> }) {
   return (
     <Card title="Stranger Danger — pump & dump watch" count={alerts.length}>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {alerts.map((a) => (
           <li key={a.ticker} className="rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-text-primary">{a.ticker}</span>
+              <div className="flex items-center gap-1.5">
+                <CompanyIcon ticker={a.ticker} logoUrl={logos[a.ticker]} title={a.ticker} size={18} />
+                <span className="text-sm font-semibold text-text-primary">{a.ticker}</span>
+              </div>
               <span className={`text-sm font-bold tabular-nums ${riskColor(a.riskScore)}`}>
                 {a.riskScore}
                 <span className="ml-0.5 text-[11px] font-normal text-text-secondary">/100 risk</span>

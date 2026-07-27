@@ -5,13 +5,13 @@ import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import {
   getCash,
-  getCompanyLogos,
   getPortfolioValue,
   setCash,
   type CashBalanceView,
   type PortfolioSnapshot,
   type PositionValue,
 } from "@/lib/apiClient";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { cn } from "@/lib/utils";
 import { subscribeToTopic } from "@/lib/wsClient";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -93,21 +93,7 @@ export function HoldingsTable() {
     return p && p.usdMarketValue ? (p.cadMarketValue ?? 0) / p.usdMarketValue : 1.42;
   }, [positions]);
 
-  // Keyed on the sorted-distinct-ticker string (not `positions` itself) so a live price tick over
-  // /topic/portfolio — which re-creates the array every time but rarely changes the ticker set —
-  // doesn't re-fetch logos on every update.
-  const [logos, setLogos] = useState<Record<string, string>>({});
-  const tickerKey = useMemo(() => [...new Set(positions.map((p) => p.ticker))].sort().join(","), [positions]);
-  useEffect(() => {
-    if (!tickerKey) return;
-    let active = true;
-    getCompanyLogos(tickerKey.split(","))
-      .then((m) => active && setLogos((prev) => ({ ...prev, ...m })))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [tickerKey]);
+  const logos = useCompanyLogos(useMemo(() => positions.map((p) => p.ticker), [positions]));
 
   const owners = useMemo(() => groupByOwner(positions, cash), [positions, cash]);
   const visibleOwners = useMemo(

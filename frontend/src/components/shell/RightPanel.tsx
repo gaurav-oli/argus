@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getLiveAlerts,
   getRecommendations,
   type LiveAlert,
   type RecommendationCard,
 } from "@/lib/apiClient";
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { relTime } from "@/lib/time";
 
 const tierColor = {
@@ -31,6 +33,8 @@ export function RightPanel() {
       active = false;
     };
   }, []);
+
+  const logos = useCompanyLogos(useMemo(() => (recs ?? []).map((r) => r.ticker), [recs]));
 
   return (
     <aside className="glass-chrome hidden h-full w-80 shrink-0 flex-col overflow-y-auto border-l border-[var(--glass-border)] xl:flex">
@@ -68,7 +72,10 @@ export function RightPanel() {
             return (
               <div key={r.id} className="rounded-lg border border-[var(--hairline)] bg-[var(--hover-wash)] p-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-display text-sm font-bold text-text-primary">{r.ticker}</span>
+                  <div className="flex items-center gap-1.5">
+                    <CompanyIcon ticker={r.ticker} logoUrl={logos[r.ticker]} title={r.ticker} size={18} />
+                    <span className="font-display text-sm font-bold text-text-primary">{r.ticker}</span>
+                  </div>
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                     style={{ color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}

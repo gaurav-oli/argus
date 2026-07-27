@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { getPaperTrades, type PaperTradeScoreboard } from "@/lib/apiClient";
+import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { absTime } from "@/lib/time";
 
 /**
@@ -27,6 +29,13 @@ export function PaperInvestorScoreboard() {
       active = false;
     };
   }, []);
+
+  const logos = useCompanyLogos(
+    useMemo(
+      () => [...(board?.recent ?? []).map((t) => t.ticker), ...(board?.openByTicker ?? []).map((p) => p.ticker)],
+      [board],
+    ),
+  );
 
   if (!loaded) {
     return <Skeleton className="h-52" />;
@@ -73,7 +82,7 @@ export function PaperInvestorScoreboard() {
         />
       </div>
 
-      {board.openByTicker.length > 0 && <OpenBook board={board} />}
+      {board.openByTicker.length > 0 && <OpenBook board={board} logos={logos} />}
 
       {noneClosed ? (
         <p className="rounded-lg border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-4 text-center text-xs text-text-secondary">
@@ -90,6 +99,7 @@ export function PaperInvestorScoreboard() {
             {board.recent.map((t, i) => (
               <li key={i} className="flex flex-col gap-1">
                 <div className="flex items-center gap-3 text-sm">
+                  <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
                   <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
                   <span
                     className="w-16 shrink-0 text-[11px] font-semibold uppercase"
@@ -130,7 +140,7 @@ export function PaperInvestorScoreboard() {
   );
 }
 
-function OpenBook({ board }: { board: PaperTradeScoreboard }) {
+function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record<string, string> }) {
   const u = board.openUnrealizedPct;
   return (
     <div className="flex flex-col gap-2 border-t border-[var(--hairline)] pt-3">
@@ -153,6 +163,7 @@ function OpenBook({ board }: { board: PaperTradeScoreboard }) {
       <ul className="flex flex-col gap-1.5">
         {board.openByTicker.map((p) => (
           <li key={p.ticker} className="flex items-center gap-3 text-sm">
+            <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
             <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
             <span
               className="w-14 shrink-0 text-[11px] font-semibold uppercase"
