@@ -2,6 +2,7 @@ package com.argus.intelligence;
 
 import java.time.Instant;
 import java.util.List;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,10 +12,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Curated news queue for the dashboard (session-gated under {@code /api/news}). The UI shows one card
- * at a time: {@code GET /next} returns the current highest-impact ready card plus how many are queued,
- * and {@code POST /{id}/done} deletes that card once read and hands back the next one. Cards are
- * produced and kept fresh by {@link NewsCurationService}; this controller only reads and dismisses.
+ * Curated news queue for the dashboard (session-gated under {@code /api/news}). {@code GET /next}
+ * returns the current highest-impact ready card plus how many are queued (the original one-at-a-time
+ * reader); {@code GET /queue} returns every ready card at once for the carousel view. Both share the
+ * same underlying cards — {@code POST /{id}/done} deletes a card once read regardless of which view
+ * it was read from. Cards are produced and kept fresh by {@link NewsCurationService}; this controller
+ * only reads and dismisses.
  */
 @RestController
 @RequestMapping("/api/news")
@@ -33,12 +36,29 @@ public class NewsController {
 		return feed();
 	}
 
-	/** Mark the current card read: delete it and return the next one plus updated counts. */
+	/** Every ready-to-read card at once (richest first), for the carousel view. */
+	@GetMapping("/queue")
+	@Transactional(readOnly = true)
+	public NewsQueue queue() {
+		List<NewsCardView> ready = cards.findBySummaryIsNotNullOrderByImpactScoreDesc().stream()
+				.map(NewsCardView::from)
+				.toList();
+		return new NewsQueue(ready, (int) cards.countBySummaryIsNull());
+	}
+
+	/** Mark a card read: delete it and return the next single-card view plus updated counts. Tolerates
+	 * a card that's already gone (e.g. pruned for staleness between a carousel render and this click) —
+	 * that's the same end state as a successful delete, not an error. */
 	@PostMapping("/{id}/done")
 	@Transactional
 	public ResponseEntity<NewsFeed> done(@PathVariable Long id) {
-		cards.deleteById(id);
-		cards.flush();
+		try {
+			cards.deleteById(id);
+			cards.flush();
+		}
+		catch (EmptyResultDataAccessException ignored) {
+			// already gone — treat as success
+		}
 		return ResponseEntity.ok(feed());
 	}
 
@@ -55,6 +75,10 @@ public class NewsController {
 	 * @param pending   cards still being summarized in the background
 	 */
 	public record NewsFeed(NewsCardView card, int remaining, int pending) {
+	}
+
+	/** @param cards every ready card, most important first; @param pending cards still being summarized */
+	public record NewsQueue(List<NewsCardView> cards, int pending) {
 	}
 
 	public record NewsCardView(Long id, String headline, String summary, String source, String url,

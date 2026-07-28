@@ -2,148 +2,166 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { getNextNews, markNewsDone, type NewsFeed } from "@/lib/apiClient";
+import { Carousel } from "@/components/ui/Carousel";
+import { getNewsQueue, markNewsDone, type NewsCardItem } from "@/lib/apiClient";
 import { absTime, relTime } from "@/lib/time";
 
 /**
- * Curated market news — the dashboard's "one story at a time" reader. Argus promotes the important,
- * recent articles it fetched (not just your holdings, and never older than ~1 day) and, with the local
- * model, writes a paragraph on what happened and its market impact. You read one card, hit "Done
- * Reading" to delete it, and the next highest-impact card appears. A badge shows how many are queued.
+ * Curated market news — a browsable carousel of the important, recent stories Argus fetched (not
+ * just your holdings, never older than ~1 day), each with a longer Gemma-written explanation: what
+ * happened, why it matters, and the likely market impact, in plain everyday language, plus a
+ * beginner glossary for any jargon. "Done Reading" removes a card from the queue; the carousel
+ * settles on its neighbor. A badge shows how many more are queued and how many are still being
+ * written.
  *
- * Summaries are produced in the background, so if a card isn't ready yet the section polls until one
- * lands. `undefined` = first load, `null` = load failed.
+ * Summaries are produced in the background, so an empty queue with cards still pending polls until
+ * the first one lands. `undefined` = first load, `null` = load failed.
  */
 
 const POLL_MS = 15_000;
 
 export function MarketNews() {
-  const [feed, setFeed] = useState<NewsFeed | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
+  const [cards, setCards] = useState<NewsCardItem[] | null | undefined>(undefined);
+  const [pending, setPending] = useState(0);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getNextNews()
-      .then((next) => active && setFeed(next))
-      .catch(() => active && setFeed((prev) => prev ?? null));
-    return () => {
-      active = false;
-    };
+  const load = useCallback(() => {
+    getNewsQueue()
+      .then((q) => {
+        setCards(q.cards);
+        setPending(q.pending);
+      })
+      .catch(() => setCards((prev) => prev ?? null));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   // While nothing is ready but summaries are still being written, poll until one lands.
-  const waiting = feed !== undefined && feed !== null && feed.card === null && feed.pending > 0;
+  const waiting = cards !== undefined && cards !== null && cards.length === 0 && pending > 0;
   useEffect(() => {
     if (!waiting) return;
-    const t = setInterval(() => {
-      getNextNews()
-        .then(setFeed)
-        .catch(() => {});
-    }, POLL_MS);
+    const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
-  }, [waiting]);
+  }, [waiting, load]);
 
-  const onDone = useCallback(async () => {
-    if (busy || !feed?.card) return;
-    setBusy(true);
+  const onDone = useCallback(async (id: number) => {
+    setBusyId(id);
     setNote(null);
     try {
-      setFeed(await markNewsDone(feed.card.id));
+      await markNewsDone(id);
+      setCards((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
     } catch {
       setNote("Couldn't update just now — try again in a moment.");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
-  }, [busy, feed]);
+  }, []);
 
   return (
     <div>
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Market News</h3>
-        <QueueBadge feed={feed} />
+        <QueueBadge count={cards?.length ?? 0} pending={pending} />
       </div>
 
-      {feed === undefined ? (
+      {cards === undefined ? (
         <Skeleton />
-      ) : feed === null ? (
+      ) : cards === null ? (
         <p className="mt-3 py-2 text-sm text-text-secondary">News is unavailable right now.</p>
-      ) : feed.card === null ? (
-        <EmptyState pending={feed.pending} />
+      ) : cards.length === 0 ? (
+        <EmptyState pending={pending} />
       ) : (
-        <article className="mt-3">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
-            <span className="font-medium uppercase tracking-wide text-accent">{feed.card.source}</span>
-            <span aria-hidden>·</span>
-            {/* News date, shown prominently — cards are never older than ~1 day. */}
-            <time dateTime={feed.card.publishedAt} className="font-mono">
-              {absTime(feed.card.publishedAt)}
-            </time>
-            <span className="text-text-secondary/70">({relTime(feed.card.publishedAt)})</span>
-          </div>
-
-          <h4 className="mt-1.5 font-display text-lg font-semibold leading-snug text-text-primary">
-            {feed.card.headline}
-          </h4>
-
-          <Summary text={feed.card.summary} />
-
-          {feed.card.tickers.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {feed.card.tickers.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-md bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-medium text-accent"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center justify-between gap-3">
-            {feed.card.url ? (
-              <a
-                href={feed.card.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] font-medium text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
-              >
-                Read full article ↗
-              </a>
-            ) : (
-              <span className="text-[11px] text-text-secondary/60">Fetched {relTime(feed.card.fetchedAt)}</span>
-            )}
-
-            <button
-              type="button"
-              onClick={onDone}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-            >
-              {busy ? "Saving…" : "Done Reading"}
-              {!busy && (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              )}
-            </button>
-          </div>
-
+        <div className="mt-3">
+          <Carousel
+            items={cards}
+            keyOf={(c) => c.id}
+            itemWidth="min(92vw, 560px)"
+            renderItem={(c) => <NewsCard card={c} busy={busyId === c.id} onDone={() => onDone(c.id)} />}
+          />
           {note && <p className="mt-2 text-[11px] italic text-text-secondary/80">{note}</p>}
-        </article>
+        </div>
       )}
     </div>
   );
 }
 
-/** Split "<paragraph> … KEY TERMS: <term — def> …" into the plain paragraph and a beginner glossary. */
-function parseSummary(raw: string): { paragraph: string; terms: { term: string; def: string }[] } {
+function NewsCard({ card, busy, onDone }: { card: NewsCardItem; busy: boolean; onDone: () => void }) {
+  return (
+    <article className="flex h-full flex-col rounded-xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
+        <span className="font-medium uppercase tracking-wide text-accent">{card.source}</span>
+        <span aria-hidden>·</span>
+        {/* News date, shown prominently — cards are never older than ~1 day. */}
+        <time dateTime={card.publishedAt} className="font-mono">
+          {absTime(card.publishedAt)}
+        </time>
+        <span className="text-text-secondary/70">({relTime(card.publishedAt)})</span>
+      </div>
+
+      <h4 className="mt-1.5 font-display text-lg font-semibold leading-snug text-text-primary">
+        {card.headline}
+      </h4>
+
+      <Summary text={card.summary} />
+
+      {card.tickers.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {card.tickers.map((t) => (
+            <span
+              key={t}
+              className="rounded-md bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-medium text-accent"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        {card.url ? (
+          <a
+            href={card.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-medium text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+          >
+            Read full article ↗
+          </a>
+        ) : (
+          <span className="text-[11px] text-text-secondary/60">Fetched {relTime(card.fetchedAt)}</span>
+        )}
+
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Done Reading"}
+          {!busy && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+/** Split "<paragraph(s)> … KEY TERMS: <term — def> …" into the plain paragraphs (what happened / why
+ * it matters / market impact — rendered as separate blocks whether or not the model labels them) and
+ * a beginner glossary. */
+function parseSummary(raw: string): { paragraphs: string[]; terms: { term: string; def: string }[] } {
   const marker = raw.search(/key\s*terms\s*:/i);
-  if (marker === -1) return { paragraph: raw.trim(), terms: [] };
-  const paragraph = raw.slice(0, marker).trim();
+  const body = marker === -1 ? raw.trim() : raw.slice(0, marker).trim();
+  const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (marker === -1) return { paragraphs, terms: [] };
   const rest = raw.slice(marker).replace(/^key\s*terms\s*:/i, "").trim();
-  if (/^none\.?$/i.test(rest)) return { paragraph, terms: [] };
+  if (/^none\.?$/i.test(rest)) return { paragraphs, terms: [] };
   const terms = rest
     .split(/\n+/)
     .map((line) => line.replace(/^\s*[-*•\d.]+\s*/, "").trim())
@@ -155,14 +173,20 @@ function parseSummary(raw: string): { paragraph: string; terms: { term: string; 
       return { term, def };
     })
     .filter((t) => t.term.length > 0);
-  return { paragraph, terms };
+  return { paragraphs, terms };
 }
 
 function Summary({ text }: { text: string }) {
-  const { paragraph, terms } = parseSummary(text);
+  const { paragraphs, terms } = parseSummary(text);
   return (
     <>
-      <p className="mt-2 text-sm leading-relaxed text-text-secondary">{paragraph}</p>
+      <div className="mt-2 flex flex-col gap-2">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-sm leading-relaxed text-text-secondary">
+            {p}
+          </p>
+        ))}
+      </div>
       {terms.length > 0 && (
         <div className="mt-3 rounded-lg border border-border/50 bg-border/[0.15] p-3">
           <h5 className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
@@ -182,14 +206,12 @@ function Summary({ text }: { text: string }) {
   );
 }
 
-function QueueBadge({ feed }: { feed: NewsFeed | null | undefined }) {
-  if (!feed) return null;
-  const { remaining, pending } = feed;
-  if (remaining === 0 && pending === 0) return null;
+function QueueBadge({ count, pending }: { count: number; pending: number }) {
+  if (count === 0 && pending === 0) return null;
   return (
     <span className="flex items-center gap-1 font-mono text-[10px] text-text-secondary">
       <span className="rounded-full bg-accent/[0.12] px-2 py-0.5 font-semibold text-accent">
-        {remaining} in queue
+        {count} in queue
       </span>
       {pending > 0 && <span className="text-text-secondary/70">+{pending} on the way</span>}
     </span>

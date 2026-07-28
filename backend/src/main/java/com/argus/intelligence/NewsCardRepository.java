@@ -14,6 +14,9 @@ public interface NewsCardRepository extends JpaRepository<NewsCard, Long> {
 	/** The next card to show: highest-impact card that already has a summary. */
 	Optional<NewsCard> findFirstBySummaryIsNotNullOrderByImpactScoreDesc();
 
+	/** Every ready-to-read card, most important first — backs the carousel view. */
+	List<NewsCard> findBySummaryIsNotNullOrderByImpactScoreDesc();
+
 	/** The next card to generate: highest-impact card still awaiting its paragraph. */
 	Optional<NewsCard> findFirstBySummaryIsNullOrderByImpactScoreDesc();
 

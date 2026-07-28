@@ -156,15 +156,20 @@ public class NewsCurationService {
 
 				Write your answer in TWO parts separated by a line containing only "KEY TERMS:".
 
-				Part 1 — ONE paragraph of 4-6 sentences: what happened, why it matters, and how it could \
-				affect the stock market and the companies or industries involved. If you must use a financial \
-				or technical word, explain it in plain words right there in parentheses.
+				Part 1 — THREE short paragraphs (3-4 sentences each), each on its own line with a blank line \
+				between them:
+				1. WHAT HAPPENED — plainly describe the event itself, as if explaining it to a friend.
+				2. WHY IT MATTERS — the reasons behind it and the immediate context (who's affected and how).
+				3. MARKET IMPACT — how this could move the stock, the companies/industries involved, or the \
+				wider market, and what an everyday investor should watch for next.
+				If you must use a financial or technical word, explain it in plain words right there in \
+				parentheses.
 
-				Part 2 — after the "KEY TERMS:" line, list 2-4 financial or technical terms from the story that \
+				Part 2 — after the "KEY TERMS:" line, list 3-5 financial or technical terms from the story that \
 				a beginner might not know. Put ONE per line, written exactly as "Term — a short, simple \
 				definition in everyday words." If the story genuinely has no such terms, write just "None".
 
-				No hype, no disclaimers, no markdown, no preamble. Start directly with the paragraph.
+				No hype, no disclaimers, no markdown, no preamble. Start directly with the first paragraph.
 
 				HEADLINE: %s
 				SOURCE: %s
@@ -174,13 +179,14 @@ public class NewsCurationService {
 				""".formatted(card.getHeadline(), card.getSource(), tickers, sentiment, snippet);
 	}
 
-	/** Model output may include stray fences/preamble; keep it a clean, bounded paragraph + glossary. */
+	/** Model output may include stray fences/preamble; keep it a clean, bounded paragraph + glossary.
+	 * 3200 chars comfortably fits the 3-paragraph what/why/impact structure + a 5-term glossary. */
 	private static String clean(String raw) {
 		if (raw == null) {
 			return null;
 		}
 		String s = raw.replace("```", "").strip();
-		return s.length() <= 1800 ? s : s.substring(0, 1800).strip();
+		return s.length() <= 3200 ? s : s.substring(0, 3200).strip();
 	}
 
 	private static String fallback(NewsCard card, NewsArticle article) {

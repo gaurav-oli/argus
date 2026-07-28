@@ -13,6 +13,9 @@ interface CarouselProps<T> {
   keyOf: (item: T, index: number) => string | number;
   renderItem: (item: T, index: number, active: boolean) => ReactNode;
   className?: string;
+  /** CSS `width` value for each item. Default suits compact cards (recommendation cards); text-heavy
+   * content (e.g. a full news summary) should pass something wider. */
+  itemWidth?: string;
 }
 
 /**
@@ -22,7 +25,7 @@ interface CarouselProps<T> {
  * instead of stacking every item vertically in a grid. Generic so any card list can opt in
  * without duplicating the scroll-tracking/gesture logic.
  */
-export function Carousel<T>({ items, keyOf, renderItem, className }: CarouselProps<T>) {
+export function Carousel<T>({ items, keyOf, renderItem, className, itemWidth = "min(86vw, 420px)" }: CarouselProps<T>) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const reduce = useReducedMotion();
@@ -75,7 +78,7 @@ export function Carousel<T>({ items, keyOf, renderItem, className }: CarouselPro
           <motion.div
             key={keyOf(item, i)}
             className="shrink-0 snap-start"
-            style={{ width: "min(86vw, 420px)", transformOrigin: "left center" }}
+            style={{ width: itemWidth, transformOrigin: "left center" }}
             animate={reduce ? undefined : { scale: i === active ? 1 : 0.94, opacity: i === active ? 1 : 0.72 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >

@@ -103,6 +103,9 @@ services:
       # Weekly digest of INFO-tier deferred alerts (argus.digest.cron). Default Sunday 17:00 Toronto;
       # "-" disables. Empty weeks send nothing.
       ARGUS_DIGEST_CRON: ${ARGUS_DIGEST_CRON:-0 0 17 * * SUN}
+      # Dashboard curated-news buffer size (argus.news-cards.target-ready). Raised from the code
+      # default of 5 so the news carousel has enough cards to feel like a carousel, not a 2-3-item list.
+      ARGUS_NEWS_CARDS_TARGET_READY: ${NEWS_CARDS_TARGET_READY:-10}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed

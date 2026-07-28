@@ -1020,6 +1020,17 @@ export const getNextNews = (): Promise<NewsFeed> => apiGet<NewsFeed>("/api/news/
 export const markNewsDone = (id: number): Promise<NewsFeed> =>
   apiPost<NewsFeed>(`/api/news/${id}/done`);
 
+/** Mirrors the backend `NewsController.NewsQueue` record. */
+export interface NewsQueue {
+  /** Every ready-to-read card at once, most important first. */
+  cards: NewsCardItem[];
+  /** Cards still being summarized in the background. */
+  pending: number;
+}
+
+/** Every ready news card at once, for the carousel view. */
+export const getNewsQueue = (): Promise<NewsQueue> => apiGet<NewsQueue>("/api/news/queue");
+
 // ---- Agent 5 performance / Ops dashboards (Epic 9, Stories 9.2–9.4) ----
 
 /** Win rate over one window. `winRatePct` is null when there are no resolved trades. */
