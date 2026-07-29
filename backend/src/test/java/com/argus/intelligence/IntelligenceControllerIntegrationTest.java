@@ -45,6 +45,9 @@ class IntelligenceControllerIntegrationTest {
 	StrangerAlertRepository strangers;
 
 	@Autowired
+	BreakingAlertRepository breaking;
+
+	@Autowired
 	com.argus.security.AppCredentialRepository credentials;
 
 	@BeforeEach
@@ -52,6 +55,7 @@ class IntelligenceControllerIntegrationTest {
 		strangers.deleteAll();
 		articles.deleteAll();
 		sources.deleteAll();
+		breaking.deleteAll();
 		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 	}
 
@@ -101,5 +105,59 @@ class IntelligenceControllerIntegrationTest {
 				.andExpect(jsonPath("$[0].ticker").value("ZZZP"))
 				.andExpect(jsonPath("$[0].riskScore").value(82))
 				.andExpect(jsonPath("$[0].requiredConsensus").value(6));
+	}
+
+	@Test
+	void breakingEndpointsAreSessionGated() throws Exception {
+		mockMvc.perform(get("/api/intelligence/breaking")).andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/intelligence/breaking/1/done")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void breakingQueueOnlyShowsReadyNonDuplicateUnreadAlerts() throws Exception {
+		Cookie session = login();
+
+		BreakingAlert ready = breaking.save(new BreakingAlert("Fed cuts rates", "http://x",
+				new String[] {"SPY"}, "Breaking: fed ", 0.8, "BULLISH", null));
+		ready.summarize("What happened.\n\nWhy it matters.\n\nMarket impact.\n\nKEY TERMS:\nNone", false);
+		breaking.save(ready);
+
+		BreakingAlert pending = breaking.save(new BreakingAlert("Still curating", "http://x",
+				new String[0], "Breaking: war", 0.7, "BEARISH", null));
+
+		BreakingAlert duplicate = breaking.save(new BreakingAlert("Same story, different wording",
+				"http://x", new String[0], "Breaking: war", 0.7, "BEARISH", null));
+		duplicate.markDuplicate();
+		breaking.save(duplicate);
+
+		BreakingAlert alreadyRead = breaking.save(new BreakingAlert("Already read", "http://x",
+				new String[0], "Breaking: war", 0.7, "BEARISH", null));
+		alreadyRead.summarize("Text.\n\nKEY TERMS:\nNone", false);
+		alreadyRead.markRead();
+		breaking.save(alreadyRead);
+
+		mockMvc.perform(get("/api/intelligence/breaking").cookie(session))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.alerts.length()").value(1))
+				.andExpect(jsonPath("$.alerts[0].headline").value("Fed cuts rates"))
+				.andExpect(jsonPath("$.alerts[0].summary").value(ready.getSummary()))
+				.andExpect(jsonPath("$.pending").value(1)); // "Still curating" only — duplicate/read are excluded
+	}
+
+	@Test
+	void doneMarksAnAlertReadAndTolerantOfAMissingId() throws Exception {
+		Cookie session = login();
+		BreakingAlert alert = breaking.save(new BreakingAlert("Read me", "http://x", new String[0],
+				"Breaking: war", 0.7, "BEARISH", null));
+		alert.summarize("Text.\n\nKEY TERMS:\nNone", false);
+		breaking.save(alert);
+
+		mockMvc.perform(post("/api/intelligence/breaking/" + alert.getId() + "/done").cookie(session))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.alerts.length()").value(0));
+
+		// A since-deleted/unknown id must not 500 (a stale carousel could act on one).
+		mockMvc.perform(post("/api/intelligence/breaking/999999/done").cookie(session))
+				.andExpect(status().isOk());
 	}
 }

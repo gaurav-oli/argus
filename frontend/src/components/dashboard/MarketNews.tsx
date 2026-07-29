@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Carousel } from "@/components/ui/Carousel";
+import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getNewsQueue, markNewsDone, type NewsCardItem } from "@/lib/apiClient";
 import { absTime, relTime } from "@/lib/time";
 
@@ -105,7 +106,7 @@ function NewsCard({ card, busy, onDone }: { card: NewsCardItem; busy: boolean; o
         {card.headline}
       </h4>
 
-      <Summary text={card.summary} />
+      <SummaryBlock text={card.summary} />
 
       {card.tickers.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -149,60 +150,6 @@ function NewsCard({ card, busy, onDone }: { card: NewsCardItem; busy: boolean; o
         </button>
       </div>
     </article>
-  );
-}
-
-/** Split "<paragraph(s)> … KEY TERMS: <term — def> …" into the plain paragraphs (what happened / why
- * it matters / market impact — rendered as separate blocks whether or not the model labels them) and
- * a beginner glossary. */
-function parseSummary(raw: string): { paragraphs: string[]; terms: { term: string; def: string }[] } {
-  const marker = raw.search(/key\s*terms\s*:/i);
-  const body = marker === -1 ? raw.trim() : raw.slice(0, marker).trim();
-  const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  if (marker === -1) return { paragraphs, terms: [] };
-  const rest = raw.slice(marker).replace(/^key\s*terms\s*:/i, "").trim();
-  if (/^none\.?$/i.test(rest)) return { paragraphs, terms: [] };
-  const terms = rest
-    .split(/\n+/)
-    .map((line) => line.replace(/^\s*[-*•\d.]+\s*/, "").trim())
-    .filter((line) => line.length > 0 && !/^none\.?$/i.test(line))
-    .map((line) => {
-      const parts = line.split(/\s+[—–-]\s+/);
-      const term = parts[0].trim();
-      const def = line.slice(term.length).replace(/^\s*[—–-]\s*/, "").trim();
-      return { term, def };
-    })
-    .filter((t) => t.term.length > 0);
-  return { paragraphs, terms };
-}
-
-function Summary({ text }: { text: string }) {
-  const { paragraphs, terms } = parseSummary(text);
-  return (
-    <>
-      <div className="mt-2 flex flex-col gap-2">
-        {paragraphs.map((p, i) => (
-          <p key={i} className="text-sm leading-relaxed text-text-secondary">
-            {p}
-          </p>
-        ))}
-      </div>
-      {terms.length > 0 && (
-        <div className="mt-3 rounded-lg border border-border/50 bg-border/[0.15] p-3">
-          <h5 className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
-            📘 Key terms
-          </h5>
-          <dl className="mt-1.5 space-y-1">
-            {terms.map((t) => (
-              <div key={t.term} className="text-xs leading-relaxed">
-                <dt className="inline font-semibold text-text-primary">{t.term}</dt>
-                {t.def && <dd className="inline text-text-secondary"> — {t.def}</dd>}
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-    </>
   );
 }
 

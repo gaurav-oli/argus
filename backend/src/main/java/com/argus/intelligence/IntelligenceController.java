@@ -4,7 +4,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,10 +50,28 @@ public class IntelligenceController {
 		return strangers.findAllByOrderByRiskScoreDesc().stream().map(StrangerItem::from).toList();
 	}
 
-	/** Recent breaking-news alerts (the ones that fired a push) — the in-app history of what mattered. */
+	/** Ready-to-read breaking alerts (summarized, non-duplicate, unread) for the carousel, plus how
+	 * many are still being curated. */
 	@GetMapping("/breaking")
-	public List<BreakingItem> breaking() {
-		return breaking.findTop20ByOrderByCreatedAtDesc().stream().map(BreakingItem::from).toList();
+	@Transactional(readOnly = true)
+	public BreakingQueue breaking() {
+		List<BreakingItem> ready = breaking.findBySummaryIsNotNullAndDuplicateFalseAndReadFalseOrderByCreatedAtDesc()
+				.stream()
+				.map(BreakingItem::from)
+				.toList();
+		return new BreakingQueue(ready, (int) breaking.countBySummaryIsNullAndDuplicateFalse());
+	}
+
+	/** "Done Reading" — soft dismiss (the audit trail keeps the row). Tolerates an id that's already
+	 * gone, for parity with the news carousel's done endpoint. */
+	@PostMapping("/breaking/{id}/done")
+	@Transactional
+	public ResponseEntity<BreakingQueue> breakingDone(@PathVariable Long id) {
+		breaking.findById(id).ifPresent(a -> {
+			a.markRead();
+			breaking.save(a);
+		});
+		return ResponseEntity.ok(breaking());
 	}
 
 	/** A news article with its Agent-1 sentiment/relevance scoring (null scores = not yet analyzed). */
@@ -75,15 +97,20 @@ public class IntelligenceController {
 		}
 	}
 
-	/** A breaking-news alert that was pushed: what fired, why, and when. */
+	/** A breaking-news alert that was pushed: what fired, why, when, and (once curated) the
+	 * beginner-friendly explanation of what it means. */
 	public record BreakingItem(Long id, String headline, String url, List<String> tickers, String reason,
-			String sentimentLabel, Instant createdAt) {
+			String sentimentLabel, String summary, Instant createdAt) {
 
 		static BreakingItem from(BreakingAlert a) {
 			return new BreakingItem(a.getId(), a.getHeadline(), a.getUrl(),
 					a.getTickers() == null ? List.of() : Arrays.asList(a.getTickers()),
-					a.getReason(), a.getSentimentLabel(), a.getCreatedAt());
+					a.getReason(), a.getSentimentLabel(), a.getSummary(), a.getCreatedAt());
 		}
+	}
+
+	/** @param alerts ready-to-read alerts, most recent first; @param pending alerts still being curated */
+	public record BreakingQueue(List<BreakingItem> alerts, int pending) {
 	}
 
 	/** A flagged stranger ticker with its pump-and-dump risk and elevated consensus bar. */

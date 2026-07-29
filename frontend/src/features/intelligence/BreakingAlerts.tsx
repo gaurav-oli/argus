@@ -1,80 +1,156 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { getBreakingAlerts, type BreakingAlertItem } from "@/lib/apiClient";
+import { Carousel } from "@/components/ui/Carousel";
+import { SummaryBlock } from "@/components/ui/SummaryBlock";
+import { getBreakingAlerts, markBreakingDone, type BreakingAlertItem } from "@/lib/apiClient";
 import { relTime } from "@/lib/time";
 
 /**
- * In-app history of breaking-news alerts (the ones that fired a push). A push is fleeting — this is
- * where you review what market-moving news Argus flagged today, even if you missed the notification.
- * Hidden entirely when there's nothing recent, so it only shows up when it matters.
+ * In-app breaking-news carousel — market-moving stories that fired a push, browsable rather than a
+ * flat list of one-liners. Before it's shown, Gemma checks the alert against recently-covered
+ * headlines (different wording/source, same underlying event never gets its own card) and, if it's
+ * genuinely new, writes a beginner-friendly explanation. "Done Reading" is a soft dismiss — the row
+ * (and the fact it fired a push) stays in the audit trail server-side; it just leaves the carousel.
+ * Hidden entirely when there's nothing to show, so it only appears when it matters.
  */
-export function BreakingAlerts() {
-  const [alerts, setAlerts] = useState<BreakingAlertItem[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
+const POLL_MS = 15_000;
+
+export function BreakingAlerts() {
+  const [alerts, setAlerts] = useState<BreakingAlertItem[] | null | undefined>(undefined);
+  const [pending, setPending] = useState(0);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(() => {
     getBreakingAlerts()
-      .then((a) => active && setAlerts(a))
-      .catch(() => active && setAlerts([]));
-    return () => {
-      active = false;
-    };
+      .then((q) => {
+        setAlerts(q.alerts);
+        setPending(q.pending);
+      })
+      .catch(() => setAlerts((prev) => prev ?? null));
   }, []);
 
-  // Nothing to show (still loading, failed, or no recent alerts) → render nothing.
-  if (!alerts || alerts.length === 0) return null;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const waiting = alerts !== undefined && alerts !== null && alerts.length === 0 && pending > 0;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(load, POLL_MS);
+    return () => clearInterval(t);
+  }, [waiting, load]);
+
+  const onDone = useCallback(async (id: number) => {
+    setBusyId(id);
+    try {
+      await markBreakingDone(id);
+      setAlerts((prev) => (prev ? prev.filter((a) => a.id !== id) : prev));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  // Nothing to show (still loading, failed, or none ready/pending) → render nothing, same as before.
+  if (!alerts || (alerts.length === 0 && pending === 0)) return null;
 
   return (
     <section className="glass relative overflow-hidden rounded-2xl p-5">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <span aria-hidden>⚠️</span> Breaking alerts
-          <span className="font-mono text-xs text-text-secondary">{alerts.length}</span>
+          {alerts.length > 0 && <span className="font-mono text-xs text-text-secondary">{alerts.length}</span>}
         </h3>
-        <span className="text-[11px] text-text-secondary">market-moving news pushed to your phone</span>
+        <span className="text-[11px] text-text-secondary">
+          market-moving news pushed to your phone
+          {pending > 0 && <span className="ml-1 text-text-secondary/70">· {pending} more on the way</span>}
+        </span>
       </div>
 
-      <ul className="mt-3 flex flex-col divide-y divide-[var(--hairline)]">
-        {alerts.map((a) => (
-          <li key={a.id} className="py-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm leading-snug text-text-primary">
-                  {a.url ? (
-                    <a
-                      href={a.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline-offset-2 hover:underline"
-                    >
-                      {a.headline}
-                    </a>
-                  ) : (
-                    a.headline
-                  )}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-secondary">
-                  <span className="rounded bg-warning/15 px-1.5 py-0.5 font-medium text-warning">{a.reason}</span>
-                  {a.tickers.slice(0, 4).map((t) => (
-                    <span key={t} className="font-mono text-accent">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <time
-                dateTime={a.createdAt}
-                className="shrink-0 font-mono text-[10px] text-text-secondary"
-                title={a.createdAt}
-              >
-                {relTime(a.createdAt)}
-              </time>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {alerts.length === 0 ? (
+        <div className="mt-3 flex items-center gap-2 py-2">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" aria-hidden />
+          <p className="text-sm text-text-secondary">Checking for duplicates and preparing summaries…</p>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <Carousel
+            items={alerts}
+            keyOf={(a) => a.id}
+            itemWidth="min(92vw, 560px)"
+            renderItem={(a) => <AlertCard alert={a} busy={busyId === a.id} onDone={() => onDone(a.id)} />}
+          />
+        </div>
+      )}
     </section>
+  );
+}
+
+function AlertCard({ alert, busy, onDone }: { alert: BreakingAlertItem; busy: boolean; onDone: () => void }) {
+  return (
+    <article className="flex h-full flex-col rounded-xl border border-border bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+          {alert.reason}
+        </span>
+        <time
+          dateTime={alert.createdAt}
+          className="shrink-0 font-mono text-[10px] text-text-secondary"
+          title={alert.createdAt}
+        >
+          {relTime(alert.createdAt)}
+        </time>
+      </div>
+
+      <h4 className="mt-1.5 font-display text-lg font-semibold leading-snug text-text-primary">
+        {alert.headline}
+      </h4>
+
+      <SummaryBlock text={alert.summary} />
+
+      {alert.tickers.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {alert.tickers.map((t) => (
+            <span
+              key={t}
+              className="rounded-md bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-medium text-accent"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        {alert.url ? (
+          <a
+            href={alert.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-medium text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+          >
+            Read full article ↗
+          </a>
+        ) : (
+          <span />
+        )}
+
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+        >
+          {busy ? "Saving…" : "Done Reading"}
+          {!busy && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </article>
   );
 }

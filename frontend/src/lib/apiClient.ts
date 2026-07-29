@@ -596,7 +596,8 @@ export const getSourceCredibility = (): Promise<SourceCredibilityItem[]> =>
 export const getStrangerAlerts = (): Promise<StrangerAlertItem[]> =>
   apiGet<StrangerAlertItem[]>("/api/intelligence/strangers");
 
-/** Mirrors `IntelligenceController.BreakingItem` — a breaking-news alert that fired a push. */
+/** Mirrors `IntelligenceController.BreakingItem` — a breaking-news alert that fired a push, with a
+ * Gemma-written summary once curation has run (`summary` is empty until then). */
 export interface BreakingAlertItem {
   id: number;
   headline: string;
@@ -604,11 +605,24 @@ export interface BreakingAlertItem {
   tickers: string[];
   reason: string;
   sentimentLabel: string | null;
+  summary: string;
   createdAt: string;
 }
 
-export const getBreakingAlerts = (): Promise<BreakingAlertItem[]> =>
-  apiGet<BreakingAlertItem[]>("/api/intelligence/breaking");
+/** Mirrors `IntelligenceController.BreakingQueue`. */
+export interface BreakingQueue {
+  /** Ready-to-read, non-duplicate, unread alerts, most recent first. */
+  alerts: BreakingAlertItem[];
+  /** Alerts still being curated (deduped/summarized) in the background. */
+  pending: number;
+}
+
+export const getBreakingAlerts = (): Promise<BreakingQueue> =>
+  apiGet<BreakingQueue>("/api/intelligence/breaking");
+
+/** Mark a breaking alert read (soft dismiss — the audit history is kept server-side). */
+export const markBreakingDone = (id: number): Promise<BreakingQueue> =>
+  apiPost<BreakingQueue>(`/api/intelligence/breaking/${id}/done`);
 
 // ---- Economic calendar / Agent 7 (Epic 5) ----
 

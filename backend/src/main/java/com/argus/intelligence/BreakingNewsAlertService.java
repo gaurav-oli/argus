@@ -98,7 +98,7 @@ public class BreakingNewsAlertService {
 				: "Breaking: " + topic;
 		// Always record it (the in-app Breaking feed keeps the full history); the push is what prefs gate.
 		alerts.save(new BreakingAlert(headline, article.getUrl(), article.getTickers(), reason, impact,
-				article.getSentimentLabel().name()));
+				article.getSentimentLabel().name(), article.getId()));
 
 		if (!prefs.allow(Category.BREAKING, article.getTickers(), false)) {
 			log.info("Breaking-news recorded but push suppressed by preferences (off/muted/quiet): {}", headline);
