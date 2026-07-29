@@ -1287,8 +1287,24 @@ export interface BackupStatusView {
   critical: BackupKindStatus | null;
 }
 
-export const getBackupStatus = (): Promise<BackupStatusView> =>
-  apiGet<BackupStatusView>("/api/ops/backup");
+/** Mirrors `BackupTriggerService.TriggerStatus` — the on-demand "Back Up Now" state. */
+export interface BackupTriggerStatus {
+  state: "IDLE" | "RUNNING" | "SUCCESS" | "FAILED";
+  startedAt: string | null;
+  message: string | null;
+}
+
+/** Mirrors `OpsController.BackupView`. */
+export interface BackupView {
+  status: BackupStatusView;
+  trigger: BackupTriggerStatus;
+}
+
+export const getBackupStatus = (): Promise<BackupView> => apiGet<BackupView>("/api/ops/backup");
+
+/** Kick off an on-demand backup. Returns immediately (RUNNING) — poll getBackupStatus for
+ * SUCCESS/FAILED. */
+export const triggerBackup = (): Promise<BackupView> => apiPost<BackupView>("/api/ops/backup/trigger");
 
 // ---- Per-agent data storage (Ops) ----
 

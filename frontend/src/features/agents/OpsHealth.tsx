@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { motion, useReducedMotion, AnimatePresence } from "motion/react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -8,8 +9,11 @@ import {
   getBackupStatus,
   getFreshness,
   getHardware,
+  triggerBackup,
   type BackupKindStatus,
   type BackupStatusView,
+  type BackupTriggerStatus,
+  type BackupView,
   type FreshnessView,
   type HardwareMetrics,
   type SourceFreshness,
@@ -19,11 +23,21 @@ import {
  * System health for the Operations view (Epic 9): host hardware (Story 9.5), data-source freshness
  * (Story 9.7), and backup status (Story 10.2). Values the JVM can't measure show as n/a.
  */
+/** How often to poll while a triggered backup is RUNNING (no real progress %, so this just needs to
+ * catch SUCCESS/FAILED reasonably promptly). */
+const POLL_MS = 1500;
+/** How long the SUCCESS state lingers before the button reverts to idle. */
+const SUCCESS_LINGER_MS = 2500;
+
 export function OpsHealth() {
   const [hw, setHw] = useState<HardwareMetrics | null>(null);
   const [fresh, setFresh] = useState<FreshnessView | null>(null);
-  const [backup, setBackup] = useState<BackupStatusView | null>(null);
+  const [backup, setBackup] = useState<BackupView | null>(null);
   const [loaded, setLoaded] = useState(false);
+
+  const loadBackup = useCallback(() => {
+    getBackupStatus().then(setBackup).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -39,6 +53,27 @@ export function OpsHealth() {
     };
   }, []);
 
+  // Poll while a backup is actively running; stop the instant it settles.
+  useEffect(() => {
+    if (backup?.trigger.state !== "RUNNING") return;
+    const t = setInterval(loadBackup, POLL_MS);
+    return () => clearInterval(t);
+  }, [backup?.trigger.state, loadBackup]);
+
+  // SUCCESS/FAILED linger briefly for the animation, then quietly revert to idle.
+  useEffect(() => {
+    if (backup?.trigger.state !== "SUCCESS" && backup?.trigger.state !== "FAILED") return;
+    const t = setTimeout(() => {
+      setBackup((b) => (b ? { ...b, trigger: { ...b.trigger, state: "IDLE", message: null } } : b));
+    }, SUCCESS_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [backup?.trigger.state]);
+
+  const onBackUpNow = useCallback(async () => {
+    const v = await triggerBackup().catch(() => null);
+    if (v) setBackup(v);
+  }, []);
+
   if (!loaded) {
     return (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -52,7 +87,9 @@ export function OpsHealth() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {hw && <HardwareCard h={hw} />}
       {fresh && <FreshnessCard f={fresh} />}
-      {backup?.enabled && <BackupCard b={backup} />}
+      {backup?.status.enabled && (
+        <BackupCard b={backup.status} trigger={backup.trigger} onBackUpNow={onBackUpNow} />
+      )}
     </div>
   );
 }
@@ -123,7 +160,15 @@ function FreshnessCard({ f }: { f: FreshnessView }) {
   );
 }
 
-function BackupCard({ b }: { b: BackupStatusView }) {
+function BackupCard({
+  b,
+  trigger,
+  onBackUpNow,
+}: {
+  b: BackupStatusView;
+  trigger: BackupTriggerStatus;
+  onBackUpNow: () => void;
+}) {
   const healthy = b.destinationConnected && b.full != null && !b.full.stale;
   return (
     <MotionCard index={2} interactive={false} className="flex flex-col gap-4">
@@ -152,7 +197,147 @@ function BackupCard({ b }: { b: BackupStatusView }) {
         <BackupRow label="Full backup" k={b.full} />
         <BackupRow label="Critical tables" k={b.critical} />
       </ul>
+      <div className="border-t border-[var(--hairline)] pt-3">
+        <BackupButton trigger={trigger} onBackUpNow={onBackUpNow} disabled={!b.destinationConnected} />
+      </div>
     </MotionCard>
+  );
+}
+
+/**
+ * "Back Up Now" — an indeterminate-progress cloud-upload animation while RUNNING (an arrow pulsing
+ * upward into the cloud, since a real percentage isn't available), a stroke-drawn checkmark + a
+ * brief particle burst on SUCCESS, and a shake + inline error on FAILED. Reduced-motion users get the
+ * same state changes with the decorative parts (looping pulse, burst, shake) skipped.
+ */
+function BackupButton({
+  trigger,
+  onBackUpNow,
+  disabled,
+}: {
+  trigger: BackupTriggerStatus;
+  onBackUpNow: () => void;
+  disabled: boolean;
+}) {
+  const reduce = useReducedMotion();
+  const running = trigger.state === "RUNNING";
+  const succeeded = trigger.state === "SUCCESS";
+  const failed = trigger.state === "FAILED";
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <motion.button
+        type="button"
+        onClick={onBackUpNow}
+        disabled={disabled || running}
+        animate={!reduce && failed ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
+        transition={{ duration: 0.4 }}
+        className={`relative flex items-center justify-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
+          succeeded
+            ? "bg-gains/15 text-gains"
+            : failed
+              ? "bg-losses/15 text-losses"
+              : "bg-accent/15 text-accent hover:bg-accent/25 disabled:opacity-50"
+        }`}
+      >
+        <CloudUploadIcon state={trigger.state} reduce={!!reduce} />
+        <span>
+          {running ? "Backing up…" : succeeded ? "Backed up" : failed ? "Backup failed — retry" : "Back Up Now"}
+        </span>
+
+        {running && (
+          <motion.span
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
+            initial={{ x: "-100%" }}
+            animate={reduce ? { x: "0%" } : { x: ["-100%", "100%"] }}
+            transition={reduce ? { duration: 0 } : { duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
+      </motion.button>
+
+      <AnimatePresence>
+        {failed && trigger.message && (
+          <motion.p
+            initial={reduce ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="text-[11px] text-losses"
+          >
+            {trigger.message}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CloudUploadIcon({ state, reduce }: { state: BackupTriggerStatus["state"]; reduce: boolean }) {
+  const size = 14;
+  if (state === "SUCCESS") {
+    return (
+      <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center">
+        {!reduce && <BurstParticles />}
+        <motion.svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <motion.path
+            d="M20 6 9 17l-5-5"
+            initial={reduce ? false : { pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+          />
+        </motion.svg>
+      </span>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.3 8.02 4 4 0 0 1 17 16H7Z"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <motion.g
+        animate={state === "RUNNING" && !reduce ? { y: [3, -3, 3], opacity: [0.5, 1, 0.5] } : { y: 1, opacity: 1 }}
+        transition={state === "RUNNING" && !reduce ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" } : undefined}
+      >
+        <path d="M12 15V9M9 12l3-3 3 3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </motion.g>
+    </svg>
+  );
+}
+
+/** A handful of small dots bursting outward and fading — the "cool" success flourish. Purely
+ * decorative, so it's the one piece skipped outright for reduced-motion rather than just simplified. */
+function BurstParticles() {
+  const dots = [0, 60, 120, 180, 240, 300];
+  return (
+    <span className="pointer-events-none absolute inset-0">
+      {dots.map((deg) => (
+        <motion.span
+          key={deg}
+          className="absolute left-1/2 top-1/2 h-1 w-1 rounded-full bg-gains"
+          initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+          animate={{
+            x: Math.cos((deg * Math.PI) / 180) * 14,
+            y: Math.sin((deg * Math.PI) / 180) * 14,
+            opacity: 0,
+            scale: 0,
+          }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      ))}
+    </span>
   );
 }
 

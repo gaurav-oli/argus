@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 
 /**
  * Filesystem-derived backup status (Story 10.2 — no DB table needed, survives restarts). Reads the
- * backup dir the host's launchd jobs write into ({@code full/} 6-hourly, {@code critical/} 15-min):
- * newest dump per kind, its age vs the expected cadence, and whether the destination is present at
- * all (a missing/unwritable dir = the drive is disconnected or the mount is broken).
+ * backup dir the host's launchd jobs write into ({@code full/} 6-hourly, {@code critical/} 15-min) —
+ * and, since the on-demand "Back Up Now" button, {@link BackupTriggerService} writes into the same
+ * {@code full/} dir too, so a manual dump shows up here exactly like a scheduled one: newest dump per
+ * kind, its age vs the expected cadence, and whether the destination is present at all (a
+ * missing/unwritable dir = the drive is disconnected or the mount is broken).
  */
 @Service
 public class BackupStatusService {

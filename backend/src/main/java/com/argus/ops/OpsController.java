@@ -1,10 +1,12 @@
 package com.argus.ops;
 
 import com.argus.backup.BackupStatusService;
+import com.argus.backup.BackupTriggerService;
 import com.argus.cost.CostRecorder;
 import com.argus.resilience.PlatformModeService;
 import com.argus.resilience.PlatformModeView;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,10 +30,11 @@ public class OpsController {
 	private final PlatformModeService platformMode;
 	private final StorageService storage;
 	private final BackupStatusService backup;
+	private final BackupTriggerService backupTrigger;
 
 	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
 			FreshnessService freshness, PlatformModeService platformMode, StorageService storage,
-			BackupStatusService backup) {
+			BackupStatusService backup, BackupTriggerService backupTrigger) {
 		this.agents = agents;
 		this.cost = cost;
 		this.hardware = hardware;
@@ -39,6 +42,7 @@ public class OpsController {
 		this.platformMode = platformMode;
 		this.storage = storage;
 		this.backup = backup;
+		this.backupTrigger = backupTrigger;
 	}
 
 	@GetMapping("/summary")
@@ -72,9 +76,21 @@ public class OpsController {
 		return storage.snapshot();
 	}
 
-	/** Story 10.2 — backup status: newest full/critical dump, size, staleness, destination presence. */
+	/** Story 10.2 — backup status: newest full/critical dump, size, staleness, destination presence,
+	 * plus the on-demand trigger's own RUNNING/SUCCESS/FAILED state (for the "Back Up Now" button). */
 	@GetMapping("/backup")
-	public BackupStatusService.BackupStatusView backup() {
-		return backup.status();
+	public BackupView backup() {
+		return new BackupView(backup.status(), backupTrigger.status());
+	}
+
+	/** Kick off an on-demand backup ("Back Up Now"). Returns immediately — the dump runs in the
+	 * background; poll {@code GET /backup} for the trigger state to reach SUCCESS/FAILED. */
+	@PostMapping("/backup/trigger")
+	public BackupView triggerBackup() {
+		backupTrigger.trigger();
+		return new BackupView(backup.status(), backupTrigger.status());
+	}
+
+	public record BackupView(BackupStatusService.BackupStatusView status, BackupTriggerService.TriggerStatus trigger) {
 	}
 }

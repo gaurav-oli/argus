@@ -19,6 +19,13 @@ RUN ./mvnw -B -q clean package -DskipTests
 FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
 
+# pg_dump for on-demand backups ("Back Up Now"): Ubuntu's default repo on this base image already
+# ships postgresql-client 18, matching the pgvector/pgvector:0.8.2-pg18 server exactly — no need for
+# the PGDG apt repo. Connects over TCP to the postgres compose service (see BackupTriggerService),
+# not via docker-exec, so the backend image needs its own pg_dump binary.
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 # Run as a non-root user.
 RUN groupadd --system argus && useradd --system --gid argus --no-create-home argus
 

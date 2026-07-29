@@ -140,14 +140,18 @@ services:
       # origin = https://<host>). Defaults suit local dev.
       ARGUS_SECURITY_WEBAUTHN_RP_ID: ${ARGUS_SECURITY_WEBAUTHN_RP_ID:-localhost}
       ARGUS_SECURITY_WEBAUTHN_ORIGINS: ${ARGUS_SECURITY_WEBAUTHN_ORIGINS:-http://localhost:3000}
-      # Backup status (Story 10.2): the container path of the read-only backup mount below. The
-      # dumps themselves run on the HOST via launchd (scripts/install-backup-schedule.sh).
+      # Backup status + on-demand "Back Up Now" (Stories 10.2 + BackupTriggerService): the container
+      # path of the backup mount below. The SCHEDULED dumps still run on the HOST via launchd
+      # (scripts/install-backup-schedule.sh); this is only for status derivation + the on-demand path.
       ARGUS_BACKUP_DIR: /backups
     volumes:
-      # Host backup dir (written by launchd + scripts/backup.sh), read-only for status derivation.
-      # Move to the external SSD later by setting ARGUS_BACKUP_HOST_DIR=/Volumes/<SSD>/argus-backups
-      # in .env and re-running scripts/install-backup-schedule.sh with the same path.
-      - ${ARGUS_BACKUP_HOST_DIR:-/Users/leanna/argus-backups}:/backups:ro
+      # Host backup dir (written by launchd + scripts/backup.sh, and now also directly by the backend
+      # for on-demand backups via BackupTriggerService's pg_dump). Read-write — a deliberate change
+      # from the original read-only mount, traded for a self-contained "Back Up Now" button with no
+      # extra host-side process to install. Move to the external SSD later by setting
+      # ARGUS_BACKUP_HOST_DIR=/Volumes/<SSD>/argus-backups in .env and re-running
+      # scripts/install-backup-schedule.sh with the same path.
+      - ${ARGUS_BACKUP_HOST_DIR:-/Users/leanna/argus-backups}:/backups
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets the container reach native Ollama
     ports:
