@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Argus Postgres backup (Story 10.1). Usage: backup.sh [full|critical]
-# Runs on the HOST (launchd), shelling pg_dump through the compose postgres service.
+# Runs on the HOST (launchd), shelling pg_dump through the running postgres container directly
+# (not `docker compose exec`, which would need to read docker-compose.yml from ~/Documents —
+# a TCC-protected folder that launchd-spawned bash can't reliably get FDA for).
 # Exit codes: 0 ok · 2 dump failed · 3 backup destination not present (disconnected/unmounted)
 set -euo pipefail
 MODE="${1:-full}"
 DEST="${ARGUS_BACKUP_DIR:?set ARGUS_BACKUP_DIR to the backup path}"
-PG_SERVICE="${ARGUS_PG_SERVICE:-postgres}"
+PG_CONTAINER="${ARGUS_PG_CONTAINER:-argus-postgres}"
 PG_USER="${POSTGRES_USER:-argus}"
 PG_DB="${POSTGRES_DB:-argus}"
 
@@ -19,7 +21,7 @@ logic_review agent_graduation watchlist briefings notification_prefs push_subscr
 [ -d "$DEST" ] && [ -w "$DEST" ] || { echo "backup dest $DEST missing/not writable (disconnected?)" >&2; exit 3; }
 ts="$(date +%Y%m%d-%H%M%S)"
 
-run_dump() { docker compose exec -T "$PG_SERVICE" pg_dump -U "$PG_USER" "$@" "$PG_DB"; }
+run_dump() { docker exec -i "$PG_CONTAINER" pg_dump -U "$PG_USER" "$@" "$PG_DB"; }
 
 if [ "$MODE" = "critical" ]; then
   mkdir -p "$DEST/critical"
