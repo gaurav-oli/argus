@@ -94,9 +94,9 @@ services:
       # Analyst Logic Review schedule (argus.logic-review.cron). Default 03:00; set e.g. "0 */2 * * * *"
       # (every 2 min) during validation so the LLM-proposes/backtest-decides pass fires promptly.
       ARGUS_LOGIC_REVIEW_CRON: ${LOGIC_REVIEW_CRON:-0 0 3 * * *}
-      # Internet-buzz agent frozen (Fable 5 review): noisiest, hard-capped signal — paused until one
-      # full tuning cycle on clean trade data proves/disproves it. Set true to resume polling.
-      ARGUS_INTERNET_ENABLED: ${ARGUS_INTERNET_ENABLED:-false}
+      # Internet-buzz agent (Fable 5 review): re-admitted at the tuning floor (V49 seed row) and
+      # governed from here on by the same nightly/logic-review self-tuning loop as every other agent.
+      ARGUS_INTERNET_ENABLED: ${ARGUS_INTERNET_ENABLED:-true}
       # Smart Cleanup schedule (argus.cleanup.cron). Default monthly (04:00 on the 1st, Toronto);
       # set "-" to disable and go back to the manual Agents-page button.
       ARGUS_CLEANUP_CRON: ${ARGUS_CLEANUP_CRON:-0 0 4 1 * *}
