@@ -2,6 +2,7 @@ package com.argus.recommendation;
 
 import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
+import com.argus.intelligence.MacroRelevanceTagger;
 import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentLabel;
@@ -22,8 +23,10 @@ import org.springframework.stereotype.Component;
  * Assembles the {@link AgentSignal}s the scoring engine needs for a ticker (Story 6.4) from the
  * agents that currently exist: Agent 1 (news sentiment, weighted by coverage and relevance),
  * Agent 2 (social crowd sentiment, weighted by volume and conviction — capped lower since the crowd
- * is noisier), and Agent 7 (the earnings calendar). As more agents come online they add their
- * signals here; until then coverage is honestly low (lowering confidence).
+ * is noisier), Agent 7 (the earnings calendar), and Agent 8 (macro/political news — tariffs, Fed
+ * policy — that moves every held ticker, not just whichever one happens to be named in the
+ * headline). As more agents come online they add their signals here; until then coverage is
+ * honestly low (lowering confidence).
  */
 @Component
 public class AgentSignalGatherer {
@@ -38,6 +41,11 @@ public class AgentSignalGatherer {
 
 	private static final Duration NEWS_WINDOW = Duration.ofDays(7);
 	private static final int FULL_COVERAGE_ARTICLES = 5;
+	/** Macro/political news cycles and market reactions move faster than company-specific coverage. */
+	private static final Duration MACRO_WINDOW = Duration.ofDays(3);
+	private static final int MACRO_FULL_COVERAGE = 3;
+	/** Unproven signal (freshly admitted) — capped below news until its own track record earns more. */
+	private static final double MACRO_MAX_WEIGHT = 0.5;
 	private static final Duration SOCIAL_WINDOW = Duration.ofDays(3);
 	private static final int SOCIAL_MIN_POSTS = 5;
 	private static final int SOCIAL_FULL_VOLUME = 30;
@@ -73,6 +81,7 @@ public class AgentSignalGatherer {
 	public List<AgentSignal> gather(String ticker) {
 		List<AgentSignal> signals = new ArrayList<>();
 		newsSignal(ticker).ifPresent(signals::add);
+		macroSignal().ifPresent(signals::add);
 		socialSignal(ticker).ifPresent(signals::add);
 		insiderSignal(ticker).ifPresent(signals::add);
 		internetSignal(ticker).ifPresent(signals::add);
@@ -204,6 +213,35 @@ public class AgentSignalGatherer {
 				avgSentiment, stories.size(), stories.size() == 1 ? "y" : "ies",
 				articles.size(), articles.size() == 1 ? "" : "s", avgRelevance * 100);
 		return Optional.of(new AgentSignal("agent-1-news", dir, weight, rationale));
+	}
+
+	/**
+	 * Agent 8 — macro/political news (tariffs, Fed policy, executive orders) that moves every held
+	 * ticker at once rather than one company specifically. Same headline-dedup + coverage/relevance
+	 * shape as {@link #newsSignal}, but reading {@link com.argus.intelligence.MacroRelevanceTagger
+	 * MACRO}-tagged articles instead of ticker-tagged ones — so it's identical across every ticker in
+	 * one gather cycle by design, not a per-ticker read. A distinct agent identity (not folded into
+	 * Agent 1) so the reliability system can tell whether macro coverage is actually predictive
+	 * independently of company-specific news, which has its own, separately mediocre track record.
+	 */
+	private Optional<AgentSignal> macroSignal() {
+		List<NewsArticle> articles =
+				news.findAnalyzedForTicker(MacroRelevanceTagger.MACRO_TAG, Instant.now().minus(MACRO_WINDOW));
+		if (articles.isEmpty()) {
+			return Optional.empty();
+		}
+		List<NewsArticle> stories = clusterByHeadline(articles);
+		double avgSentiment = average(stories, NewsArticle::getSentimentScore);
+		double avgRelevance = average(stories, NewsArticle::getRelevanceScore);
+		SignalDirection dir = avgSentiment > 0.1 ? SignalDirection.BULLISH
+				: avgSentiment < -0.1 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
+		double coverage = Math.min(1.0, (double) stories.size() / MACRO_FULL_COVERAGE);
+		double weight = MACRO_MAX_WEIGHT * coverage * (0.5 + 0.5 * avgRelevance);
+		String rationale = String.format(
+				"Macro/political: avg sentiment %.2f across %d distinct stor%s (%d article%s), relevance %.0f%%",
+				avgSentiment, stories.size(), stories.size() == 1 ? "y" : "ies",
+				articles.size(), articles.size() == 1 ? "" : "s", avgRelevance * 100);
+		return Optional.of(new AgentSignal("agent-8-macro", dir, weight, rationale));
 	}
 
 	/**

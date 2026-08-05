@@ -1,7 +1,13 @@
 package com.argus.recommendation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /** Pure transition rules for Agent 5 graduation (Story 6.6, FR-11). */
@@ -67,5 +73,36 @@ class GraduationServiceTest {
 		assertEquals(true, GraduationState.ACTIVE.canRecommend());
 		assertEquals(false, GraduationState.SHADOW.canRecommend());
 		assertEquals(false, GraduationState.FROZEN.canRecommend());
+	}
+
+	// ---- resume() — manual review (instance method, needs mocked repositories) ----
+
+	@Test
+	void resumeMovesFrozenBackToShadowNotStraightToTrusted() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.FROZEN);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class));
+
+		GraduationState result = service.resume();
+
+		assertEquals(GraduationState.SHADOW, result);
+		assertEquals(GraduationState.SHADOW, g.getState());
+		verify(repo).save(g);
+	}
+
+	@Test
+	void resumeIsANoOpWhenNotCurrentlyFrozen() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.ACTIVE);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class));
+
+		GraduationState result = service.resume();
+
+		assertEquals(GraduationState.ACTIVE, result, "resume() must not skip the earn-your-way-up ladder");
+		verify(repo, never()).save(any());
 	}
 }

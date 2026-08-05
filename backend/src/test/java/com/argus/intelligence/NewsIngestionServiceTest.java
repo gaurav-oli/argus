@@ -1,5 +1,6 @@
 package com.argus.intelligence;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import org.mockito.ArgumentCaptor;
 import com.argus.agent.AgentEventPublisher;
 import com.argus.intelligence.NewsIngestionProperties.Gdelt;
 import com.argus.intelligence.NewsIngestionProperties.Rss;
@@ -28,6 +30,7 @@ class NewsIngestionServiceTest {
 	private final AgentEventPublisher events = mock(AgentEventPublisher.class);
 	private final SourceCredibilityService credibility = mock(SourceCredibilityService.class);
 	private final TickerRelevanceTagger tagger = new TickerRelevanceTagger();
+	private final MacroRelevanceTagger macroTagger = new MacroRelevanceTagger();
 
 	private final NewsIngestionProperties props = new NewsIngestionProperties(
 			60_000, 300_000, 900_000, 60, new Gdelt(true, "q", 10), new Rss(List.of()));
@@ -41,7 +44,7 @@ class NewsIngestionServiceTest {
 	}
 
 	private NewsIngestionService service(List<NewsSource> sources) {
-		return new NewsIngestionService(sources, articles, tagger, universe, clock, events,
+		return new NewsIngestionService(sources, articles, tagger, macroTagger, universe, clock, events,
 				credibility, props);
 	}
 
@@ -62,6 +65,38 @@ class NewsIngestionServiceTest {
 		verify(articles, times(2)).save(any(NewsArticle.class));
 		verify(events, times(2)).publish(eq(NewsIngestionService.STREAM_KEY),
 				eq("news.article.ingested"), any());
+	}
+
+	@Test
+	void macroKeywordHeadlineIsTaggedEvenWithNoHeldTickerMentioned() {
+		heldAapl(); // held universe is AAPL — this headline names no ticker at all
+		NewsSource src = mock(NewsSource.class);
+		when(src.name()).thenReturn("good");
+		when(src.fetch(any())).thenReturn(List.of(
+				raw("good", "1", "Trump announces new tariffs on Chinese imports")));
+		when(articles.existsBySourceAndExternalId(eq("good"), anyString())).thenReturn(false);
+		ArgumentCaptor<NewsArticle> captor = ArgumentCaptor.forClass(NewsArticle.class);
+		when(articles.save(captor.capture())).thenAnswer(inv -> persisted(inv.getArgument(0)));
+
+		int stored = service(List.of(src)).ingestOnce();
+
+		assertEquals(1, stored, "a macro story is stored even though it matches no held ticker");
+		assertArrayEquals(new String[] {MacroRelevanceTagger.MACRO_TAG}, captor.getValue().getTickers());
+	}
+
+	@Test
+	void ordinaryHeadlineIsNotMacroTagged() {
+		heldAapl();
+		NewsSource src = mock(NewsSource.class);
+		when(src.name()).thenReturn("good");
+		when(src.fetch(any())).thenReturn(List.of(raw("good", "1", "AAPL jumps on earnings")));
+		when(articles.existsBySourceAndExternalId(eq("good"), anyString())).thenReturn(false);
+		ArgumentCaptor<NewsArticle> captor = ArgumentCaptor.forClass(NewsArticle.class);
+		when(articles.save(captor.capture())).thenAnswer(inv -> persisted(inv.getArgument(0)));
+
+		service(List.of(src)).ingestOnce();
+
+		assertArrayEquals(new String[] {"AAPL"}, captor.getValue().getTickers());
 	}
 
 	@Test

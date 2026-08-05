@@ -4,6 +4,7 @@ import com.argus.calendar.CalendarEventRepository;
 import com.argus.cost.BudgetStatus;
 import com.argus.cost.CostGovernor;
 import com.argus.cost.CostRecorder;
+import com.argus.intelligence.MacroRelevanceTagger;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
@@ -18,11 +19,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Per-agent status for the Agents dashboard (Epic 9, Story 9.1), aligned to the architecture's
- * 7-agent roster. All seven now run on real data: Agent 1 (News — which also owns the Source
- * Credibility Engine and the Stranger Danger watch), Agent 2 (Social), Agent 3 (Internet),
- * Agent 4 (SEC filings), Agent 5 (Recommender), Agent 6 (Cost Governor — budget governance with
- * auto-switch), and Agent 7 (Calendar).
+ * Per-agent status for the Agents dashboard (Epic 9, Story 9.1). All run on real data: Agent 1
+ * (News — which also owns the Source Credibility Engine and the Stranger Danger watch), Agent 2
+ * (Social), Agent 3 (Internet), Agent 4 (SEC filings), Agent 5 (Recommender), Agent 6 (Cost
+ * Governor — budget governance with auto-switch), Agent 7 (Calendar), and Agent 8 (Macro/political
+ * news — no source of its own; it tags the same articles Agent 1 already ingests, so its coverage
+ * is bounded by Agent 1's sources).
  */
 @Service
 public class AgentStatusService {
@@ -91,7 +93,14 @@ public class AgentStatusService {
 				active("calendar", "Agent 7", "Economic Calendar",
 						"Tracks earnings, Fed/CPI/jobs/GDP, ex-dividend and lock-up dates; flags pre-event quiet periods.",
 						calendar.count(), "events tracked", calendar.latestIngestedAt(), "daily · 6am ET",
-						finnhubEnabled ? null : "Earnings calendar needs a Finnhub key"));
+						finnhubEnabled ? null : "Earnings calendar needs a Finnhub key"),
+				active("macro", "Agent 8", "Macro / Political News",
+						"Tags tariff/Fed/currency-policy stories that move every held ticker at once, from the "
+								+ "same feed Agent 1 ingests — no ticker mention required, so nothing gets dropped "
+								+ "for naming no specific stock.",
+						news.countByTag(MacroRelevanceTagger.MACRO_TAG), "macro articles",
+						news.latestIngestedAtForTag(MacroRelevanceTagger.MACRO_TAG), "same cadence as Agent 1",
+						"Feeds agent-8-macro"));
 	}
 
 	private static AgentStatusView active(String id, String code, String name, String description,

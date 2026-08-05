@@ -49,6 +49,13 @@ public class RecommendationController {
 		return graduation.summary();
 	}
 
+	/** Manual review (Story 6.6) — resume a FROZEN Agent 5 back to SHADOW. A no-op if not frozen. */
+	@PostMapping("/graduation/resume")
+	public GraduationService.GraduationSummary resumeGraduation() {
+		graduation.resume();
+		return graduation.summary();
+	}
+
 	@GetMapping("/{id}")
 	public RecommendationCard get(@PathVariable Long id) {
 		return recommendations.diagnostic(id)

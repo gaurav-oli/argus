@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ArticleTags } from "@/components/ui/ArticleTags";
 import { Carousel } from "@/components/ui/Carousel";
 import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getNewsQueue, markNewsDone, type NewsCardItem } from "@/lib/apiClient";
@@ -108,18 +109,7 @@ function NewsCard({ card, busy, onDone }: { card: NewsCardItem; busy: boolean; o
 
       <SummaryBlock text={card.summary} />
 
-      {card.tickers.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {card.tickers.map((t) => (
-            <span
-              key={t}
-              className="rounded-md bg-accent/[0.08] px-1.5 py-0.5 font-mono text-[10px] font-medium text-accent"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
+      <ArticleTags tickers={card.tickers} />
 
       <div className="mt-auto flex items-center justify-between gap-3 pt-4">
         {card.url ? (

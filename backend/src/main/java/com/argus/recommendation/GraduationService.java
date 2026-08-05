@@ -56,6 +56,25 @@ public class GraduationService {
 				Math.max(0, ACTIVE_TRADES - total));
 	}
 
+	/**
+	 * Manual review (Story 6.6): resume a FROZEN Agent 5 back to SHADOW — not straight to PROBATION
+	 * or ACTIVE. A freeze means a real failure pattern happened; resuming should mean "prove it
+	 * again from zero trust", same posture as every other cold-start in this app (e.g. Agent 3's
+	 * re-admission), not "assume the fix worked". No-ops (returns the unchanged state) if not
+	 * currently FROZEN, so this can't be used to skip the earn-your-way-up ladder outside a real freeze.
+	 */
+	@Transactional
+	public GraduationState resume() {
+		AgentGraduation g = graduation.findById(AgentGraduation.SINGLETON_ID).orElseGet(AgentGraduation::new);
+		if (g.getState() != GraduationState.FROZEN) {
+			return g.getState();
+		}
+		g.setState(GraduationState.SHADOW);
+		graduation.save(g);
+		log.info("Agent 5 graduation: FROZEN -> SHADOW (manual review — resumed)");
+		return GraduationState.SHADOW;
+	}
+
 	/** Record a recommendation outcome and re-evaluate the state. Returns the (possibly new) state. */
 	@Transactional
 	public GraduationState recordOutcome(boolean won, Long recommendationId) {

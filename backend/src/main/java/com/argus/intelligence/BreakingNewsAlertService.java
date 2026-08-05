@@ -17,21 +17,27 @@ import org.springframework.stereotype.Service;
  * Detects immediate, market-moving news and pushes it to the user's phone. Evaluated as each article
  * finishes sentiment analysis (Agent 1). A story alerts when it's either strongly material to the
  * holdings (relevance × |sentiment| ≥ {@code impactThreshold}) or it hits a market-wide breaking topic
- * ({@link #BREAKING_TOPICS} — war, the Fed, tariffs, a market-moving political remark, a crash, …) with
- * enough sentiment behind it. Alerts are deduped by headline and rate-limited so the phone gets the big
- * events without being spammed. The push reuses the existing Web-Push channel ({@link PushService}).
+ * with enough sentiment behind it — either a macro/policy story ({@link MacroRelevanceTagger}, the
+ * same keyword set the trading signal uses, so a Trump/tariff/Fed/currency story can't be caught by
+ * one path and missed by the other) or a crisis/crash topic ({@link #BREAKING_TOPICS} — war, a market
+ * crash, a bankruptcy — things that are breaking-news-worthy without being "macro/policy" per se).
+ * Alerts are deduped by headline and rate-limited so the phone gets the big events without being
+ * spammed. The push reuses the existing Web-Push channel ({@link PushService}).
  */
 @Service
 public class BreakingNewsAlertService {
 
 	private static final Logger log = LoggerFactory.getLogger(BreakingNewsAlertService.class);
 
-	/** Lower-cased substrings that flag a market-wide breaking event regardless of holdings-relevance. */
+	/**
+	 * Lower-cased substrings for breaking-news-worthy topics that aren't macro/policy news — those
+	 * live in {@link MacroRelevanceTagger} instead (shared with the trading signal, so the two can't
+	 * silently drift apart the way this list and that one already had before being unified).
+	 */
 	private static final Set<String> BREAKING_TOPICS = Set.of(
 			"war", "invasion", "invade", "missile", "airstrike", "air strike", "attack", "strike on",
-			"nuclear", "ceasefire", "sanction", "tariff", "embargo", "opec", "oil price",
-			"trump", "white house", "federal reserve", "fed ", "rate cut", "rate hike", "interest rate",
-			"inflation", "recession", "jobs report", "cpi", "downgrade", "default", "shutdown", "bankrupt",
+			"nuclear", "ceasefire", "embargo", "opec", "oil price",
+			"inflation", "recession", "jobs report", "cpi", "downgrade", "default", "bankrupt",
 			"crash", "plunge", "selloff", "sell-off", "circuit breaker", "emergency", "bailout", "coup");
 
 	private final BreakingAlertRepository alerts;
@@ -40,15 +46,18 @@ public class BreakingNewsAlertService {
 	private final CostGovernor costGovernor;
 	private final NotificationPreferencesService prefs;
 	private final BreakingNewsProperties props;
+	private final MacroRelevanceTagger macroTagger;
 
 	public BreakingNewsAlertService(BreakingAlertRepository alerts, PushService push, ModelGateway gateway,
-			CostGovernor costGovernor, NotificationPreferencesService prefs, BreakingNewsProperties props) {
+			CostGovernor costGovernor, NotificationPreferencesService prefs, BreakingNewsProperties props,
+			MacroRelevanceTagger macroTagger) {
 		this.alerts = alerts;
 		this.push = push;
 		this.gateway = gateway;
 		this.costGovernor = costGovernor;
 		this.prefs = prefs;
 		this.props = props;
+		this.macroTagger = macroTagger;
 	}
 
 	/** Evaluate a freshly-analyzed article; push + record it if it clears the bar and the guards. */
@@ -72,6 +81,9 @@ public class BreakingNewsAlertService {
 		String topic = matchedTopic(headline);
 		boolean strongForHoldings = impact >= props.impactThreshold();
 		boolean breakingMacro = topic != null && sentiment >= props.sentimentMin();
+		// getSummary() is deliberately not passed here: matchedTopic()/BREAKING_TOPICS already scans
+		// only the headline (same historical behavior), and macroTagger.isMacroRelevant(headline, null)
+		// mirrors that scope rather than silently widening what counts as breaking.
 		if (!strongForHoldings && !breakingMacro) {
 			return;
 		}
@@ -136,7 +148,11 @@ public class BreakingNewsAlertService {
 		}
 	}
 
-	private static String matchedTopic(String headline) {
+	/** Macro/policy topics are checked first (shared list, see class doc); crisis/crash topics are this class's own. */
+	private String matchedTopic(String headline) {
+		if (macroTagger.isMacroRelevant(headline, null)) {
+			return "macro/political news";
+		}
 		String h = headline.toLowerCase();
 		for (String topic : BREAKING_TOPICS) {
 			if (h.contains(topic)) {

@@ -39,4 +39,12 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
 	/** Most-recent sentiment-analysis time — Agent 2 "last run". */
 	@Query("select max(a.analyzedAt) from NewsArticle a")
 	Instant latestAnalyzedAt();
+
+	/** How many articles carry {@code tag} in tickers[] — Agent 8's throughput (real symbol or {@link MacroRelevanceTagger#MACRO_TAG}). */
+	@Query(value = "SELECT COUNT(*) FROM news_articles WHERE :tag = ANY(tickers)", nativeQuery = true)
+	long countByTag(@Param("tag") String tag);
+
+	/** Most-recent ingest time among articles carrying {@code tag} — Agent 8 "last run". */
+	@Query(value = "SELECT MAX(ingested_at) FROM news_articles WHERE :tag = ANY(tickers)", nativeQuery = true)
+	Instant latestIngestedAtForTag(@Param("tag") String tag);
 }
