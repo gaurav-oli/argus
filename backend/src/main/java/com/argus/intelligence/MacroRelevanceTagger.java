@@ -31,14 +31,30 @@ public class MacroRelevanceTagger {
 	public static final String MACRO_TAG = "MACRO";
 
 	private static final List<String> KEYWORDS = List.of(
+			// US policy — the original coverage, kept as-is.
 			"trump", "tariff", "tariffs", "trade war", "federal reserve", "fomc",
 			"rate cut", "rate hike", "interest rate decision", "white house",
 			"executive order", "government shutdown", "sanction", "sanctions",
 			// Currency/FX policy — a distinct blind spot found in production (a yen-intervention story
 			// moved markets and was never surfaced anywhere, ticker signal or breaking alert, because
 			// neither keyword list had any currency terms at all).
-			"yen", "dollar", "euro", "currency", "forex", "devaluation", "currency intervention",
-			"bank of japan", "boj", "ecb", "pboc");
+			"yen", "dollar", "euro", "yuan", "renminbi", "sterling", "currency", "forex",
+			"devaluation", "currency intervention",
+			// Global central banks — this whole list was US-only before, which is exactly backwards
+			// for a signal meant to catch news that moves every held ticker regardless of which
+			// country it originates in.
+			"bank of japan", "boj", "european central bank", "ecb", "people's bank of china", "pboc",
+			"bank of england", "boe", "reserve bank of india", "rbi", "swiss national bank", "snb",
+			"bank of canada",
+			// Global bodies/blocs/events.
+			"nato", "g7", "g20", "opec", "united nations", "security council", "brexit",
+			"european union",
+			// Unambiguous geopolitical-crisis terms — deliberately not the single ambiguous words
+			// ("war", "attack", "nuclear") that legitimately appear in ordinary company/sector news
+			// ("price war", "cyberattack", "nuclear energy stock"); those stay in
+			// BreakingNewsAlertService's own list, gated by its extra LLM-confirmation step before a
+			// push fires — a safety net this always-on trading signal doesn't have.
+			"invasion", "ceasefire", "coup", "embargo", "martial law", "diplomatic crisis");
 
 	private static final Pattern PATTERN = Pattern.compile(
 			"\\b(" + String.join("|", KEYWORDS.stream().map(Pattern::quote).toList()) + ")\\b",

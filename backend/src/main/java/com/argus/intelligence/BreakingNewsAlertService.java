@@ -35,10 +35,10 @@ public class BreakingNewsAlertService {
 	 * silently drift apart the way this list and that one already had before being unified).
 	 */
 	private static final Set<String> BREAKING_TOPICS = Set.of(
-			"war", "invasion", "invade", "missile", "airstrike", "air strike", "attack", "strike on",
-			"nuclear", "ceasefire", "embargo", "opec", "oil price",
+			"war", "invade", "missile", "airstrike", "air strike", "attack", "strike on", "nuclear",
+			"opec", "oil price",
 			"inflation", "recession", "jobs report", "cpi", "downgrade", "default", "bankrupt",
-			"crash", "plunge", "selloff", "sell-off", "circuit breaker", "emergency", "bailout", "coup");
+			"crash", "plunge", "selloff", "sell-off", "circuit breaker", "emergency", "bailout");
 
 	private final BreakingAlertRepository alerts;
 	private final PushService push;
