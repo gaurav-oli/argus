@@ -23,6 +23,12 @@ import org.springframework.stereotype.Component;
  * had no currency/FX terms either, until a real yen-intervention story was missed by both paths at
  * once). {@code BreakingNewsAlertService} still keeps its own list for topics that are breaking-news
  * worthy but not macro/policy per se (war, a market crash, a bankruptcy).
+ *
+ * <p>A fixed list can never be exhaustive, so {@link MacroKeywordLearningService} keeps it growing:
+ * it's DB-backed ({@code macro_keyword}), and {@link #reload(List)} atomically swaps in a freshly
+ * compiled pattern whenever a new keyword is learned — no redeploy needed. The no-arg constructor
+ * still defaults to {@link #DEFAULT_KEYWORDS} so this class stays pure and trivially unit-testable
+ * (no Spring, no DB) exactly as before; only the learning service talks to the database.
  */
 @Component
 public class MacroRelevanceTagger {
@@ -30,7 +36,8 @@ public class MacroRelevanceTagger {
 	/** Pseudo-ticker tag for macro-relevant articles — reuses the existing tickers[] column/query. */
 	public static final String MACRO_TAG = "MACRO";
 
-	private static final List<String> KEYWORDS = List.of(
+	/** The original hand-curated list — also what {@code V50} seeds {@code macro_keyword} from. */
+	static final List<String> DEFAULT_KEYWORDS = List.of(
 			// US policy — the original coverage, kept as-is.
 			"trump", "tariff", "tariffs", "trade war", "federal reserve", "fomc",
 			"rate cut", "rate hike", "interest rate decision", "white house",
@@ -56,14 +63,36 @@ public class MacroRelevanceTagger {
 			// push fires — a safety net this always-on trading signal doesn't have.
 			"invasion", "ceasefire", "coup", "embargo", "martial law", "diplomatic crisis");
 
-	private static final Pattern PATTERN = Pattern.compile(
-			"\\b(" + String.join("|", KEYWORDS.stream().map(Pattern::quote).toList()) + ")\\b",
-			Pattern.CASE_INSENSITIVE);
+	private volatile List<String> keywords;
+	private volatile Pattern pattern;
+
+	public MacroRelevanceTagger() {
+		reload(DEFAULT_KEYWORDS);
+	}
 
 	/** Whether this headline/summary covers macro/political market-moving news. */
 	public boolean isMacroRelevant(String headline, String summary) {
 		String haystack = safe(headline) + " " + safe(summary);
-		return PATTERN.matcher(haystack).find();
+		return pattern.matcher(haystack).find();
+	}
+
+	/** The keyword list currently in effect — used by {@link MacroKeywordLearningService}'s prompt. */
+	public List<String> currentKeywords() {
+		return keywords;
+	}
+
+	/**
+	 * Atomically swap in a new keyword set and its compiled pattern. Called once at startup (from the
+	 * DB-backed list) and again whenever {@link MacroKeywordLearningService} adopts a new keyword —
+	 * the live tagger is always in sync with {@code macro_keyword}, no redeploy required.
+	 */
+	public void reload(List<String> newKeywords) {
+		List<String> copy = List.copyOf(newKeywords);
+		Pattern compiled = Pattern.compile(
+				"\\b(" + String.join("|", copy.stream().map(Pattern::quote).toList()) + ")\\b",
+				Pattern.CASE_INSENSITIVE);
+		this.keywords = copy;
+		this.pattern = compiled;
 	}
 
 	private static String safe(String s) {

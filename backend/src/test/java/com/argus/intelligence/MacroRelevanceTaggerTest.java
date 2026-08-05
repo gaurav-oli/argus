@@ -1,8 +1,10 @@
 package com.argus.intelligence;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Macro/political keyword matching for Agent 8 — pure, no Spring. */
@@ -89,5 +91,24 @@ class MacroRelevanceTaggerTest {
 		// The exact shape of story the user flagged as missing: a real-world macro/political event with
 		// zero connection to Trump or US policy specifically (Bank of Japan currency intervention).
 		assertTrue(tagger.isMacroRelevant("Bank of Japan intervenes as yen hits multi-decade low", null));
+	}
+
+	@Test
+	void noArgConstructorDefaultsToTheFullKeywordList() {
+		assertEquals(MacroRelevanceTagger.DEFAULT_KEYWORDS, tagger.currentKeywords());
+	}
+
+	@Test
+	void reloadAtomicallySwapsInANewKeywordSetAndItsCompiledPattern() {
+		// The mechanism MacroKeywordLearningService uses to make a learned keyword live without a
+		// redeploy: a story that was NOT macro-relevant before reload() must become relevant after.
+		assertFalse(tagger.isMacroRelevant("Ruritania seizes foreign assets", null));
+
+		tagger.reload(List.of("ruritania"));
+
+		assertTrue(tagger.isMacroRelevant("Ruritania seizes foreign assets", null));
+		assertEquals(List.of("ruritania"), tagger.currentKeywords());
+		// The old list is gone, not merged — reload() is a full swap, not an append.
+		assertFalse(tagger.isMacroRelevant("Trump announces new tariffs", null));
 	}
 }

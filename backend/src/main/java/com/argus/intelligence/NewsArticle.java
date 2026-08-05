@@ -146,16 +146,26 @@ public class NewsArticle {
 		this.analyzedAt = at;
 	}
 
+	/** Whether {@link MacroRelevanceTagger#MACRO_TAG} is already present — checked before tagging so a
+	 * genuine LLM-only catch (the keyword list missed it) can be told apart from a redundant one, for
+	 * {@link MacroKeywordLearningService}'s miss log. */
+	public boolean hasMacroTag() {
+		for (String t : tickers) {
+			if (MacroRelevanceTagger.MACRO_TAG.equals(t)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * Add the {@link MacroRelevanceTagger#MACRO_TAG} pseudo-ticker if it isn't already present —
 	 * idempotent, since {@link MacroRelevanceTagger}'s keyword match may have already added it at
 	 * ingest time and this is the LLM classification catching it independently during analysis.
 	 */
 	public void addMacroTag() {
-		for (String t : tickers) {
-			if (MacroRelevanceTagger.MACRO_TAG.equals(t)) {
-				return;
-			}
+		if (hasMacroTag()) {
+			return;
 		}
 		String[] widened = java.util.Arrays.copyOf(tickers, tickers.length + 1);
 		widened[tickers.length] = MacroRelevanceTagger.MACRO_TAG;

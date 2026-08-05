@@ -26,13 +26,16 @@ public class IntelligenceController {
 	private final SourceCredibilityRepository sources;
 	private final StrangerAlertRepository strangers;
 	private final BreakingAlertRepository breaking;
+	private final MacroKeywordLearningService macroKeywordLearning;
 
 	public IntelligenceController(NewsArticleRepository articles, SourceCredibilityRepository sources,
-			StrangerAlertRepository strangers, BreakingAlertRepository breaking) {
+			StrangerAlertRepository strangers, BreakingAlertRepository breaking,
+			MacroKeywordLearningService macroKeywordLearning) {
 		this.articles = articles;
 		this.sources = sources;
 		this.strangers = strangers;
 		this.breaking = breaking;
+		this.macroKeywordLearning = macroKeywordLearning;
 	}
 
 	@GetMapping("/news")
@@ -72,6 +75,13 @@ public class IntelligenceController {
 			breaking.save(a);
 		});
 		return ResponseEntity.ok(breaking());
+	}
+
+	/** Manual trigger (rather than waiting up to a week) for Agent 8's keyword-learning review — mirrors
+	 * the graduation resume endpoint's on-demand pattern. */
+	@PostMapping("/macro-keywords/review")
+	public MacroKeywordLearningService.Result reviewMacroKeywords() {
+		return macroKeywordLearning.review();
 	}
 
 	/** A news article with its Agent-1 sentiment/relevance scoring (null scores = not yet analyzed). */

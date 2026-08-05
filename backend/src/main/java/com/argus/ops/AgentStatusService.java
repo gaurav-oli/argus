@@ -4,6 +4,7 @@ import com.argus.calendar.CalendarEventRepository;
 import com.argus.cost.BudgetStatus;
 import com.argus.cost.CostGovernor;
 import com.argus.cost.CostRecorder;
+import com.argus.intelligence.MacroKeywordRepository;
 import com.argus.intelligence.MacroRelevanceTagger;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SourceCredibilityRepository;
@@ -38,13 +39,14 @@ public class AgentStatusService {
 	private final SecFilingRepository sec;
 	private final WebMentionRepository web;
 	private final CostGovernor costGovernor;
+	private final MacroKeywordRepository macroKeywords;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
 	public AgentStatusService(NewsArticleRepository news, SourceCredibilityRepository credibility,
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
-			WebMentionRepository web, CostGovernor costGovernor,
+			WebMentionRepository web, CostGovernor costGovernor, MacroKeywordRepository macroKeywords,
 			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
@@ -56,6 +58,7 @@ public class AgentStatusService {
 		this.sec = sec;
 		this.web = web;
 		this.costGovernor = costGovernor;
+		this.macroKeywords = macroKeywords;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -100,13 +103,21 @@ public class AgentStatusService {
 								+ "for naming no specific stock.",
 						news.countByTag(MacroRelevanceTagger.MACRO_TAG), "macro articles",
 						news.latestIngestedAtForTag(MacroRelevanceTagger.MACRO_TAG), "same cadence as Agent 1",
-						"Feeds agent-8-macro"));
+						agent8Note()));
 	}
 
 	private static AgentStatusView active(String id, String code, String name, String description,
 			long captured, String captureLabel, Instant lastActivity, String schedule, String note) {
 		return new AgentStatusView(id, code, name, description, captured > 0 ? "ACTIVE" : "IDLE", captured,
 				captureLabel, lastActivity, schedule, note, null);
+	}
+
+	/** Agent 8's keyword list is DB-backed and self-updating (MacroKeywordLearningService) — surface that. */
+	private String agent8Note() {
+		long learned = macroKeywords.countBySource("learned");
+		return learned > 0
+				? "Feeds agent-8-macro · " + learned + " keyword(s) self-learned from missed stories"
+				: "Feeds agent-8-macro · keyword list self-updates weekly from missed stories";
 	}
 
 	private AgentStatusView costGovernor() {

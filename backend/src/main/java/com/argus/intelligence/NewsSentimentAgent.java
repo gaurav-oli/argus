@@ -24,12 +24,14 @@ public class NewsSentimentAgent implements Agent {
 	private final NewsArticleRepository articles;
 	private final SentimentAnalyzer analyzer;
 	private final BreakingNewsAlertService breakingNews;
+	private final MacroKeywordMissRepository macroMisses;
 
 	public NewsSentimentAgent(NewsArticleRepository articles, SentimentAnalyzer analyzer,
-			BreakingNewsAlertService breakingNews) {
+			BreakingNewsAlertService breakingNews, MacroKeywordMissRepository macroMisses) {
 		this.articles = articles;
 		this.analyzer = analyzer;
 		this.breakingNews = breakingNews;
+		this.macroMisses = macroMisses;
 	}
 
 	@Override
@@ -64,7 +66,13 @@ public class NewsSentimentAgent implements Agent {
 		if (analysis.macro()) {
 			// LLM-caught macro relevance, independent of MacroRelevanceTagger's keyword match at ingest
 			// time — catches genuinely global geopolitical/macro stories the keyword list doesn't name.
+			boolean keywordAlreadyCaughtIt = article.hasMacroTag();
 			article.addMacroTag();
+			if (!keywordAlreadyCaughtIt) {
+				// A genuine miss — the keyword list should have caught this and didn't. Log it as
+				// evidence for MacroKeywordLearningService's weekly review.
+				macroMisses.save(new MacroKeywordMiss(articleId, article.getHeadline(), article.getSummary()));
+			}
 		}
 		articles.save(article);
 		log.debug("news sentiment: article {} -> {} (score={}, relevance={}, macro={})",
