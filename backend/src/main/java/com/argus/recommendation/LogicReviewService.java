@@ -23,7 +23,9 @@ import tools.jackson.databind.json.JsonMapper;
  * record and proposes per-agent weight-multiplier <em>factors</em> (e.g. "trust social 15% less"). The
  * agent then <b>backtests</b> those factors by re-scoring every closed trade through the real
  * {@link ProbabilityScoringEngine} and only adopts them if they lower the Brier score (better-calibrated)
- * without hurting directional accuracy, over a minimum sample. So the LLM widens the space of ideas;
+ * <em>and</em> strictly raise directional accuracy, over a minimum sample — calibration alone isn't
+ * enough to ship, since a factor set can sharpen confidence without ever changing which calls are
+ * actually right. So the LLM widens the space of ideas;
  * realized historical outcomes — not the model's say-so — decide what ships. Adopted factors multiply
  * into the live per-agent multipliers (clamped to the tuning bounds) and the change is fully reversible
  * (the next tuning recompute re-derives the base from outcomes). Every run is logged to
@@ -114,8 +116,9 @@ public class LogicReviewService {
 		proposals.forEach(p -> factors.put(p.agent(), p.factor()));
 		Score proposed = backtest(evals, factors);
 
-		boolean improves = proposed.brier() <= baseline.brier() - props.brierMargin()
-				&& proposed.accuracy() >= baseline.accuracy();
+		boolean brierImproved = brierImproved(baseline, proposed, props.brierMargin());
+		boolean accuracyImproved = accuracyImproved(baseline, proposed);
+		boolean improves = brierImproved && accuracyImproved;
 		boolean adopt = improves && props.autoApply() && !factors.isEmpty();
 
 		String reason;
@@ -123,8 +126,11 @@ public class LogicReviewService {
 			reason = "Model proposed no actionable changes — keeping current logic.";
 		}
 		else if (!improves) {
-			reason = "Proposed changes didn't beat current on the backtest (Brier %.4f → %.4f) — rejected."
-					.formatted(baseline.brier(), proposed.brier());
+			String why = !brierImproved && !accuracyImproved
+					? "neither Brier nor accuracy improved"
+					: !brierImproved ? "Brier didn't improve enough" : "accuracy didn't actually improve (must beat, not just match, the baseline)";
+			reason = "Proposed changes rejected (%s): Brier %.4f → %.4f, accuracy %.1f%% → %.1f%%."
+					.formatted(why, baseline.brier(), proposed.brier(), baseline.accuracy() * 100, proposed.accuracy() * 100);
 		}
 		else if (!props.autoApply()) {
 			reason = "Proposed changes improve the backtest (Brier %.4f → %.4f) but auto-apply is off — logged only."
@@ -344,10 +350,32 @@ public class LogicReviewService {
 		return Math.round(v * 100.0) / 100.0;
 	}
 
+	/**
+	 * Whether the proposed calibration is enough of a gain to ship. {@code brierMargin} guards
+	 * against noise-level Brier wobble — anything less than this improvement doesn't count.
+	 * Package-visible for tests.
+	 */
+	static boolean brierImproved(Score baseline, Score proposed, double brierMargin) {
+		return proposed.brier() <= baseline.brier() - brierMargin;
+	}
+
+	/**
+	 * Whether the proposed factors actually call more trades correctly than the baseline — strictly
+	 * more, not just "no worse". A change that only reshapes stated confidence without ever flipping
+	 * a wrong call to right is calibration, not improvement, and shouldn't be adopted as one: this
+	 * was previously {@code >=}, which let the review adopt runs where accuracy stayed exactly flat
+	 * for weeks (confirmed against production history) while still being logged as "adopted... backtest
+	 * improved". Package-visible for tests.
+	 */
+	static boolean accuracyImproved(Score baseline, Score proposed) {
+		return proposed.accuracy() > baseline.accuracy();
+	}
+
 	/** A closed trade's recommendation plus the direction the market actually went (package-visible for tests). */
 	record Eval(Recommendation rec, SignalDirection actual) {
 	}
 
-	private record Score(double accuracy, double brier) {
+	/** Package-visible (not private) so {@link #brierImproved} / {@link #accuracyImproved} are testable. */
+	record Score(double accuracy, double brier) {
 	}
 }

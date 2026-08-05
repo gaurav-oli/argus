@@ -55,4 +55,44 @@ class LogicReviewServiceTest {
 				SignalDirection.BEARISH);
 		assertTrue(LogicReviewService.dissentStats(List.of(e)).isEmpty());
 	}
+
+	// ---- adoption decision (the actual bug: Brier moved but accuracy stayed exactly flat for
+	// weeks in production, yet the old `>=` check let every one of those runs get adopted) ----
+
+	@Test
+	void calibrationOnlyChangeIsNotAdopted() {
+		// Real production shape: Brier genuinely improves, accuracy doesn't move at all.
+		var baseline = new LogicReviewService.Score(0.389, 0.3155);
+		var proposed = new LogicReviewService.Score(0.389, 0.3034);
+
+		assertTrue(LogicReviewService.brierImproved(baseline, proposed, 0.01));
+		assertFalse(LogicReviewService.accuracyImproved(baseline, proposed));
+	}
+
+	@Test
+	void accuracyRegressionIsNotAdoptedEvenIfBrierImproves() {
+		var baseline = new LogicReviewService.Score(0.50, 0.32);
+		var proposed = new LogicReviewService.Score(0.45, 0.28);
+
+		assertTrue(LogicReviewService.brierImproved(baseline, proposed, 0.01));
+		assertFalse(LogicReviewService.accuracyImproved(baseline, proposed));
+	}
+
+	@Test
+	void genuineImprovementOnBothAxesIsAdopted() {
+		var baseline = new LogicReviewService.Score(0.389, 0.3155);
+		var proposed = new LogicReviewService.Score(0.417, 0.3034); // 14/36 -> 15/36 correct
+
+		assertTrue(LogicReviewService.brierImproved(baseline, proposed, 0.01));
+		assertTrue(LogicReviewService.accuracyImproved(baseline, proposed));
+	}
+
+	@Test
+	void brierMarginBlocksNoiseLevelCalibrationWobble() {
+		var baseline = new LogicReviewService.Score(0.417, 0.3155);
+		var proposed = new LogicReviewService.Score(0.444, 0.3149); // real accuracy gain, trivial Brier wobble
+
+		assertFalse(LogicReviewService.brierImproved(baseline, proposed, 0.01));
+		assertTrue(LogicReviewService.accuracyImproved(baseline, proposed));
+	}
 }
