@@ -4,10 +4,17 @@ import { AgentActivity, type PipelineAgent } from "@/components/dashboard/AgentA
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { getAgentStatus, getBudgetStatus, type AgentStatus, type BudgetStatus } from "@/lib/apiClient";
+import {
+  getAgentStatus,
+  getBudgetStatus,
+  triggerMacroKeywordReview,
+  type AgentStatus,
+  type BudgetStatus,
+  type MacroKeywordReviewResult,
+} from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { subscribeToTopic } from "@/lib/wsClient";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * Agents dashboard (Epic 9, Story 9.1). Live per-agent status from /api/agents/status: what each
@@ -265,7 +272,56 @@ function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
       )}
 
       {!partial && !planned && agent.note && <NoteLine note={agent.note} />}
+      {agent.id === "macro" && <MacroKeywordReviewButton />}
     </MotionCard>
+  );
+}
+
+/**
+ * Manual trigger for Agent 8's weekly keyword-learning review (MacroKeywordLearningService) — rather
+ * than waiting for the Sunday cron. Shows the resulting reason inline: what it considered, and
+ * whether anything was actually learned.
+ */
+function MacroKeywordReviewButton() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<MacroKeywordReviewResult | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const onReview = useCallback(async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const r = await triggerMacroKeywordReview();
+      setResult(r);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-[var(--hairline)] pt-3.5">
+      <button
+        type="button"
+        onClick={onReview}
+        disabled={busy}
+        className="self-start rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {busy ? "Reviewing…" : "Review Now"}
+      </button>
+      {result && (
+        <p className="text-[11px] leading-relaxed text-text-secondary">
+          {result.adopted.length > 0 && (
+            <span className="mr-1 font-semibold text-gains">
+              +{result.adopted.length} keyword{result.adopted.length === 1 ? "" : "s"} learned:
+            </span>
+          )}
+          {result.reason}
+        </p>
+      )}
+      {failed && <p className="text-[11px] text-losses">Couldn&apos;t run the review — try again in a moment.</p>}
+    </div>
   );
 }
 

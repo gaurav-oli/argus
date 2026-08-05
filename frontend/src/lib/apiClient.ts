@@ -742,7 +742,7 @@ export const sendPortfolioChat = (
 
 // ---- Agents / Operations dashboard (Epic 9, Story 9.1) ----
 
-/** Live status of one agent in the fleet (architecture's 7-agent roster). */
+/** Live status of one agent in the fleet (architecture's 8-agent roster). */
 export interface AgentStatus {
   id: string;
   code: string;
@@ -763,6 +763,26 @@ export interface AgentStatus {
 
 export const getAgentStatus = (): Promise<AgentStatus[]> =>
   apiGet<AgentStatus[]>("/api/agents/status");
+
+/** One proposed (or adopted) keyword from Agent 8's weekly self-learning review. */
+export interface MacroKeywordProposal {
+  keyword: string;
+  why: string;
+  corroboration: number;
+}
+
+/** Result of one macro-keyword learning review — the "learning feedback" record for Agent 8. */
+export interface MacroKeywordReviewResult {
+  ran: boolean;
+  missesConsidered: number;
+  proposals: MacroKeywordProposal[];
+  adopted: MacroKeywordProposal[];
+  reason: string;
+}
+
+/** Manual trigger for Agent 8's keyword-learning review, rather than waiting for the weekly cron. */
+export const triggerMacroKeywordReview = (): Promise<MacroKeywordReviewResult> =>
+  apiPost<MacroKeywordReviewResult>("/api/intelligence/macro-keywords/review");
 
 /** One item in the dashboard Live Alerts feed — composed from real agent output. */
 export interface LiveAlert {
