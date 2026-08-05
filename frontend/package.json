@@ -10,6 +10,12 @@
   },
   "dependencies": {
     "@stomp/stompjs": "^7.3.0",
+    "@tsparticles/engine": "^4.3.2",
+    "@tsparticles/react": "^4.3.2",
+    "@tsparticles/slim": "^4.3.2",
+    "@tsparticles/updater-opacity": "^4.3.2",
+    "@tsparticles/updater-out-modes": "^4.3.2",
+    "@tsparticles/updater-size": "^4.3.2",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "lightweight-charts": "^5.2.0",
