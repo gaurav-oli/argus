@@ -51,7 +51,7 @@ public class JournalService {
 		JsonNode snap = parseSnapshot(d.getSnapshot());
 		return new JournalEntryView(d.getId(), d.getRecommendationId(),
 				snap.path("ticker").asString(""), snap.path("direction").asString(""),
-				d.getDecision().name(), d.getDecidedAt(), outcomeOf(avgReturnPct), avgReturnPct);
+				d.getDecision().name(), d.getSource().name(), d.getDecidedAt(), outcomeOf(avgReturnPct), avgReturnPct);
 	}
 
 	private JournalDetailView toDetailView(TradeDecision d, Double avgReturnPct) {
@@ -71,7 +71,7 @@ public class JournalService {
 				snap.path("bullProbability").decimalValue(null),
 				snap.path("bearProbability").decimalValue(null),
 				snap.path("confidence").decimalValue(null),
-				d.getDecision().name(), d.getReasoning(), d.getDecidedAt(),
+				d.getDecision().name(), d.getSource().name(), d.getReasoning(), d.getDecidedAt(),
 				d.getEntryPrice(), d.getPositionSize(), signals, personaVerdicts,
 				outcomeOf(avgReturnPct), avgReturnPct);
 	}
@@ -91,15 +91,17 @@ public class JournalService {
 
 	// ---- DTOs ----
 
-	/** One journal row. {@code outcome} is WIN/LOSS/PENDING; {@code outcomeReturnPct} is null when pending. */
+	/** One journal row. {@code outcome} is WIN/LOSS/PENDING; {@code outcomeReturnPct} is null when
+	 * pending. {@code source} is USER (a card confirmed by hand) or AGENT (the Investor persona acting
+	 * on its own paper trades). */
 	public record JournalEntryView(Long decisionId, Long recommendationId, String ticker, String direction,
-			String decision, java.time.Instant decidedAt, String outcome, Double outcomeReturnPct) {
+			String decision, String source, java.time.Instant decidedAt, String outcome, Double outcomeReturnPct) {
 	}
 
 	/** Full frozen snapshot + entry details + the same outcome derivation as the list view. */
 	public record JournalDetailView(Long decisionId, Long recommendationId, String ticker, String direction,
 			BigDecimal bullProbability, BigDecimal bearProbability, BigDecimal confidence,
-			String decision, String reasoning, java.time.Instant decidedAt,
+			String decision, String source, String reasoning, java.time.Instant decidedAt,
 			BigDecimal entryPrice, BigDecimal positionSize,
 			List<SignalDetail> signals, List<PersonaVerdictDetail> personaVerdicts,
 			String outcome, Double outcomeReturnPct) {

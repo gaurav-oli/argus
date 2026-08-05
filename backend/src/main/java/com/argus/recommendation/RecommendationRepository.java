@@ -19,4 +19,9 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 	/** A single recommendation with its diagnostic signals eagerly loaded. */
 	@org.springframework.data.jpa.repository.EntityGraph(attributePaths = "signals")
 	Optional<Recommendation> findWithSignalsById(Long id);
+
+	/** Recommendations with no {@link TradeDecision} yet — the Investor's live hook only records one at
+	 * creation time, so this is what the startup backfill (and any future gap) reconciles against. */
+	@Query("select r from Recommendation r where r.id not in (select d.recommendationId from TradeDecision d)")
+	List<Recommendation> findMissingDecision();
 }

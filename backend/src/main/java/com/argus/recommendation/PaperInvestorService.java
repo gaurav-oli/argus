@@ -3,6 +3,7 @@ package com.argus.recommendation;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.LivePortfolioService;
+import com.argus.recommendation.TradeDecision.Decision;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -78,7 +79,17 @@ public class PaperInvestorService {
 	 * (ticker, direction, horizon) thesis is already open. When every horizon is already open the
 	 * recommendation instead re-affirms the open legs (the restatement is itself signal, and counting
 	 * it avoids the duplicate-trade pseudo-replication the learning loop would mistake for evidence).
-	 * No-op for a NEUTRAL call or an unpriced ticker. Best-effort — never breaks the trigger.
+	 * The {@code NEUTRAL} check is defensive only — {@link Recommendation}'s direction is always a
+	 * binary bull/bear call ({@code Recommendation(String, ProbabilityScore, ...)}: {@code bull ≥ 0.5 ?
+	 * BULLISH : BEARISH}), so this never actually fires for real data; kept in case that ever changes.
+	 * No-op for an unpriced ticker either. Best-effort — never breaks the trigger.
+	 *
+	 * <p>This is also where the Investor's Taken decision gets recorded (Trade Journal, regret analysis
+	 * — {@link TradeConfirmationService#recordAgentDecision}): successfully opening or re-affirming a
+	 * position is the Investor taking the call. There is currently no agent-driven Declined path — the
+	 * Investor acts on every priced, non-duplicate recommendation it gets, so Declined stays reserved
+	 * for an actual human pass on a card. An unpriced ticker or the recommendation-id dedup guard are
+	 * infra/idempotency skips, not decisions, so neither records anything.
 	 */
 	@Transactional
 	public List<SimulatedTrade> open(Recommendation rec) {
@@ -120,6 +131,7 @@ public class PaperInvestorService {
 								.reduce((a, b) -> a + "/" + b).orElse("-"),
 						spy == null ? "n/a" : spy);
 			}
+			confirmations.recordAgentDecision(rec.getId(), Decision.TAKEN);
 			return opened;
 		} catch (RuntimeException ex) {
 			log.warn("Investor: failed to open paper trade for {}: {}",

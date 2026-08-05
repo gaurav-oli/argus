@@ -12,9 +12,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * A user's Taken/Declined decision on a recommendation, with an immutable {@code snapshot} of the
- * signals + reasoning captured at decision time (Story 6.7, FR-14b). The actual {@code outcome} is
- * recorded later without mutating the snapshot.
+ * A Taken/Declined decision on a recommendation, with an immutable {@code snapshot} of the signals +
+ * reasoning captured at decision time (Story 6.7, FR-14b). The actual {@code outcome} is recorded later
+ * without mutating the snapshot. {@code source} distinguishes who decided: the Investor persona acting
+ * autonomously on its own paper trades ({@link Source#AGENT}, via
+ * {@link TradeConfirmationService#recordAgentDecision}) vs a human confirming a card
+ * ({@link Source#USER}, via {@link TradeConfirmationService#confirm}) — both can exist for the same
+ * recommendation, since a human weighing in doesn't erase what the algorithm already did.
  */
 @Entity
 @Table(name = "trade_decisions")
@@ -23,6 +27,8 @@ public class TradeDecision {
 	public enum Decision { TAKEN, DECLINED }
 
 	public enum Outcome { WIN, LOSS }
+
+	public enum Source { USER, AGENT }
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -59,22 +65,23 @@ public class TradeDecision {
 	@Column(name = "position_size")
 	private BigDecimal positionSize;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private Source source;
+
 	protected TradeDecision() {
 		// JPA
 	}
 
-	public TradeDecision(Long recommendationId, Decision decision, String reasoning, String snapshot) {
-		this(recommendationId, decision, reasoning, snapshot, null, null);
-	}
-
 	public TradeDecision(Long recommendationId, Decision decision, String reasoning, String snapshot,
-			BigDecimal entryPrice, BigDecimal positionSize) {
+			BigDecimal entryPrice, BigDecimal positionSize, Source source) {
 		this.recommendationId = recommendationId;
 		this.decision = decision;
 		this.reasoning = reasoning;
 		this.snapshot = snapshot;
 		this.entryPrice = entryPrice;
 		this.positionSize = positionSize;
+		this.source = source;
 	}
 
 	/** Record the realized outcome once (idempotent — a set outcome is not overwritten). */
@@ -119,5 +126,9 @@ public class TradeDecision {
 
 	public BigDecimal getPositionSize() {
 		return positionSize;
+	}
+
+	public Source getSource() {
+		return source;
 	}
 }

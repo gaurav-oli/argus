@@ -236,11 +236,14 @@ function RegretCard({ r }: { r: RegretView }) {
   const gap = r.regretGapPct;
   return (
     <MotionCard index={3} interactive={false} className="flex flex-col gap-4">
-      <SectionHead title="Regret analysis" sub="How your taken vs declined calls actually played out." />
+      <SectionHead
+        title="Regret analysis"
+        sub="How recommendations that were acted on vs. passed on actually performed."
+      />
       {!hasData ? (
         <Empty>
-          Needs decided recommendations with closed paper trades — decide on a few calls and check back
-          after their horizons resolve.
+          Needs decided recommendations with closed paper trades — check back once the Investor
+          persona&apos;s open positions start resolving.
         </Empty>
       ) : (
         <>

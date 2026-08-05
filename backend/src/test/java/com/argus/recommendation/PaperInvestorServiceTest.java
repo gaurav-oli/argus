@@ -167,6 +167,65 @@ class PaperInvestorServiceTest {
 		verify(trades, never()).save(any());
 	}
 
+	// ---- open() is also where the Investor's Taken decision gets recorded (Trade Journal, regret
+	// analysis) — opening/re-affirming a position is taking the call. Recommendation's direction is
+	// always a binary bull/bear call in practice (never NEUTRAL), so there's no agent-driven Declined
+	// path today; NEUTRAL here is only exercising the defensive branch. ----
+
+	@Test
+	void neutralCallRecordsNoDecision() {
+		investor.open(rec("AAPL", SignalDirection.NEUTRAL, 1L));
+		verify(confirmations, never()).recordAgentDecision(any(), any());
+	}
+
+	@Test
+	void unpricedTickerRecordsNoDecision() {
+		// An infra gap (no live price), not a real decision — must not be logged as either taken or declined.
+		when(prices.latestPrice("XYZ")).thenReturn(Optional.empty());
+		investor.open(rec("XYZ", SignalDirection.BULLISH, 2L));
+		verify(confirmations, never()).recordAgentDecision(any(), any());
+	}
+
+	@Test
+	void duplicateRecommendationRecordsNoDecision() {
+		// Idempotency guard, not a new decision — recordAgentDecision itself is separately idempotent,
+		// but this path shouldn't even attempt it.
+		when(trades.existsByRecommendationId(3L)).thenReturn(true);
+		investor.open(rec("AAPL", SignalDirection.BULLISH, 3L));
+		verify(confirmations, never()).recordAgentDecision(any(), any());
+	}
+
+	@Test
+	void openingNewLegsRecordsAgentTaken() {
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
+		when(benchmark.latest()).thenReturn(Optional.of(bd(500)));
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		staggeredInvestor().open(rec("AAPL", SignalDirection.BULLISH, 7L));
+
+		verify(confirmations).recordAgentDecision(7L, TradeDecision.Decision.TAKEN);
+	}
+
+	@Test
+	void reaffirmingAnExistingThesisAlsoRecordsAgentTaken() {
+		// Re-affirming still means the Investor holds (and is restating) a real position — TAKEN, same
+		// as opening a brand-new leg.
+		when(trades.existsByRecommendationId(9L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
+				eq("AAPL"), eq(SignalDirection.BULLISH), anyInt(), eq(SimulatedTrade.Status.OPEN)))
+				.thenReturn(true);
+		SimulatedTrade leg = new SimulatedTrade(1L, "AAPL", SignalDirection.BULLISH, bd(100), bd(50), 7, null);
+		when(trades.findByTickerAndDirectionAndStatus("AAPL", SignalDirection.BULLISH,
+				SimulatedTrade.Status.OPEN)).thenReturn(List.of(leg));
+
+		staggeredInvestor().open(rec("AAPL", SignalDirection.BULLISH, 9L));
+
+		verify(confirmations).recordAgentDecision(9L, TradeDecision.Decision.TAKEN);
+	}
+
 	// ---- close loop feeds graduation ----
 
 	@Test

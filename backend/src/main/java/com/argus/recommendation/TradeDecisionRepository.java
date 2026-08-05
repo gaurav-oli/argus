@@ -12,6 +12,9 @@ public interface TradeDecisionRepository extends JpaRepository<TradeDecision, Lo
 	/** Decisions on one recommendation — outcome wiring from paper-trade closes (regret analysis). */
 	java.util.List<TradeDecision> findByRecommendationId(Long recommendationId);
 
+	/** Idempotency guard for {@code recordAgentDecision} — never overwrite an existing decision. */
+	boolean existsByRecommendationId(Long recommendationId);
+
 	/** Most-recent-first, for the Trade Journal list view (Story 11.1). */
 	java.util.List<TradeDecision> findAllByOrderByDecidedAtDesc();
 }

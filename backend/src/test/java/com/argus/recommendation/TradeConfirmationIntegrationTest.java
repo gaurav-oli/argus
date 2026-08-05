@@ -50,10 +50,14 @@ class TradeConfirmationIntegrationTest {
 	@Autowired
 	PersonaVerdictRepository personaVerdicts;
 
+	@Autowired
+	SimulatedTradeRepository simulatedTrades;
+
 	@BeforeEach
 	void clean() {
 		decisions.deleteAll();
 		trades.deleteAll();
+		simulatedTrades.deleteAll();
 		personaVerdicts.deleteAll();
 		recRepo.deleteAll();
 		graduation.save(new AgentGraduation());
@@ -150,5 +154,95 @@ class TradeConfirmationIntegrationTest {
 
 		assertTrue(d.getSnapshot().contains("\"personaVerdicts\":[]"),
 				"no cached verdicts must freeze as an empty list, not trigger generation or fail");
+	}
+
+	// ---- recordAgentDecision: the Investor persona's own Taken/Declined (Trade Journal, regret) ----
+
+	@Test
+	void agentDecisionIsTaggedWithAgentSource() {
+		Recommendation rec = aRecommendation();
+
+		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
+
+		TradeDecision d = decisions.findByRecommendationId(rec.getId()).get(0);
+		assertEquals(TradeDecision.Source.AGENT, d.getSource());
+		assertEquals(Decision.TAKEN, d.getDecision());
+		assertEquals(RecommendationStatus.TAKEN, recRepo.findById(rec.getId()).orElseThrow().getStatus());
+	}
+
+	@Test
+	void humanConfirmIsTaggedWithUserSource() {
+		Recommendation rec = aRecommendation();
+
+		TradeDecision d = confirmation.confirm(rec.getId(), Decision.TAKEN, "in", null, null);
+
+		assertEquals(TradeDecision.Source.USER, d.getSource());
+	}
+
+	@Test
+	void agentDecisionNeverOverwritesAnExistingOne() {
+		Recommendation rec = aRecommendation();
+		confirmation.confirm(rec.getId(), Decision.DECLINED, "too risky", null, null);
+
+		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
+
+		assertEquals(1, decisions.findByRecommendationId(rec.getId()).size(),
+				"the Investor must not overwrite a decision that already exists");
+		assertEquals(Decision.DECLINED, decisions.findByRecommendationId(rec.getId()).get(0).getDecision());
+	}
+
+	@Test
+	void agentDecisionIsIdempotent() {
+		Recommendation rec = aRecommendation();
+
+		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
+		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
+
+		assertEquals(1, decisions.findByRecommendationId(rec.getId()).size());
+	}
+
+	// ---- backfillAgentDecisions: historical recommendations that predate this wiring ----
+
+	@Test
+	void backfillClassifiesTakenFromAnExistingPaperTrade() {
+		Recommendation rec = aRecommendation();
+		simulatedTrades.save(new SimulatedTrade(rec.getId(), "AAPL", SignalDirection.BULLISH,
+				new BigDecimal("100"), new BigDecimal("50"), 30, null));
+
+		confirmation.backfillAgentDecisions();
+
+		TradeDecision d = decisions.findByRecommendationId(rec.getId()).get(0);
+		assertEquals(Decision.TAKEN, d.getDecision());
+		assertEquals(TradeDecision.Source.AGENT, d.getSource());
+	}
+
+	@Test
+	void backfillClassifiesTakenFromAReaffirmedThesisWithNoDirectTradeRow() {
+		// The exact gap found against real production data: a repeat recommendation that only
+		// re-affirmed an already-open (ticker, direction) thesis never gets its own simulated_trades
+		// row — the leg keeps the id of whichever recommendation opened it FIRST. That still means the
+		// Investor was genuinely acting on this later call too, so it must backfill as TAKEN.
+		Recommendation opener = aRecommendation(); // AAPL BULLISH — opens the thesis
+		simulatedTrades.save(new SimulatedTrade(opener.getId(), "AAPL", SignalDirection.BULLISH,
+				new BigDecimal("100"), new BigDecimal("50"), 30, null));
+		Recommendation reaffirmed = aRecommendation(); // a later AAPL BULLISH call, no trade row of its own
+
+		confirmation.backfillAgentDecisions();
+
+		TradeDecision d = decisions.findByRecommendationId(reaffirmed.getId()).get(0);
+		assertEquals(Decision.TAKEN, d.getDecision());
+		assertEquals(TradeDecision.Source.AGENT, d.getSource());
+	}
+
+	@Test
+	void backfillLeavesGenuinelyUndecidedRecommendationsAlone() {
+		// Non-neutral (real directional call) but no paper trade exists at all for this ticker/direction
+		// — the Investor never got to price it (e.g. an unpriced ticker at the time). Not a decision —
+		// must stay untouched.
+		Recommendation rec = aRecommendation();
+
+		confirmation.backfillAgentDecisions();
+
+		assertTrue(decisions.findByRecommendationId(rec.getId()).isEmpty());
 	}
 }

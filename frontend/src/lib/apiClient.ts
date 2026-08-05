@@ -1154,13 +1154,15 @@ export const getRegret = (): Promise<RegretView> =>
 // ---- Trade Journal (Story 11.1, F22) ----
 
 /** One journal row — mirrors `JournalService.JournalEntryView`. `outcome` is PENDING until a
- * matching paper leg closes; `outcomeReturnPct` is null while pending. */
+ * matching paper leg closes; `outcomeReturnPct` is null while pending. `source` is AGENT for the
+ * Investor persona's own paper trades, USER for a card confirmed by hand. */
 export interface JournalEntryView {
   decisionId: number;
   recommendationId: number;
   ticker: string;
   direction: string;
   decision: "TAKEN" | "DECLINED";
+  source: "USER" | "AGENT";
   decidedAt: string;
   outcome: "WIN" | "LOSS" | "PENDING";
   outcomeReturnPct: number | null;
@@ -1190,6 +1192,7 @@ export interface JournalDetailView {
   bearProbability: number | null;
   confidence: number | null;
   decision: "TAKEN" | "DECLINED";
+  source: "USER" | "AGENT";
   reasoning: string | null;
   decidedAt: string;
   entryPrice: number | null;

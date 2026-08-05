@@ -39,12 +39,12 @@ export function TradeJournal() {
     <MotionCard index={4} interactive={false} className="flex flex-col gap-4">
       <SectionHead
         title="Trade Journal"
-        sub="Every recommendation you've taken or declined, with the reasoning frozen at the moment you decided."
+        sub="Every recommendation taken or declined — by the Investor persona's own paper trades, or by you — with the reasoning frozen at that moment."
       />
       {entries === null ? (
         <Skeleton className="h-40" />
       ) : entries.length === 0 ? (
-        <Empty>Decide on a recommendation (Take or Decline) to start your journal.</Empty>
+        <Empty>Nothing decided yet — entries appear as soon as the Investor persona acts on a recommendation.</Empty>
       ) : (
         <ul className="flex flex-col divide-y divide-border/60">
           {entries.map((e) => (
@@ -94,6 +94,7 @@ function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: stri
           >
             {entry.decision === "TAKEN" ? "Taken" : "Declined"}
           </span>
+          <SourceBadge source={entry.source} />
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11px] text-text-secondary">
@@ -129,7 +130,9 @@ function JournalDetail({ detail }: { detail: JournalDetailView }) {
 
       {detail.reasoning && (
         <p className="text-text-primary">
-          <span className="font-medium text-text-secondary">Your reasoning: </span>
+          <span className="font-medium text-text-secondary">
+            {detail.source === "AGENT" ? "Investor's reasoning: " : "Your reasoning: "}
+          </span>
           {detail.reasoning}
         </p>
       )}
@@ -177,6 +180,20 @@ function JournalDetail({ detail }: { detail: JournalDetailView }) {
           : "Outcome is the Investor's paper-trade return vs SPY for this recommendation, the same figure Regret analysis uses."}
       </p>
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: JournalEntryView["source"] }) {
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[10px] font-medium",
+        source === "AGENT" ? "bg-accent/15 text-accent" : "bg-border/60 text-text-secondary",
+      )}
+      title={source === "AGENT" ? "The Investor persona's own paper trade" : "Confirmed by you"}
+    >
+      {source === "AGENT" ? "Agent" : "You"}
+    </span>
   );
 }
 

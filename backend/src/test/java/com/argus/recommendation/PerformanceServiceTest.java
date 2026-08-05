@@ -152,7 +152,7 @@ class PerformanceServiceTest {
 	}
 
 	private static TradeDecision decision(Long recId, Decision d) {
-		return new TradeDecision(recId, d, "why", "{}");
+		return new TradeDecision(recId, d, "why", "{}", null, null, TradeDecision.Source.USER);
 	}
 
 	/** A closed leg with a vs-SPY excess return (the figure regret scoring prefers). */
