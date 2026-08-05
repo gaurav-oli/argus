@@ -2,7 +2,6 @@
 
 import { BankIcon } from "@/components/ui/BankIcon";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
-import { MotionCard } from "@/components/ui/MotionCard";
 import {
   getCash,
   getPortfolioValue,
@@ -59,13 +58,11 @@ type TypeRollup = {
 };
 
 /**
- * The Holdings ledger (Story 3.5 + Multi-Bank Holdings). Live from `/topic/portfolio`.
- *
- * Information architecture (redesigned — the flat per-owner mega-table made it hard to tell which
- * account was on screen while scrolling, and cash/rollup/detail repeated the same numbers three
- * times): a compact cross-bank summary up top, an owner switcher so the household's four ledgers
- * don't have to be read as one continuous scroll, then each owner as a distinct panel containing one
- * clearly-bordered card per account (cash shown as a plain stat, not a disguised fake holding row).
+ * The Holdings ledger (Story 3.5 + Multi-Bank Holdings, redesigned to cut the redundancy of showing
+ * every position at three simultaneous levels of detail). One table: account type is the resting
+ * state — a handful of rows in CAD — and clicking a row is the only way to reach the underlying
+ * accounts and their positions. Nothing renders pre-expanded, so nothing competes for attention with
+ * everything else.
  */
 export function HoldingsTable() {
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
@@ -119,7 +116,7 @@ export function HoldingsTable() {
   const totalUsd = snap?.totalValueUsd ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-medium text-text-primary">Holdings by account</h3>
         <span className="text-xs text-text-secondary tabular-nums">
@@ -129,21 +126,14 @@ export function HoldingsTable() {
 
       <OwnerTabs owners={owners} selected={selectedOwner} onSelect={setSelectedOwner} />
 
-      <AccountTypeRollup owners={visibleOwners} fx={fx} />
-
-      <div className="flex flex-col gap-4">
-        {visibleOwners.map((o, i) => (
-          <OwnerPanel key={o.key} owner={o} fx={fx} index={i} onRemoveCash={removeCash} logos={logos} />
-        ))}
-      </div>
+      <Ledger owners={visibleOwners} fx={fx} logos={logos} onRemoveCash={removeCash} />
     </div>
   );
 }
 
 /**
- * Owner switcher — the single biggest fix for "which account am I looking at": instead of every
- * owner's full ledger stacked in one endless scroll, pick one household member (or "All") and only
- * their panel renders below. Also scopes the cross-bank rollup, so one control filters everything.
+ * Owner switcher — instead of every owner's full ledger stacked in one endless scroll, pick one
+ * household member (or "All") and only their rows render below.
  */
 function OwnerTabs({
   owners,
@@ -205,12 +195,22 @@ function TabButton({
 }
 
 /**
- * Combined-by-account-type rollup (Multi-Bank Holdings). For each owner, the same registration type
- * is summed ACROSS banks — e.g. an owner's NBDB TFSA + RBC TFSA shown as one TFSA line with total
- * invested and gain/loss (CAD). Owners never merge (a corporation stays its own owner), so nothing
- * crosses an ownership boundary. Each type row expands to the underlying per-bank accounts.
+ * The one ledger table (replaces the old always-expanded rollup + separate per-owner cards). Each
+ * (owner, account type) row is the resting state — invested/market/cash/gain-loss summed across
+ * banks. Expanding it is the only way to reach the underlying accounts, and each account's cash and
+ * positions render inline right there, so nothing is ever shown at two levels of detail at once.
  */
-function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number }) {
+function Ledger({
+  owners,
+  fx,
+  logos,
+  onRemoveCash,
+}: {
+  owners: OwnerGroup[];
+  fx: number;
+  logos: Record<string, string>;
+  onRemoveCash: (c: CashBalanceView) => void;
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
     setExpanded((prev) => {
@@ -226,194 +226,122 @@ function AccountTypeRollup({ owners, fx }: { owners: OwnerGroup[]; fx: number })
   if (ownerRollups.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <h4 className="text-sm font-semibold text-text-primary">Summary — combined by account type</h4>
-      <p className="text-xs text-text-secondary">
-        Same registration summed across banks, within each owner (in CAD). Invested and gain/loss cover
-        securities; uninvested cash is shown separately.
-      </p>
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full min-w-[720px] text-left text-sm tabular-nums">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-text-secondary">
-              <th className="px-3 py-2 font-medium">Owner / Type</th>
-              <th className="hidden px-3 py-2 font-medium sm:table-cell">Banks</th>
-              <th className="px-3 py-2 text-right font-medium">Invested ≈CAD</th>
-              <th className="px-3 py-2 text-right font-medium">Market ≈CAD</th>
-              <th className="px-3 py-2 text-right font-medium">Cash ≈CAD</th>
-              <th className="px-3 py-2 text-right font-medium">Gain / Loss</th>
-            </tr>
-          </thead>
-          {ownerRollups.map(({ owner, types }) => (
-            <tbody key={owner.key}>
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <table className="w-full min-w-[720px] text-left text-sm tabular-nums">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wide text-text-secondary">
+            <th className="px-3 py-2 font-medium">Account type</th>
+            <th className="hidden px-3 py-2 font-medium sm:table-cell">Banks</th>
+            <th className="px-3 py-2 text-right font-medium">Invested ≈CAD</th>
+            <th className="px-3 py-2 text-right font-medium">Market ≈CAD</th>
+            <th className="px-3 py-2 text-right font-medium">Cash ≈CAD</th>
+            <th className="px-3 py-2 text-right font-medium">Gain / Loss</th>
+          </tr>
+        </thead>
+        {ownerRollups.map(({ owner, types }) => (
+          <tbody key={owner.key}>
+            {ownerRollups.length > 1 || owners.length > 1 ? (
               <tr className="border-t border-border bg-[var(--hover-wash)]">
                 <td className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-secondary" colSpan={6}>
                   {owner.ownerType ? `${owner.ownerType} · ` : ""}
                   {owner.ownerName ?? "Unassigned"}
                 </td>
               </tr>
-              {types.map((r) => {
-                const pct = r.invested > 0 ? (r.pnlCad / r.invested) * 100 : null;
-                const isOpen = expanded.has(r.key);
-                const canExpand = r.accounts.length > 1 || r.institutions.length > 1;
-                return (
-                  <Fragment key={r.key}>
-                    <tr
-                      className={cn(
-                        "border-t border-border/60",
-                        canExpand && "cursor-pointer hover:bg-[var(--hover-wash)]",
-                      )}
-                      onClick={canExpand ? () => toggle(r.key) : undefined}
-                    >
-                      <td className="px-3 py-2 font-medium text-text-primary">
-                        {canExpand && (
-                          <span className="mr-1.5 inline-block w-2 text-text-secondary">{isOpen ? "▾" : "▸"}</span>
-                        )}
-                        {r.accountType}
-                      </td>
-                      <td className="hidden px-3 py-2 sm:table-cell">
-                        <div className="flex flex-wrap gap-1">
-                          {r.institutions.length > 0
-                            ? r.institutions.map((inst) => (
-                                <Pill key={inst} muted icon={<BankIcon institution={inst} size={12} />}>
-                                  {inst}
-                                </Pill>
-                              ))
-                            : <span className="text-text-secondary">—</span>}
+            ) : null}
+            {types.map((r) => {
+              const pct = r.invested > 0 ? (r.pnlCad / r.invested) * 100 : null;
+              const isOpen = expanded.has(r.key);
+              return (
+                <Fragment key={r.key}>
+                  <tr
+                    className="cursor-pointer border-t border-border/60 hover:bg-[var(--hover-wash)]"
+                    onClick={() => toggle(r.key)}
+                  >
+                    <td className="px-3 py-3 font-medium text-text-primary">
+                      <span className="mr-1.5 inline-block w-2 text-text-secondary">{isOpen ? "▾" : "▸"}</span>
+                      {r.accountType}
+                      <span className="ml-2 text-xs font-normal text-text-secondary">
+                        {r.accounts.length} account{r.accounts.length === 1 ? "" : "s"}
+                      </span>
+                    </td>
+                    <td className="hidden px-3 py-3 sm:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {r.institutions.length > 0
+                          ? r.institutions.map((inst) => (
+                              <Pill key={inst} muted icon={<BankIcon institution={inst} size={12} />}>
+                                {inst}
+                              </Pill>
+                            ))
+                          : <span className="text-text-secondary">—</span>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right text-text-primary">{money(r.invested)}</td>
+                    <td className="px-3 py-3 text-right text-text-primary">{money(r.marketCad)}</td>
+                    <td className="px-3 py-3 text-right text-text-secondary">{r.cashCad > 0 ? money(r.cashCad) : "—"}</td>
+                    <td className={`px-3 py-3 text-right font-medium ${pnlClass(r.pnlCad)}`}>
+                      {signedMoney(r.pnlCad)}
+                      {pct != null && <span className="ml-1 text-[11px]">({pct >= 0 ? "+" : ""}{pct.toFixed(2)}%)</span>}
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-t border-border/40 bg-surface">
+                      <td colSpan={6} className="px-3 pb-5 pl-8 pt-1">
+                        <div className="flex flex-col gap-5">
+                          {r.accounts.map((a) => (
+                            <AccountDetail
+                              key={a.key}
+                              account={a}
+                              fx={fx}
+                              logos={logos}
+                              onRemoveCash={onRemoveCash}
+                              showAccountSummary={r.accounts.length > 1}
+                            />
+                          ))}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right text-text-primary">{money(r.invested)}</td>
-                      <td className="px-3 py-2 text-right text-text-primary">{money(r.marketCad)}</td>
-                      <td className="px-3 py-2 text-right text-text-secondary">{r.cashCad > 0 ? money(r.cashCad) : "—"}</td>
-                      <td className={`px-3 py-2 text-right font-medium ${pnlClass(r.pnlCad)}`}>
-                        {signedMoney(r.pnlCad)}
-                        {pct != null && <span className="ml-1 text-[11px]">({pct >= 0 ? "+" : ""}{pct.toFixed(2)}%)</span>}
-                      </td>
                     </tr>
-                    {isOpen &&
-                      r.accounts.map((a) => {
-                        const t = accountCad(a, fx);
-                        const apct = t.invested > 0 ? (t.pnl / t.invested) * 100 : null;
-                        return (
-                          <tr key={a.key} className="border-t border-border/40 bg-surface text-[13px]">
-                            <td className="px-3 py-1.5 pl-8 text-text-secondary">{a.accountName}</td>
-                            <td className="hidden px-3 py-1.5 sm:table-cell">
-                              {a.institution ? (
-                                <Pill muted icon={<BankIcon institution={a.institution} size={12} />}>
-                                  {a.institution}
-                                </Pill>
-                              ) : (
-                                <span className="text-text-secondary">—</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.invested)}</td>
-                            <td className="px-3 py-1.5 text-right text-text-secondary">{money(t.market)}</td>
-                            <td className="px-3 py-1.5 text-right text-text-secondary">{t.cash > 0 ? money(t.cash) : "—"}</td>
-                            <td className={`px-3 py-1.5 text-right ${pnlClass(t.pnl)}`}>
-                              {signedMoney(t.pnl)}
-                              {apct != null && <span className="ml-1 text-[11px]">({apct >= 0 ? "+" : ""}{apct.toFixed(2)}%)</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          ))}
-        </table>
-      </div>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        ))}
+      </table>
     </div>
   );
 }
 
 /**
- * One owner's full ledger — a distinct glass panel (the app's established grouping surface) so it
- * reads as one clear unit vs. the other owners, containing one AccountCard per account plus an
- * owner-level total. Replaces the old single continuous table that mixed every account's rows.
+ * One account's detail, inline inside an expanded ledger row: an optional summary line (skipped when
+ * a type has only one account — the parent row already shows those totals), cash as a plain labelled
+ * stat with a remove action, then just that account's positions.
  */
-function OwnerPanel({
-  owner,
-  fx,
-  index,
-  onRemoveCash,
-  logos,
-}: {
-  owner: OwnerGroup;
-  fx: number;
-  index: number;
-  onRemoveCash: (c: CashBalanceView) => void;
-  logos: Record<string, string>;
-}) {
-  let ownerCad = 0;
-  let ownerUsd = 0;
-  for (const a of owner.accounts) {
-    const t = accountTotals(a, fx);
-    ownerCad += t.cad;
-    ownerUsd += t.usd;
-  }
-  const isJoint = (owner.ownerType ?? "").toLowerCase() === "joint";
-
-  return (
-    <MotionCard index={index} interactive={false} className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-              isJoint ? "bg-accent/15 text-accent" : "bg-elevated text-text-secondary",
-            )}
-          >
-            {owner.ownerType ?? "Account"}
-          </span>
-          <h4 className="text-sm font-semibold text-text-primary">{owner.ownerName ?? "Unassigned"}</h4>
-          <span className="text-xs text-text-secondary">
-            {owner.accounts.length} account{owner.accounts.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-sm font-semibold tabular-nums text-text-primary">{money(ownerCad)} CAD</div>
-          <div className="font-mono text-[11px] tabular-nums text-text-secondary">≈ {money(ownerUsd)} USD</div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        {owner.accounts.map((a) => (
-          <AccountCard key={a.key} account={a} fx={fx} onRemoveCash={onRemoveCash} logos={logos} />
-        ))}
-      </div>
-    </MotionCard>
-  );
-}
-
-/**
- * One account, one unambiguous card: name/currency/bank in the header (impossible to lose track of
- * while scrolling), cash as a plain labelled stat (not a fake ticker row), then just that account's
- * holdings in a compact table. This — not a shared background tint on a table row — is what actually
- * fixes "which account am I looking at."
- */
-function AccountCard({
+function AccountDetail({
   account,
   fx,
-  onRemoveCash,
   logos,
+  onRemoveCash,
+  showAccountSummary,
 }: {
   account: AccountGroup;
   fx: number;
-  onRemoveCash: (c: CashBalanceView) => void;
   logos: Record<string, string>;
+  onRemoveCash: (c: CashBalanceView) => void;
+  showAccountSummary: boolean;
 }) {
   const t = accountTotals(account, fx);
+  const cadT = accountCad(account, fx);
+  const apct = cadT.invested > 0 ? (cadT.pnl / cadT.invested) * 100 : null;
   const isCad = account.currency === "CAD";
   const sortedPositions = [...account.positions].sort(
     (a, b) => (b.cadMarketValue ?? 0) - (a.cadMarketValue ?? 0),
   );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border bg-[var(--hover-wash)] px-3.5 py-2.5">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-semibold text-text-primary">{account.accountName}</span>
+          <span className="text-[13px] font-semibold text-text-primary">{account.accountName}</span>
           <Pill>{account.currency}</Pill>
           {account.institution && (
             <Pill muted icon={<BankIcon institution={account.institution} size={12} />}>
@@ -421,12 +349,24 @@ function AccountCard({
             </Pill>
           )}
         </div>
-        <div className="text-right">
-          <div className="font-mono text-[13px] font-semibold tabular-nums text-text-primary">
-            {money(t.cad)} CAD
+        {showAccountSummary ? (
+          <div className="flex items-center gap-4 text-xs">
+            <span className="text-text-secondary">
+              Invested {money(cadT.invested)} · Market {money(cadT.market)}
+            </span>
+            <span className={`font-medium ${pnlClass(cadT.pnl)}`}>
+              {signedMoney(cadT.pnl)}
+              {apct != null && <span className="ml-1 text-[11px]">({apct >= 0 ? "+" : ""}{apct.toFixed(2)}%)</span>}
+            </span>
           </div>
-          <div className="font-mono text-[11px] tabular-nums text-text-secondary">≈ {money(t.usd)} USD</div>
-        </div>
+        ) : (
+          <div className="text-right">
+            <div className="font-mono text-[13px] font-semibold tabular-nums text-text-primary">
+              {money(t.cad)} CAD
+            </div>
+            <div className="font-mono text-[11px] tabular-nums text-text-secondary">≈ {money(t.usd)} USD</div>
+          </div>
+        )}
       </div>
 
       {account.cash.map((c) => {
@@ -435,7 +375,7 @@ function AccountCard({
         return (
           <div
             key={`cash-${c.id}`}
-            className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2 text-[13px]"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--hover-wash)] px-3 py-2 text-[13px]"
           >
             <span className="flex items-center gap-1.5 text-text-secondary">
               <span className="font-medium text-accent">Cash available</span>
@@ -458,23 +398,23 @@ function AccountCard({
       })}
 
       {sortedPositions.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-border/60">
           <table className="w-full text-left text-[13px] tabular-nums">
             <thead>
               <tr className="text-[10px] uppercase tracking-wide text-text-secondary">
-                <th className="px-3.5 py-1.5 font-medium">Symbol</th>
-                <th className="hidden px-3.5 py-1.5 font-medium md:table-cell">Description</th>
-                <th className="px-3.5 py-1.5 text-right font-medium">Qty</th>
-                <th className="hidden px-3.5 py-1.5 text-right font-medium lg:table-cell">Book Value</th>
-                <th className="px-3.5 py-1.5 text-right font-medium">Market Value</th>
-                <th className="px-3.5 py-1.5 text-right font-medium">≈ CAD</th>
-                <th className="px-3.5 py-1.5 text-right font-medium">≈ USD</th>
+                <th className="px-3 py-1.5 font-medium">Symbol</th>
+                <th className="hidden px-3 py-1.5 font-medium md:table-cell">Description</th>
+                <th className="px-3 py-1.5 text-right font-medium">Qty</th>
+                <th className="hidden px-3 py-1.5 text-right font-medium lg:table-cell">Book Value</th>
+                <th className="px-3 py-1.5 text-right font-medium">Market Value</th>
+                <th className="px-3 py-1.5 text-right font-medium">≈ CAD</th>
+                <th className="px-3 py-1.5 text-right font-medium">≈ USD</th>
               </tr>
             </thead>
             <tbody>
               {sortedPositions.map((p) => (
                 <tr key={p.id} className="border-t border-border/40">
-                  <td className="px-3.5 py-1.5 font-medium text-text-primary">
+                  <td className="px-3 py-1.5 font-medium text-text-primary">
                     <span className="flex items-center gap-2">
                       <CompanyIcon
                         ticker={p.ticker}
@@ -486,19 +426,19 @@ function AccountCard({
                       {p.afterHours && <span className="text-[10px] text-warning">AH</span>}
                     </span>
                   </td>
-                  <td className="hidden px-3.5 py-1.5 text-text-secondary md:table-cell">
+                  <td className="hidden px-3 py-1.5 text-text-secondary md:table-cell">
                     {p.companyName ?? "—"}
                     {p.currency === "USD" && isCad && p.price != null && (
                       <span className="ml-1.5 text-[11px] text-text-secondary/70">· US${qty(p.price)}</span>
                     )}
                   </td>
-                  <td className="px-3.5 py-1.5 text-right text-text-primary">{qty(p.shares)}</td>
-                  <td className="hidden px-3.5 py-1.5 text-right text-text-secondary lg:table-cell">{money(p.costBasis)}</td>
-                  <td className="px-3.5 py-1.5 text-right text-text-primary">
+                  <td className="px-3 py-1.5 text-right text-text-primary">{qty(p.shares)}</td>
+                  <td className="hidden px-3 py-1.5 text-right text-text-secondary lg:table-cell">{money(p.costBasis)}</td>
+                  <td className="px-3 py-1.5 text-right text-text-primary">
                     {money(isCad ? p.cadMarketValue : p.usdMarketValue)}
                   </td>
-                  <td className="px-3.5 py-1.5 text-right text-text-primary">{money(p.cadMarketValue)}</td>
-                  <td className="px-3.5 py-1.5 text-right text-text-primary">{money(p.usdMarketValue)}</td>
+                  <td className="px-3 py-1.5 text-right text-text-primary">{money(p.cadMarketValue)}</td>
+                  <td className="px-3 py-1.5 text-right text-text-primary">{money(p.usdMarketValue)}</td>
                 </tr>
               ))}
             </tbody>

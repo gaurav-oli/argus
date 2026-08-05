@@ -30,7 +30,7 @@ export function PageHeader({
         <h1 className="font-display text-2xl font-bold text-text-primary lg:text-[2rem]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-text-secondary">{subtitle}</p>}
       </div>
-      {action && <div className="hidden shrink-0 sm:block">{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </header>
   );
 }
