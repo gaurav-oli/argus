@@ -47,7 +47,7 @@ class BreakingNewsAlertServiceTest {
 	private static NewsArticle article(String headline, SentimentLabel label, double score, double relevance) {
 		NewsArticle a = new NewsArticle("Reuters", "id-" + Math.random(), "u", headline, null,
 				Instant.now(), new String[0]);
-		a.applySentiment(new SentimentAnalysis(label, score, relevance), Instant.now());
+		a.applySentiment(new SentimentAnalysis(label, score, relevance, false), Instant.now());
 		return a;
 	}
 

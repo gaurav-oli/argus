@@ -83,7 +83,7 @@ public class DevDataSeeder {
 			String[] tickers, SentimentLabel label, double score, double relevance) {
 		NewsArticle a = new NewsArticle(source, externalId, "https://example.com/" + externalId,
 				headline, headline + ".", when, tickers);
-		a.applySentiment(new SentimentAnalysis(label, score, relevance), when);
+		a.applySentiment(new SentimentAnalysis(label, score, relevance, false), when);
 		return a;
 	}
 }

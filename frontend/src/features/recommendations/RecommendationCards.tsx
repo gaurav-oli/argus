@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 
 /**
  * Probability Forecast Cards (Epic 6 — Agent 5). Weather-style cards from /api/recommendations:
- * direction, a bull/bear probability bar, confidence (with the Black-Swan cap), 7-agent signal dots,
+ * direction, a bull/bear probability bar, confidence (with the Black-Swan cap), 8-agent signal dots,
  * an expandable diagnostic (Story 6.2), and Taken/Declined actions that snapshot the decision (6.7).
  * Rendered in a horizontal M3-style carousel rather than a stacked grid, so N recommendations don't
  * push the rest of the Intelligence page down the more Agent 5 issues.
@@ -377,11 +377,13 @@ function stanceColor(stance: string): string {
       : "var(--color-text-secondary)";
 }
 
-const AGENT_SLOTS = ["agent-1", "agent-2", "agent-3", "agent-4", "agent-5", "agent-6", "agent-7"];
+const AGENT_SLOTS = [
+  "agent-1", "agent-2", "agent-3", "agent-4", "agent-5", "agent-6", "agent-7", "agent-8",
+];
 
 function SignalDots({ signals }: { signals: SignalView[] }) {
   return (
-    <div className="flex items-center gap-1.5" title="7-agent signals">
+    <div className="flex items-center gap-1.5" title="8-agent signals">
       {AGENT_SLOTS.map((slot) => {
         const s = signals.find((x) => x.agent.startsWith(slot));
         return <span key={slot} className={`h-2.5 w-2.5 rounded-full ${s ? dotColor(s.direction) : "bg-border"}`} />;

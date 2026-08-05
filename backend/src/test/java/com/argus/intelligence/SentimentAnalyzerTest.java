@@ -77,4 +77,24 @@ class SentimentAnalyzerTest {
 		analyze("{\"sentiment\":\"NEUTRAL\",\"score\":0,\"relevance\":0}");
 		verify(gateway).generate(anyString(), eq(ModelTier.SMALL));
 	}
+
+	@Test
+	void parsesMacroTrue() {
+		SentimentAnalysis a = analyze(
+				"{\"sentiment\":\"BEARISH\",\"score\":-0.4,\"relevance\":0.2,\"macro\":true}");
+		assertEquals(true, a.macro());
+	}
+
+	@Test
+	void macroDefaultsFalseWhenFieldMissing() {
+		// Older/looser model replies without the macro field must not accidentally read as macro news.
+		SentimentAnalysis a = analyze("{\"sentiment\":\"BULLISH\",\"score\":0.8,\"relevance\":0.9}");
+		assertEquals(false, a.macro());
+	}
+
+	@Test
+	void nonJsonReplyMacroDefaultsFalse() {
+		SentimentAnalysis a = analyze("[dev-mock] Argus Model Gateway is alive.");
+		assertEquals(false, a.macro());
+	}
 }

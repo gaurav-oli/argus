@@ -56,7 +56,7 @@ class AgentSignalGathererTest {
 			double score, double relevance, String[] tickers) {
 		NewsArticle a = new NewsArticle(source, "id" + Math.random(), "u", headline, "s",
 				Instant.now(), tickers);
-		a.applySentiment(new SentimentAnalysis(label, score, relevance), Instant.now());
+		a.applySentiment(new SentimentAnalysis(label, score, relevance, false), Instant.now());
 		return a;
 	}
 

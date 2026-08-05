@@ -23,8 +23,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProbabilityScoringEngine {
 
-	/** The full agent fleet — coverage is measured against this (FR-13's "7-agent" signal dots). */
-	static final int EXPECTED_AGENTS = 7;
+	/** The full agent fleet — coverage is measured against this (FR-13's signal dots; 8 since Agent 8). */
+	static final int EXPECTED_AGENTS = 8;
 
 	/**
 	 * Pseudo-weight of neutral prior evidence pinned at 0.5. Acts as Bayesian shrinkage: the bull

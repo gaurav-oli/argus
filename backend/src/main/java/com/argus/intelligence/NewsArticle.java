@@ -146,6 +146,22 @@ public class NewsArticle {
 		this.analyzedAt = at;
 	}
 
+	/**
+	 * Add the {@link MacroRelevanceTagger#MACRO_TAG} pseudo-ticker if it isn't already present —
+	 * idempotent, since {@link MacroRelevanceTagger}'s keyword match may have already added it at
+	 * ingest time and this is the LLM classification catching it independently during analysis.
+	 */
+	public void addMacroTag() {
+		for (String t : tickers) {
+			if (MacroRelevanceTagger.MACRO_TAG.equals(t)) {
+				return;
+			}
+		}
+		String[] widened = java.util.Arrays.copyOf(tickers, tickers.length + 1);
+		widened[tickers.length] = MacroRelevanceTagger.MACRO_TAG;
+		this.tickers = widened;
+	}
+
 	private static BigDecimal scaled(double v) {
 		return BigDecimal.valueOf(v).setScale(3, RoundingMode.HALF_UP);
 	}

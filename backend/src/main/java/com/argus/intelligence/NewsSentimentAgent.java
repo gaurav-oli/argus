@@ -61,9 +61,14 @@ public class NewsSentimentAgent implements Agent {
 		List<String> tickers = article.getTickers() == null ? List.of() : Arrays.asList(article.getTickers());
 		SentimentAnalysis analysis = analyzer.analyze(article.getHeadline(), article.getSummary(), tickers);
 		article.applySentiment(analysis, Instant.now());
+		if (analysis.macro()) {
+			// LLM-caught macro relevance, independent of MacroRelevanceTagger's keyword match at ingest
+			// time — catches genuinely global geopolitical/macro stories the keyword list doesn't name.
+			article.addMacroTag();
+		}
 		articles.save(article);
-		log.debug("news sentiment: article {} -> {} (score={}, relevance={})",
-				articleId, analysis.label(), analysis.score(), analysis.relevance());
+		log.debug("news sentiment: article {} -> {} (score={}, relevance={}, macro={})",
+				articleId, analysis.label(), analysis.score(), analysis.relevance(), analysis.macro());
 		// Immediate market-moving news → push alert (best-effort; never breaks analysis).
 		try {
 			breakingNews.evaluate(article);

@@ -81,7 +81,7 @@ class IntelligenceControllerIntegrationTest {
 
 		NewsArticle a = new NewsArticle("Reuters", "ic-1", "http://x", "AAPL beats on services",
 				"summary", Instant.parse("2026-06-23T12:00:00Z"), new String[] {"AAPL"});
-		a.applySentiment(new SentimentAnalysis(SentimentLabel.BULLISH, 0.8, 0.9), Instant.now());
+		a.applySentiment(new SentimentAnalysis(SentimentLabel.BULLISH, 0.8, 0.9, false), Instant.now());
 		articles.save(a);
 
 		credibility.register("Reuters");

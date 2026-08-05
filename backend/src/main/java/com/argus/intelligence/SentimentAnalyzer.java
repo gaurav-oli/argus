@@ -12,11 +12,15 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Scores an article's sentiment and holdings-relevance via the small model (Story 4.2, FR-8). Prompts
- * for strict JSON and parses it defensively — anything unparseable (including the dev mock's canned
- * reply, or a model/timeout failure) degrades to {@link SentimentAnalysis#neutral()} rather than
- * throwing, so one bad article never stalls the pipeline. Runs on {@link ModelTier#SMALL}: unserialized
- * and with no paid fallback, since Agent 1 calls this at volume.
+ * Scores an article's sentiment, holdings-relevance, and macro/political relevance via the small model
+ * (Story 4.2, FR-8). The macro flag is Agent 8's LLM classification pass — it rides this same call
+ * (zero added cost/latency) rather than a second per-article LLM call, and complements
+ * {@link MacroRelevanceTagger}'s keyword match with real-world judgment for macro stories the keyword
+ * list doesn't name. Prompts for strict JSON and parses it defensively — anything unparseable
+ * (including the dev mock's canned reply, or a model/timeout failure) degrades to
+ * {@link SentimentAnalysis#neutral()} rather than throwing, so one bad article never stalls the
+ * pipeline. Runs on {@link ModelTier#SMALL}: unserialized and with no paid fallback, since Agent 1
+ * calls this at volume.
  */
 @Component
 public class SentimentAnalyzer {
@@ -45,9 +49,12 @@ public class SentimentAnalyzer {
 		return """
 				You are a financial news analyst. Assess the article below for an investor holding: %s.
 				Respond with ONLY a JSON object, no prose, in exactly this shape:
-				{"sentiment":"BULLISH|BEARISH|NEUTRAL","score":<number -1..1>,"relevance":<number 0..1>}
+				{"sentiment":"BULLISH|BEARISH|NEUTRAL","score":<number -1..1>,"relevance":<number 0..1>,"macro":true|false}
 				- score: negative = bearish, positive = bullish, magnitude = strength.
 				- relevance: how material this is to the listed holdings (0 = irrelevant, 1 = highly material).
+				- macro: true if this is broad macro/political/geopolitical news that could move markets across \
+				many companies or sectors at once (e.g. central bank policy, tariffs/trade, elections, war or \
+				geopolitical conflict, sanctions, currency moves) — NOT specific to one company. false otherwise.
 
 				HEADLINE: %s
 				SUMMARY: %s
@@ -65,7 +72,8 @@ public class SentimentAnalyzer {
 			SentimentLabel label = parseLabel(node.path("sentiment").asString(""));
 			double score = clamp(node.path("score").asDouble(0.0), -1.0, 1.0);
 			double relevance = clamp(node.path("relevance").asDouble(0.0), 0.0, 1.0);
-			return new SentimentAnalysis(label, score, relevance);
+			boolean macro = node.path("macro").asBoolean(false);
+			return new SentimentAnalysis(label, score, relevance, macro);
 		} catch (RuntimeException ex) {
 			log.debug("Unparseable sentiment JSON; neutral: {}", ex.getMessage());
 			return SentimentAnalysis.neutral();
