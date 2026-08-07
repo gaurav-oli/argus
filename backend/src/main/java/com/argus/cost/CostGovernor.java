@@ -23,10 +23,13 @@ public class CostGovernor {
 	private static final double NOTICE = 0.70;
 
 	private final CostEventRepository events;
+	private final LocalModelCallRepository localCalls;
 	private final double budgetUsd;
 
-	public CostGovernor(CostEventRepository events, @Value("${argus.budget.monthly-usd:20}") double budgetUsd) {
+	public CostGovernor(CostEventRepository events, LocalModelCallRepository localCalls,
+			@Value("${argus.budget.monthly-usd:20}") double budgetUsd) {
 		this.events = events;
+		this.localCalls = localCalls;
 		this.budgetUsd = budgetUsd;
 	}
 
@@ -38,6 +41,7 @@ public class CostGovernor {
 	public BudgetStatus status() {
 		double spent = monthToDate();
 		long calls = events.countByOccurredAtAfter(startOfMonth());
+		long localModelCalls = localCalls.countByOccurredAtAfter(startOfMonth());
 		double pct = budgetUsd <= 0 ? 0 : (spent / budgetUsd) * 100;
 		LocalDate today = LocalDate.now(ZONE);
 		int dayOfMonth = today.getDayOfMonth();
@@ -45,7 +49,7 @@ public class CostGovernor {
 		double projected = dayOfMonth == 0 ? spent : spent / dayOfMonth * daysInMonth;
 		String band = pct >= 95 ? "CRITICAL" : pct >= 80 ? "WARNING" : pct >= 70 ? "NOTICE" : "NORMAL";
 		return new BudgetStatus(round(spent), budgetUsd, round(pct), band, YearMonth.now(ZONE).toString(),
-				daysInMonth - dayOfMonth, round(projected), pct >= 95, calls);
+				daysInMonth - dayOfMonth, round(projected), pct >= 95, calls, localModelCalls);
 	}
 
 	private double monthToDate() {

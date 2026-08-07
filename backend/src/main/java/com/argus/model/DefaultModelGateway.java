@@ -32,11 +32,13 @@ public class DefaultModelGateway implements ModelGateway {
 	private final ChatClient chatClient;
 	private final HaikuFallback haikuFallback;
 	private final com.argus.cost.CostGovernor costGovernor;
+	private final com.argus.cost.CostRecorder costRecorder;
 	private final Semaphore permits;
 	private final Duration callTimeout;
 
 	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
-			com.argus.cost.CostGovernor costGovernor, ModelGatewayProperties properties) {
+			com.argus.cost.CostGovernor costGovernor, com.argus.cost.CostRecorder costRecorder,
+			ModelGatewayProperties properties) {
 		if (properties.concurrency() < 1) {
 			// A 0/negative value would create a semaphore no caller can ever acquire, silently
 			// bricking every BIG-tier call — fail loudly at startup instead.
@@ -46,6 +48,7 @@ public class DefaultModelGateway implements ModelGateway {
 		this.chatClient = ChatClient.builder(chatModel).build();
 		this.haikuFallback = haikuFallback;
 		this.costGovernor = costGovernor;
+		this.costRecorder = costRecorder;
 		this.permits = new Semaphore(properties.concurrency());
 		this.callTimeout = properties.callTimeoutSeconds();
 	}
@@ -92,6 +95,7 @@ public class DefaultModelGateway implements ModelGateway {
 		long startNanos = System.nanoTime();
 		String content = chatClient.prompt().user(prompt).call().content();
 		log.debug("small model generate ok ({} ms)", (System.nanoTime() - startNanos) / 1_000_000);
+		costRecorder.recordLocalCall("SMALL");
 		return content;
 	}
 
@@ -153,6 +157,7 @@ public class DefaultModelGateway implements ModelGateway {
 			return haikuFallback.generate(prompt);
 		}
 		log.info("model generate ok ({} ms)", durationMs);
+		costRecorder.recordLocalCall("BIG");
 		return content;
 	}
 

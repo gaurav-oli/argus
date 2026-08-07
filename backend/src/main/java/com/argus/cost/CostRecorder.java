@@ -29,8 +29,13 @@ public class CostRecorder {
 	/** Persists each call so spend survives restarts (Agent 6). Null in unit tests (in-memory only). */
 	private final CostEventRepository events;
 
-	public CostRecorder(org.springframework.beans.factory.ObjectProvider<CostEventRepository> events) {
+	/** Null in unit tests (in-memory only), same as {@link #events}. */
+	private final LocalModelCallRepository localCalls;
+
+	public CostRecorder(org.springframework.beans.factory.ObjectProvider<CostEventRepository> events,
+			org.springframework.beans.factory.ObjectProvider<LocalModelCallRepository> localCalls) {
 		this.events = events.getIfAvailable();
+		this.localCalls = localCalls.getIfAvailable();
 	}
 
 	/** Record one Haiku call; returns its USD cost. Negative counts are clamped to 0. */
@@ -56,6 +61,21 @@ public class CostRecorder {
 	/** Cost of the most recent recorded call (USD). 0 before any call. */
 	public double lastCostUsd() {
 		return lastCostUsd;
+	}
+
+	/** Record one successful local-model (Gemma) call — free, but counted so the Cost Governor panel
+	 * can show call volume even when nothing was spent. Best-effort: a persistence failure never
+	 * breaks the caller, same as {@link #record}. */
+	public void recordLocalCall(String tier) {
+		if (localCalls == null) {
+			return;
+		}
+		try {
+			localCalls.save(new LocalModelCall(tier));
+		}
+		catch (RuntimeException ex) {
+			log.warn("Could not persist local-model call: {}", ex.getMessage());
+		}
 	}
 
 	/** Cumulative recorded spend this process lifetime (USD). */

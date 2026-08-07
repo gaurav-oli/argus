@@ -146,6 +146,9 @@ function BudgetPanel({ b }: { b: BudgetStatus }) {
         <span>
           {b.paidCalls} paid call{b.paidCalls === 1 ? "" : "s"}
         </span>
+        <span>
+          {b.localModelCalls} Gemma call{b.localModelCalls === 1 ? "" : "s"}
+        </span>
         <span>{b.daysLeftInMonth}d left in {b.month}</span>
         {b.paidCallsBlocked && (
           <span className="ml-auto font-semibold text-losses">⚠ Budget reached — escalations on local model</span>

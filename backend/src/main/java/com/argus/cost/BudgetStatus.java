@@ -11,8 +11,11 @@ package com.argus.cost;
  * @param daysLeftInMonth  days remaining in the month
  * @param projectedUsd     linear month-end projection at the current run-rate
  * @param paidCallsBlocked true once ≥95% — escalations auto-switch to the local model
- * @param paidCalls        number of paid calls this month
+ * @param paidCalls        number of paid (Haiku) calls this month
+ * @param localModelCalls  number of successful local-model (Gemma) calls this month — free, but worth
+ *                         showing alongside spend so the panel isn't only "how much did I spend."
  */
 public record BudgetStatus(double spentUsd, double budgetUsd, double percentUsed, String band,
-		String month, int daysLeftInMonth, double projectedUsd, boolean paidCallsBlocked, long paidCalls) {
+		String month, int daysLeftInMonth, double projectedUsd, boolean paidCallsBlocked, long paidCalls,
+		long localModelCalls) {
 }

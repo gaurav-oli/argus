@@ -11,8 +11,8 @@ class CostRecorderTest {
 
 	@SuppressWarnings("unchecked")
 	private static CostRecorder newRecorder() {
-		// No persistence in unit tests — the ObjectProvider yields null, so record() stays in-memory.
-		return new CostRecorder(mock(ObjectProvider.class));
+		// No persistence in unit tests — the ObjectProviders yield null, so record() stays in-memory.
+		return new CostRecorder(mock(ObjectProvider.class), mock(ObjectProvider.class));
 	}
 
 	@Test

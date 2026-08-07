@@ -818,6 +818,7 @@ export interface BudgetStatus {
   projectedUsd: number;
   paidCallsBlocked: boolean;
   paidCalls: number;
+  localModelCalls: number;
 }
 
 export const getBudgetStatus = (): Promise<BudgetStatus> => apiGet<BudgetStatus>("/api/budget/status");

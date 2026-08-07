@@ -9,6 +9,8 @@ import com.argus.common.BadRequestException;
 import com.argus.common.PayloadTooLargeException;
 import com.argus.cost.CostEventRepository;
 import com.argus.cost.CostGovernor;
+import com.argus.cost.CostRecorder;
+import com.argus.cost.LocalModelCallRepository;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,13 +38,19 @@ class DefaultModelGatewayTest {
 
 	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
 	private static CostGovernor gov() {
-		return new CostGovernor(mock(CostEventRepository.class), 0);
+		return new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), 0);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static CostRecorder recorder() {
+		return new CostRecorder(mock(org.springframework.beans.factory.ObjectProvider.class),
+				mock(org.springframework.beans.factory.ObjectProvider.class));
 	}
 
 	@Test
 	void generateReturnsModelContent() {
 		ModelGateway gateway = new DefaultModelGateway(
-				new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
+				new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(1));
 
 		assertEquals("pong", gateway.generate("ping"));
 	}
@@ -50,7 +58,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void escalateRoutesDirectlyToHaiku() {
 		ModelGateway gateway = new DefaultModelGateway(
-				new MockChatModel("local"), prompt -> "haiku:" + prompt, gov(), props(1));
+				new MockChatModel("local"), prompt -> "haiku:" + prompt, gov(), recorder(), props(1));
 
 		assertEquals("haiku:deep question", gateway.escalate("deep question"));
 	}
@@ -63,7 +71,7 @@ class DefaultModelGatewayTest {
 			return "fallback-response";
 		};
 
-		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), recorder(), props(1));
 
 		assertEquals("fallback-response", gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get(), "Haiku fallback should be invoked exactly once on failure");
@@ -79,7 +87,7 @@ class DefaultModelGatewayTest {
 			return "fallback-response";
 		};
 
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), recorder(), props(1));
 
 		assertEquals("fallback-response", gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get(), "Haiku fallback should be invoked exactly once on blank content");
@@ -93,7 +101,7 @@ class DefaultModelGatewayTest {
 			return "fallback-response";
 		};
 
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("   \n  "), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("   \n  "), fallback, gov(), recorder(), props(1));
 
 		assertEquals("fallback-response", gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get());
@@ -108,7 +116,7 @@ class DefaultModelGatewayTest {
 			fallbackCalls.incrementAndGet();
 			return "fallback";
 		};
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), recorder(), props(1));
 
 		assertEquals("", gateway.generate("ping", ModelTier.SMALL));
 		assertEquals(0, fallbackCalls.get());
@@ -117,7 +125,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void bigModelAccessIsSerialized() throws InterruptedException {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), recorder(), props(1));
 
 		int threads = 8;
 		var workers = new Thread[threads];
@@ -138,7 +146,7 @@ class DefaultModelGatewayTest {
 	@Test
 	void smallTierBypassesTheBigModelSemaphore() {
 		ConcurrencyTrackingChatModel model = new ConcurrencyTrackingChatModel();
-		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(model, (HaikuFallback) prompt -> "unused", gov(), recorder(), props(1));
 
 		int threads = 6;
 		var workers = new Thread[threads];
@@ -168,7 +176,7 @@ class DefaultModelGatewayTest {
 			fallbackCalls.incrementAndGet();
 			return "fallback";
 		};
-		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), recorder(), props(1));
 
 		try {
 			gateway.generate("ping", ModelTier.SMALL);
@@ -182,14 +190,14 @@ class DefaultModelGatewayTest {
 	@Test
 	void constructorRejectsNonPositiveConcurrency() {
 		assertThrows(IllegalArgumentException.class,
-				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(0)));
+				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(0)));
 		assertThrows(IllegalArgumentException.class,
-				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(-1)));
+				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(-1)));
 	}
 
 	@Test
 	void generateRejectsNullOrBlankPrompt() {
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(1));
 
 		assertThrows(BadRequestException.class, () -> gateway.generate(null));
 		assertThrows(BadRequestException.class, () -> gateway.generate("   "));
@@ -198,7 +206,7 @@ class DefaultModelGatewayTest {
 
 	@Test
 	void generateRejectsOversizedPrompt() {
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(1));
 		String huge = "x".repeat(50_001);
 
 		assertThrows(PayloadTooLargeException.class, () -> gateway.generate(huge));
@@ -214,7 +222,7 @@ class DefaultModelGatewayTest {
 			fallbackCalls.incrementAndGet();
 			throw new ModelGatewayException("Haiku is down");
 		};
-		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), recorder(), props(1));
 
 		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get(), "a failing Haiku fallback must be invoked exactly once, never retried");
@@ -227,7 +235,7 @@ class DefaultModelGatewayTest {
 			fallbackCalls.incrementAndGet();
 			throw new ModelGatewayException("Haiku is down");
 		};
-		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), props(1));
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, gov(), recorder(), props(1));
 
 		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
 		assertEquals(1, fallbackCalls.get(), "a failing Haiku fallback must be invoked exactly once, never retried");
@@ -238,7 +246,7 @@ class DefaultModelGatewayTest {
 		HaikuFallback fallback = prompt -> {
 			throw new ModelGatewayException("Haiku is down");
 		};
-		DefaultModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), props(1));
+		DefaultModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, gov(), recorder(), props(1));
 
 		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
 		assertEquals(1, gateway.availablePermits(), "permit must be released before the fallback call, not leaked on fallback failure");
@@ -257,7 +265,8 @@ class DefaultModelGatewayTest {
 			return "fallback-response";
 		};
 		DefaultModelGateway gateway = new DefaultModelGateway(
-				new HangingChatModel(Duration.ofSeconds(3)), fallback, gov(), propsWithTimeout(1, Duration.ofMillis(200)));
+				new HangingChatModel(Duration.ofSeconds(3)), fallback, gov(), recorder(),
+				propsWithTimeout(1, Duration.ofMillis(200)));
 
 		long start = System.nanoTime();
 		String result = gateway.generate("ping");
