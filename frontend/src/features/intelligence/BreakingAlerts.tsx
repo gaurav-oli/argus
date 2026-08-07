@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ArticleTags } from "@/components/ui/ArticleTags";
 import { Carousel } from "@/components/ui/Carousel";
+import { RefreshButton } from "@/components/ui/RefreshIcon";
 import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getBreakingAlerts, markBreakingDone, type BreakingAlertItem } from "@/lib/apiClient";
-import { relTime } from "@/lib/time";
+import { absTime, relTime } from "@/lib/time";
 
 /**
  * In-app breaking-news carousel — market-moving stories that fired a push, browsable rather than a
@@ -23,9 +24,10 @@ export function BreakingAlerts() {
   const [alerts, setAlerts] = useState<BreakingAlertItem[] | null | undefined>(undefined);
   const [pending, setPending] = useState(0);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {
-    getBreakingAlerts()
+    return getBreakingAlerts()
       .then((q) => {
         setAlerts(q.alerts);
         setPending(q.pending);
@@ -35,6 +37,15 @@ export function BreakingAlerts() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }, [load]);
 
   const waiting = alerts !== undefined && alerts !== null && alerts.length === 0 && pending > 0;
@@ -64,10 +75,13 @@ export function BreakingAlerts() {
           <span aria-hidden>⚠️</span> Breaking alerts
           {alerts.length > 0 && <span className="font-mono text-xs text-text-secondary">{alerts.length}</span>}
         </h3>
-        <span className="text-[11px] text-text-secondary">
-          market-moving news pushed to your phone
-          {pending > 0 && <span className="ml-1 text-text-secondary/70">· {pending} more on the way</span>}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-text-secondary">
+            market-moving news pushed to your phone
+            {pending > 0 && <span className="ml-1 text-text-secondary/70">· {pending} more on the way</span>}
+          </span>
+          <RefreshButton onClick={onRefresh} refreshing={refreshing} />
+        </div>
       </div>
 
       {alerts.length === 0 ? (
@@ -96,13 +110,12 @@ function AlertCard({ alert, busy, onDone }: { alert: BreakingAlertItem; busy: bo
         <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
           {alert.reason}
         </span>
-        <time
-          dateTime={alert.createdAt}
-          className="shrink-0 font-mono text-[10px] text-text-secondary"
-          title={alert.createdAt}
-        >
-          {relTime(alert.createdAt)}
-        </time>
+        <div className="shrink-0 whitespace-nowrap text-right text-[10px] text-text-secondary">
+          <time dateTime={alert.createdAt} className="font-mono">
+            {absTime(alert.createdAt)}
+          </time>
+          <span className="ml-1 text-text-secondary/70">({relTime(alert.createdAt)})</span>
+        </div>
       </div>
 
       <h4 className="mt-1.5 font-display text-lg font-semibold leading-snug text-text-primary">

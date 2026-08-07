@@ -17,11 +17,23 @@ public interface NewsCardRepository extends JpaRepository<NewsCard, Long> {
 	/** Every ready-to-read card, most important first — backs the carousel view. */
 	List<NewsCard> findBySummaryIsNotNullOrderByImpactScoreDesc();
 
+	/** Every ready-to-read card published since {@code cutoff}, most important first — the carousel
+	 * view's "today and yesterday only" guarantee, enforced at read time rather than trusting the
+	 * curation prune cycle (which only runs every 30 min). */
+	List<NewsCard> findBySummaryIsNotNullAndPublishedAtAfterOrderByImpactScoreDesc(Instant cutoff);
+
+	/** As above, but just the single highest-impact card — backs the one-at-a-time reader. */
+	Optional<NewsCard> findFirstBySummaryIsNotNullAndPublishedAtAfterOrderByImpactScoreDesc(Instant cutoff);
+
 	/** The next card to generate: highest-impact card still awaiting its paragraph. */
 	Optional<NewsCard> findFirstBySummaryIsNullOrderByImpactScoreDesc();
 
 	/** Ready-to-read cards (what the queue count shows). */
 	long countBySummaryIsNotNull();
+
+	/** Ready-to-read cards published since {@code cutoff} — the filtered queue's own count, so the
+	 * badge never shows a number larger than what's actually in the (age-filtered) list. */
+	long countBySummaryIsNotNullAndPublishedAtAfter(Instant cutoff);
 
 	/** Cards still being summarized (drives the "more on the way" hint). */
 	long countBySummaryIsNull();

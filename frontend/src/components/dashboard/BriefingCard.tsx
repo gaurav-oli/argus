@@ -9,6 +9,7 @@ import {
   type Briefing,
   type MarketPulse,
 } from "@/lib/apiClient";
+import { RefreshIcon } from "@/components/ui/RefreshIcon";
 import { absTime } from "@/lib/time";
 
 /**
@@ -277,22 +278,3 @@ function SunriseIcon() {
   );
 }
 
-function RefreshIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={spinning ? "animate-spin" : ""}
-      aria-hidden
-    >
-      <path d="M21 12a9 9 0 1 1-3-6.7" />
-      <path d="M21 3v5h-5" />
-    </svg>
-  );
-}

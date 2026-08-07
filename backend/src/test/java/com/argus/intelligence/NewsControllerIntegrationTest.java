@@ -40,8 +40,12 @@ class NewsControllerIntegrationTest {
 	}
 
 	private NewsCard readyCard(String headline, double impact) {
+		return readyCard(headline, impact, Instant.now());
+	}
+
+	private NewsCard readyCard(String headline, double impact, Instant publishedAt) {
 		NewsArticle article = articles.save(new NewsArticle("finnhub", "ext-" + headline, "http://x",
-				headline, "snippet", Instant.now(), new String[] {"AAPL"}));
+				headline, "snippet", publishedAt, new String[] {"AAPL"}));
 		NewsCard card = new NewsCard(article, impact);
 		card.summarize("A plain-language paragraph.\n\nKEY TERMS:\nNone", false);
 		return cards.save(card);
@@ -62,6 +66,17 @@ class NewsControllerIntegrationTest {
 		assertEquals("Higher impact story", queue.cards().get(0).headline(), "most important first");
 		assertEquals("Lower impact story", queue.cards().get(1).headline());
 		assertEquals(1, queue.pending(), "the unsummarized card counts as pending, not ready");
+	}
+
+	@Test
+	void queueExcludesCardsOlderThanTodayOrYesterday() {
+		readyCard("Fresh today", 0.5, Instant.now());
+		readyCard("From three days ago", 0.9, Instant.now().minus(java.time.Duration.ofDays(3)));
+
+		NewsController.NewsQueue queue = controller.queue();
+
+		assertEquals(1, queue.cards().size(), "a 3-day-old card must not appear even if higher impact");
+		assertEquals("Fresh today", queue.cards().get(0).headline());
 	}
 
 	@Test

@@ -1,6 +1,8 @@
 package com.argus.intelligence;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -18,10 +20,18 @@ import org.springframework.web.bind.annotation.RestController;
  * same underlying cards — {@code POST /{id}/done} deletes a card once read regardless of which view
  * it was read from. Cards are produced and kept fresh by {@link NewsCurationService}; this controller
  * only reads and dismisses.
+ *
+ * <p>Both read endpoints additionally enforce a "today or yesterday" freshness floor at request time
+ * ({@link #todayAndYesterdayCutoff()}) — {@link NewsCurationService}'s prune only runs every 30 min, so
+ * without this a card could still be served up to that long after aging out of its lookback window.
  */
 @RestController
 @RequestMapping("/api/news")
 public class NewsController {
+
+	/** Same timezone convention used app-wide for calendar-day logic (earnings quiet periods, digest,
+	 * cost governor bands) — see {@code EarningsQuietPeriodService}, {@code NotificationPreferencesService}. */
+	private static final ZoneId ZONE = ZoneId.of("America/Toronto");
 
 	private final NewsCardRepository cards;
 
@@ -36,14 +46,22 @@ public class NewsController {
 		return feed();
 	}
 
-	/** Every ready-to-read card at once (richest first), for the carousel view. */
+	/** Every ready-to-read card at once (richest first), for the carousel view — today and yesterday only. */
 	@GetMapping("/queue")
 	@Transactional(readOnly = true)
 	public NewsQueue queue() {
-		List<NewsCardView> ready = cards.findBySummaryIsNotNullOrderByImpactScoreDesc().stream()
+		Instant cutoff = todayAndYesterdayCutoff();
+		List<NewsCardView> ready = cards.findBySummaryIsNotNullAndPublishedAtAfterOrderByImpactScoreDesc(cutoff)
+				.stream()
 				.map(NewsCardView::from)
 				.toList();
 		return new NewsQueue(ready, (int) cards.countBySummaryIsNull());
+	}
+
+	/** Midnight at the start of yesterday, in the app's timezone — "today or yesterday" as a real
+	 * calendar-day boundary rather than a rolling 24-48h window. */
+	private static Instant todayAndYesterdayCutoff() {
+		return LocalDate.now(ZONE).minusDays(1).atStartOfDay(ZONE).toInstant();
 	}
 
 	/** Mark a card read: delete it and return the next single-card view plus updated counts. Tolerates
@@ -63,10 +81,12 @@ public class NewsController {
 	}
 
 	private NewsFeed feed() {
-		NewsCardView card = cards.findFirstBySummaryIsNotNullOrderByImpactScoreDesc()
+		Instant cutoff = todayAndYesterdayCutoff();
+		NewsCardView card = cards.findFirstBySummaryIsNotNullAndPublishedAtAfterOrderByImpactScoreDesc(cutoff)
 				.map(NewsCardView::from)
 				.orElse(null);
-		return new NewsFeed(card, (int) cards.countBySummaryIsNotNull(), (int) cards.countBySummaryIsNull());
+		return new NewsFeed(card, (int) cards.countBySummaryIsNotNullAndPublishedAtAfter(cutoff),
+				(int) cards.countBySummaryIsNull());
 	}
 
 	/**

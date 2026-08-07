@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ArticleTags } from "@/components/ui/ArticleTags";
 import { Carousel } from "@/components/ui/Carousel";
+import { RefreshButton } from "@/components/ui/RefreshIcon";
 import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getNewsQueue, markNewsDone, type NewsCardItem } from "@/lib/apiClient";
 import { absTime, relTime } from "@/lib/time";
@@ -27,9 +28,10 @@ export function MarketNews() {
   const [pending, setPending] = useState(0);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {
-    getNewsQueue()
+    return getNewsQueue()
       .then((q) => {
         setCards(q.cards);
         setPending(q.pending);
@@ -39,6 +41,16 @@ export function MarketNews() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setNote(null);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }, [load]);
 
   // While nothing is ready but summaries are still being written, poll until one lands.
@@ -66,7 +78,10 @@ export function MarketNews() {
     <div>
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Market News</h3>
-        <QueueBadge count={cards?.length ?? 0} pending={pending} />
+        <div className="flex items-center gap-2">
+          <QueueBadge count={cards?.length ?? 0} pending={pending} />
+          <RefreshButton onClick={onRefresh} refreshing={refreshing} />
+        </div>
       </div>
 
       {cards === undefined ? (
