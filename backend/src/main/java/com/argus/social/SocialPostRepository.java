@@ -14,6 +14,10 @@ public interface SocialPostRepository extends JpaRepository<SocialPost, Long> {
 	/** Most-recent posts for a ticker (Intelligence view feed). */
 	List<SocialPost> findTop50ByTickerOrderByPostedAtDesc(String ticker);
 
+	/** Raw posts for a ticker since {@code since} — Agent 9's research pass wants the actual post
+	 * bodies, not just the sentiment-count aggregate {@link #sentimentCountsForTicker} gives. */
+	List<SocialPost> findByTickerAndPostedAtAfter(String ticker, Instant since);
+
 	/** Most-recent posts across all tickers (Intelligence view feed). */
 	List<SocialPost> findTop50ByOrderByPostedAtDesc();
 

@@ -11,6 +11,8 @@ import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
 import com.argus.internet.WebMentionRepository;
 import com.argus.recommendation.RecommendationRepository;
+import com.argus.research.ResearchJob;
+import com.argus.research.ResearchJobRepository;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
 import java.time.Instant;
@@ -40,6 +42,7 @@ public class AgentStatusService {
 	private final WebMentionRepository web;
 	private final CostGovernor costGovernor;
 	private final MacroKeywordRepository macroKeywords;
+	private final ResearchJobRepository research;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
@@ -47,6 +50,7 @@ public class AgentStatusService {
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
 			WebMentionRepository web, CostGovernor costGovernor, MacroKeywordRepository macroKeywords,
+			ResearchJobRepository research,
 			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
@@ -59,6 +63,7 @@ public class AgentStatusService {
 		this.web = web;
 		this.costGovernor = costGovernor;
 		this.macroKeywords = macroKeywords;
+		this.research = research;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -103,7 +108,13 @@ public class AgentStatusService {
 								+ "for naming no specific stock.",
 						news.countByTag(MacroRelevanceTagger.MACRO_TAG), "macro articles",
 						news.latestIngestedAtForTag(MacroRelevanceTagger.MACRO_TAG), "same cadence as Agent 1",
-						agent8Note()));
+						agent8Note()),
+				active("research", "Agent 9", "On-Demand Research",
+						"Only works when asked: name a ticker and it plans its own research, gathers news, "
+								+ "macro, social, insider, web, and earnings data, revises the plan mid-run if it "
+								+ "learns something new, then writes a long-term/short-term analysis.",
+						research.countByStatus(ResearchJob.Status.DONE), "reports completed",
+						null, "on demand", agent9Note()));
 	}
 
 	private static AgentStatusView active(String id, String code, String name, String description,
@@ -118,6 +129,15 @@ public class AgentStatusService {
 		return learned > 0
 				? "Feeds agent-8-macro · " + learned + " keyword(s) self-learned from missed stories"
 				: "Feeds agent-8-macro · keyword list self-updates weekly from missed stories";
+	}
+
+	/** Whether a job is currently in flight, surfaced as the note since "on demand" agents don't have a
+	 * meaningful last-ingested timestamp the way scheduled agents do. */
+	private String agent9Note() {
+		long running = research.countByStatusIn(
+				List.of(ResearchJob.Status.PLANNING, ResearchJob.Status.RESEARCHING,
+						ResearchJob.Status.REVISING_PLAN, ResearchJob.Status.SYNTHESIZING));
+		return running > 0 ? running + " job(s) in progress right now" : "Idle — waiting to be asked";
 	}
 
 	private AgentStatusView costGovernor() {

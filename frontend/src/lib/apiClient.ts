@@ -764,6 +764,40 @@ export interface AgentStatus {
 export const getAgentStatus = (): Promise<AgentStatus[]> =>
   apiGet<AgentStatus[]>("/api/agents/status");
 
+// ---- Agent 9 — on-demand research ----
+
+/** One step in a research plan. `status` is PENDING/RUNNING/DONE while a job is in flight. */
+export interface ResearchStep {
+  id: string;
+  label: string;
+  dataSource: "NEWS" | "MACRO" | "SOCIAL" | "INSIDER" | "WEB" | "EARNINGS";
+  why: string;
+  status: "PENDING" | "RUNNING" | "DONE" | "SKIPPED" | "FAILED";
+}
+
+/** A research job's full state — pushed live over `/topic/research/{id}` and returned by every
+ * `/api/research` endpoint. `report` is null until DONE; `error` is set only on FAILED. */
+export interface ResearchJobView {
+  id: number;
+  ticker: string;
+  status: "PLANNING" | "RESEARCHING" | "REVISING_PLAN" | "SYNTHESIZING" | "DONE" | "FAILED";
+  plan: ResearchStep[];
+  report: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Start a research pass on a ticker; returns immediately, the job runs in the background. */
+export const startResearch = (ticker: string): Promise<ResearchJobView> =>
+  apiPost<ResearchJobView>("/api/research/jobs", { ticker });
+
+export const getResearchJobs = (): Promise<ResearchJobView[]> =>
+  apiGet<ResearchJobView[]>("/api/research/jobs");
+
+export const getResearchJob = (id: number): Promise<ResearchJobView> =>
+  apiGet<ResearchJobView>(`/api/research/jobs/${id}`);
+
 /** One proposed (or adopted) keyword from Agent 8's weekly self-learning review. */
 export interface MacroKeywordProposal {
   keyword: string;

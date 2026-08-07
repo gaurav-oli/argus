@@ -4,6 +4,7 @@ import { AgentPerformance } from "@/features/agents/AgentPerformance";
 import { DataStorage } from "@/features/agents/DataStorage";
 import { LogicReview } from "@/features/agents/LogicReview";
 import { PaperInvestorScoreboard } from "@/features/agents/PaperInvestorScoreboard";
+import { ResearchAgentSection } from "@/features/agents/ResearchAgentSection";
 import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 import { TradeJournal } from "@/features/agents/TradeJournal";
@@ -35,6 +36,10 @@ export default function AgentsPage() {
           <TradeJournal />
           <LogicReview />
         </div>
+      </div>
+
+      <div className="mt-8">
+        <ResearchAgentSection />
       </div>
 
       <div className="mt-8">
