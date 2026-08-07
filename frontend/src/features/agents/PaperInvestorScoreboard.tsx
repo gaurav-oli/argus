@@ -160,7 +160,7 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
           )}
         </p>
       </div>
-      <ul className="flex flex-col gap-1.5">
+      <ul className="flex max-h-60 flex-col gap-1.5 overflow-y-auto pr-1">
         {board.openByTicker.map((p) => (
           <li key={p.ticker} className="flex items-center gap-3 text-sm">
             <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
