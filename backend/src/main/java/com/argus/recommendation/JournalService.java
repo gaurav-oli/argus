@@ -12,12 +12,12 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Read-only Trade Journal (Story 11.1, F22): every Taken/Declined decision, most-recent-first, with
- * its frozen FR-15 rationale snapshot and — once a matching paper leg has closed — how Agent 5's call
- * actually played out. Reads {@code ticker}/{@code direction}/signals/persona verdicts from the frozen
- * {@code snapshot} JSON rather than joining live {@link Recommendation} state, since the journal is
- * deliberately a historical record of what was true at decision time, not the recommendation's
- * current state.
+ * Read-only Trade Journal (Story 11.1, F22): the 100 most recent Taken/Declined decisions,
+ * most-recent-first, with each one's frozen FR-15 rationale snapshot and — once a matching paper leg
+ * has closed — how Agent 5's call actually played out. Reads {@code ticker}/{@code direction}/
+ * signals/persona verdicts from the frozen {@code snapshot} JSON rather than joining live
+ * {@link Recommendation} state, since the journal is deliberately a historical record of what was
+ * true at decision time, not the recommendation's current state.
  */
 @Service
 public class JournalService {
@@ -35,7 +35,7 @@ public class JournalService {
 	@Transactional(readOnly = true)
 	public List<JournalEntryView> list() {
 		Map<Long, Double> avgReturnByRec = performance.avgReturnByRecommendation();
-		return decisions.findAllByOrderByDecidedAtDesc().stream()
+		return decisions.findTop100ByOrderByDecidedAtDesc().stream()
 				.map(d -> toEntryView(d, avgReturnByRec.get(d.getRecommendationId())))
 				.toList();
 	}

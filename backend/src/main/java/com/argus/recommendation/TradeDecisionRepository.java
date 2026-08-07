@@ -15,6 +15,8 @@ public interface TradeDecisionRepository extends JpaRepository<TradeDecision, Lo
 	/** Idempotency guard for {@code recordAgentDecision} — never overwrite an existing decision. */
 	boolean existsByRecommendationId(Long recommendationId);
 
-	/** Most-recent-first, for the Trade Journal list view (Story 11.1). */
-	java.util.List<TradeDecision> findAllByOrderByDecidedAtDesc();
+	/** Most-recent 100, for the Trade Journal list view (Story 11.1) — unbounded before, this table now
+	 * grows continuously (every recommendation the Investor persona acts on records one), so an
+	 * unlimited fetch was shipping and rendering the entire history on every page load. */
+	java.util.List<TradeDecision> findTop100ByOrderByDecidedAtDesc();
 }

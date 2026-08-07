@@ -127,4 +127,20 @@ class JournalServiceIntegrationTest {
 	void detailReturnsEmptyForUnknownDecision() {
 		assertFalse(journal.detail(999_999L).isPresent());
 	}
+
+	@Test
+	void listIsCappedAtTheMostRecent100() {
+		// The journal now grows continuously (every recommendation the Investor persona acts on records
+		// one) — an unbounded fetch was shipping and rendering the entire history on every page load.
+		Recommendation last = null;
+		for (int i = 0; i < 105; i++) {
+			last = aRecommendation("T" + i);
+			confirmation.confirm(last.getId(), Decision.TAKEN, "auto", null, null);
+		}
+
+		List<JournalEntryView> entries = journal.list();
+
+		assertEquals(100, entries.size());
+		assertEquals(last.getTicker(), entries.get(0).ticker(), "still most-recent-first within the cap");
+	}
 }

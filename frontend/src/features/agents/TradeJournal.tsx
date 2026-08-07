@@ -15,7 +15,7 @@ import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { cn } from "@/lib/utils";
 
 /**
- * Trade Journal (Story 11.1, F22): every Taken/Declined recommendation decision, most recent first,
+ * Trade Journal (Story 11.1, F22): the 100 most recent Taken/Declined recommendation decisions,
  * with its frozen FR-15 rationale snapshot and — once a matching paper leg closes — how Agent 5's call
  * actually played out. Read-only; sits next to the aggregate Regret analysis card it complements with
  * per-decision detail.
@@ -46,7 +46,7 @@ export function TradeJournal() {
       ) : entries.length === 0 ? (
         <Empty>Nothing decided yet — entries appear as soon as the Investor persona acts on a recommendation.</Empty>
       ) : (
-        <ul className="flex flex-col divide-y divide-border/60">
+        <ul className="flex max-h-[32rem] flex-col divide-y divide-border/60 overflow-y-auto">
           {entries.map((e) => (
             <JournalRow key={e.decisionId} entry={e} logoUrl={logos[e.ticker]} />
           ))}
