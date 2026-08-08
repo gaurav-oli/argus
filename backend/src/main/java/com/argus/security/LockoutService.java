@@ -1,5 +1,8 @@
 package com.argus.security;
 
+import com.argus.notification.Notification;
+import com.argus.notification.NotificationService;
+import com.argus.notification.UrgencyTier;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -35,10 +38,12 @@ public class LockoutService {
 
 	private final StringRedisTemplate redis;
 	private final LockoutProperties props;
+	private final NotificationService notifications;
 
-	public LockoutService(StringRedisTemplate redis, LockoutProperties props) {
+	public LockoutService(StringRedisTemplate redis, LockoutProperties props, NotificationService notifications) {
 		this.redis = redis;
 		this.props = props;
+		this.notifications = notifications;
 	}
 
 	/** Reject the attempt before any PIN check if a lockout is currently in effect. */
@@ -71,9 +76,9 @@ public class LockoutService {
 		}
 		if (fails >= props.alertThreshold()) {
 			arm(props.alertLockout());
-			// TODO(Epic 8 — Web Push): notify the secondary device on the 10-minute lockout (FR-38).
-			log.warn("Auth locked {}m after {} failed attempts (secondary-device alert pending Epic 8)",
+			log.warn("Auth locked {}m after {} failed attempts — alerting secondary device",
 					props.alertLockout().toMinutes(), fails);
+			alertSecondaryDevice(fails);
 			throw LockedException.timed(props.alertLockout().toSeconds());
 		}
 		if (fails >= props.warnThreshold()) {
@@ -121,6 +126,21 @@ public class LockoutService {
 
 	private void arm(Duration duration) {
 		redis.opsForValue().set(KEY_LOCK, LOCK_TIMED, duration);
+	}
+
+	/** Secondary-device alert on the alert-threshold lockout (FR-38, Epic 8). CRITICAL so it bypasses
+	 * the fatigue gate and quiet hours — a string of failed PIN attempts should always reach the
+	 * legitimate user's other devices. Best-effort: a push failure must never mask the lockout itself. */
+	private void alertSecondaryDevice(long fails) {
+		try {
+			notifications.notify(Notification.of(UrgencyTier.CRITICAL,
+					"⚠️ Repeated failed sign-in attempts",
+					fails + " failed PIN attempts locked this device for " + props.alertLockout().toMinutes()
+							+ " minutes. If this wasn't you, clear the lockout from another device.",
+					"/"));
+		} catch (RuntimeException ex) {
+			log.warn("Lockout secondary-device alert failed: {}", ex.getMessage());
+		}
 	}
 
 	/** Lockout snapshot. {@code full} = needs another device; else {@code secondsRemaining} > 0 if timed. */
