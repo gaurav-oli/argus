@@ -3,11 +3,10 @@ package com.argus.marketdata;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
@@ -35,6 +34,7 @@ public class FinnhubPriceFeed implements PriceFeed {
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 
 	private final String apiKey;
+	private final FinnhubRest finnhub;
 	private final java.util.concurrent.ScheduledExecutorService reconnects =
 			java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
 				Thread t = new Thread(r, "finnhub-reconnect");
@@ -49,8 +49,9 @@ public class FinnhubPriceFeed implements PriceFeed {
 	private volatile BiConsumer<String, BigDecimal> previousCloseConsumer;
 	private final java.util.Set<String> subscribed = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-	public FinnhubPriceFeed(@Value("${argus.finnhub.api-key}") String apiKey) {
+	public FinnhubPriceFeed(@Value("${argus.finnhub.api-key}") String apiKey, FinnhubRest finnhub) {
 		this.apiKey = apiKey;
+		this.finnhub = finnhub;
 	}
 
 	@Override
@@ -128,15 +129,22 @@ public class FinnhubPriceFeed implements PriceFeed {
 	 * Seed each symbol's previous close AND current price from the Finnhub /quote REST endpoint
 	 * (best-effort). Seeding the current price ({@code c}) means a holding shows a value immediately
 	 * on subscribe, rather than waiting for the first live WS trade to arrive.
+	 *
+	 * <p>Routed through {@link FinnhubRest} (Epic 4 follow-up) rather than a private {@code
+	 * HttpClient} — these /quote calls now count against the same shared rate-limited budget as
+	 * every other Finnhub REST call, instead of being able to 429 the news source by burning through
+	 * the free-tier cap outside its accounting.
 	 */
 	private void seedPreviousCloses(Collection<String> tickers, BiConsumer<String, BigDecimal> previousClose) {
-		HttpClient http = HttpClient.newHttpClient();
 		for (String symbol : tickers) {
 			try {
-				HttpResponse<String> res = http.send(HttpRequest.newBuilder()
-						.uri(URI.create("https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + apiKey))
-						.GET().build(), HttpResponse.BodyHandlers.ofString());
-				JsonNode quote = JSON.readTree(res.body());
+				Optional<String> body = finnhub.get(
+						"https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + apiKey);
+				if (body.isEmpty()) {
+					log.debug("No quote for {}: rate-limited or dropped", symbol);
+					continue;
+				}
+				JsonNode quote = JSON.readTree(body.get());
 				JsonNode pc = quote.path("pc");
 				if (!pc.isMissingNode() && pc.asDouble() > 0) {
 					previousClose.accept(symbol, new BigDecimal(pc.asString()));
@@ -146,11 +154,8 @@ public class FinnhubPriceFeed implements PriceFeed {
 				if (handler != null && !c.isMissingNode() && c.asDouble() > 0) {
 					handler.onTick(symbol, new BigDecimal(c.asString()), Instant.now());
 				}
-			} catch (RuntimeException | java.io.IOException | InterruptedException ex) {
+			} catch (RuntimeException ex) {
 				log.debug("No quote for {}: {}", symbol, ex.getMessage());
-				if (ex instanceof InterruptedException) {
-					Thread.currentThread().interrupt();
-				}
 			}
 		}
 	}
