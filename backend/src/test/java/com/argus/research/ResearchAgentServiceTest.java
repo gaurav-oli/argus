@@ -19,6 +19,7 @@ import com.argus.common.BadRequestException;
 import com.argus.common.LivePushService;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.internet.WebMentionRepository;
+import com.argus.marketdata.FinnhubRest;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.research.ResearchAgentService.Step;
@@ -45,9 +46,10 @@ class ResearchAgentServiceTest {
 	private final ModelGateway gateway = mock(ModelGateway.class);
 	private final LivePushService livePush = mock(LivePushService.class);
 	private final ResearchJobProperties props = new ResearchJobProperties(2, 30);
+	private final FinnhubRest finnhub = mock(FinnhubRest.class);
 
 	private final ResearchAgentService service = new ResearchAgentService(
-			jobs, news, social, sec, web, calendar, gateway, livePush, props);
+			jobs, news, social, sec, web, calendar, gateway, livePush, props, finnhub, "test-key");
 
 	{
 		// Default every raw-data source to empty unless a test overrides it — keeps each test focused
@@ -58,6 +60,7 @@ class ResearchAgentServiceTest {
 		when(web.findByTickerAndPostedAtAfter(anyString(), any())).thenReturn(List.of());
 		when(calendar.findByTickerAndTypeAndEventDateBetweenOrderByEventDateAsc(anyString(), any(), any(), any()))
 				.thenReturn(List.of());
+		when(finnhub.get(anyString())).thenReturn(Optional.empty());
 	}
 
 	// ---- ticker validation ----
@@ -180,6 +183,55 @@ class ResearchAgentServiceTest {
 	}
 
 	@Test
+	void gatherFinancialsSummarizesKeyRatiosFromFinnhub() {
+		ResearchJob job = new ResearchJob("SPCX");
+		when(jobs.findById(1L)).thenReturn(Optional.of(job));
+		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
+				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
+		when(finnhub.get(contains("stock/metric"))).thenReturn(
+				Optional.of("{\"metric\":{\"peTTM\":25.4,\"netProfitMarginTTM\":12.3}}"));
+		when(gateway.escalate(anyString())).thenReturn("report");
+
+		service.runPipeline(1L);
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("25.4"), "the P/E ratio must appear in the findings");
+		assertTrue(job.getFindings().contains("12.3"), "the net margin must appear in the findings");
+	}
+
+	@Test
+	void gatherFinancialsDegradesGracefullyWithNoApiKey() {
+		ResearchAgentService noKeyService = new ResearchAgentService(
+				jobs, news, social, sec, web, calendar, gateway, livePush, props, finnhub, "");
+		ResearchJob job = new ResearchJob("SPCX");
+		when(jobs.findById(1L)).thenReturn(Optional.of(job));
+		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
+				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
+		when(gateway.escalate(anyString())).thenReturn("report");
+
+		noKeyService.runPipeline(1L);
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("No Finnhub API key configured"));
+		verify(finnhub, never()).get(anyString());
+	}
+
+	@Test
+	void gatherFinancialsDegradesGracefullyWhenFinnhubReturnsNothing() {
+		ResearchJob job = new ResearchJob("SPCX");
+		when(jobs.findById(1L)).thenReturn(Optional.of(job));
+		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
+				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
+		when(finnhub.get(contains("stock/metric"))).thenReturn(Optional.empty());
+		when(gateway.escalate(anyString())).thenReturn("report");
+
+		service.runPipeline(1L);
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("unavailable"));
+	}
+
+	@Test
 	void planFallsBackToTheDefaultWhenTheModelCallFails() {
 		ResearchJob job = new ResearchJob("SPCX");
 		when(jobs.findById(1L)).thenReturn(Optional.of(job));
@@ -189,7 +241,7 @@ class ResearchAgentServiceTest {
 		service.runPipeline(1L);
 
 		List<Step> finalPlan = ResearchAgentService.readPlan(job.getPlan());
-		assertEquals(6, finalPlan.size(), "the default (all 6 sources) plan is used when planning fails");
+		assertEquals(7, finalPlan.size(), "the default (all 7 sources) plan is used when planning fails");
 		assertEquals(ResearchJob.Status.DONE, job.getStatus(),
 				"a failed plan call must not fail the whole job — the default plan carries it through");
 	}

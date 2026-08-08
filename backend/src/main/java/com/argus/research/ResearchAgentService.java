@@ -10,6 +10,7 @@ import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.internet.WebMention;
 import com.argus.internet.WebMentionRepository;
+import com.argus.marketdata.FinnhubRest;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.sec.SecFiling;
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -46,9 +48,15 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>Cost is bounded regardless of how many replans happen: the plan and every replan check use the
  * local model ({@code ModelGateway.generate(..., BIG)}, free); only the single final synthesis call
  * uses {@code escalate()} (paid Haiku) — the same "rare, valuable, user-initiated" idiom
- * {@code ConversationService}'s "deeper analysis" already uses. v1 deliberately gathers no
- * financial-statement data (P&L/debt/ratios) — the synthesis prompt says so rather than inventing
- * numbers it wasn't given.
+ * {@code ConversationService}'s "deeper analysis" already uses.
+ *
+ * <p>FINANCIALS (fast-follow) pulls key ratios from Finnhub's {@code /stock/metric} — confirmed
+ * available on existing credentials, no new key needed. Full financial-<em>statement</em> data (line-item
+ * P&amp;L/balance-sheet figures via SEC EDGAR XBRL company facts) remains deliberately deferred: EDGAR
+ * keys off CIK, not ticker, and a ticker→CIK resolver is its own small subsystem, not a one-line
+ * addition. Likewise 10-K/10-Q narrative parsing (MD&amp;A/risk factors) and peer/competitor
+ * comparison are out of scope for this pass. The synthesis prompt is honest about what it wasn't
+ * given rather than inventing numbers.
  */
 @Service
 public class ResearchAgentService {
@@ -56,7 +64,8 @@ public class ResearchAgentService {
 	private static final Logger log = LoggerFactory.getLogger(ResearchAgentService.class);
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private static final Pattern TICKER_PATTERN = Pattern.compile("^[A-Z]{1,6}(\\.[A-Z])?$");
-	private static final List<String> DATA_SOURCES = List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS");
+	private static final List<String> DATA_SOURCES =
+			List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS", "FINANCIALS");
 	private static final int EARNINGS_LOOKAHEAD_DAYS = 90;
 
 	private final ResearchJobRepository jobs;
@@ -68,12 +77,15 @@ public class ResearchAgentService {
 	private final ModelGateway gateway;
 	private final LivePushService livePush;
 	private final ResearchJobProperties props;
+	private final FinnhubRest finnhub;
+	private final String finnhubApiKey;
 	private final ExecutorService executor;
 
 	public ResearchAgentService(ResearchJobRepository jobs, NewsArticleRepository news,
 			SocialPostRepository social, SecFilingRepository sec, WebMentionRepository web,
 			CalendarEventRepository calendar, ModelGateway gateway, LivePushService livePush,
-			ResearchJobProperties props) {
+			ResearchJobProperties props, FinnhubRest finnhub,
+			@org.springframework.beans.factory.annotation.Value("${argus.finnhub.api-key:}") String finnhubApiKey) {
 		this.jobs = jobs;
 		this.news = news;
 		this.social = social;
@@ -83,6 +95,8 @@ public class ResearchAgentService {
 		this.gateway = gateway;
 		this.livePush = livePush;
 		this.props = props;
+		this.finnhub = finnhub;
+		this.finnhubApiKey = finnhubApiKey;
 		AtomicInteger threadNum = new AtomicInteger();
 		this.executor = Executors.newFixedThreadPool(Math.max(1, props.maxConcurrentJobs()), r -> {
 			Thread t = new Thread(r, "research-agent-" + threadNum.incrementAndGet());
@@ -229,10 +243,11 @@ public class ResearchAgentService {
 				- INSIDER: recent insider (Form 4) buy/sell filings
 				- WEB: Hacker News discussion and Wikipedia attention
 				- EARNINGS: next earnings date and recent EPS-surprise history
+				- FINANCIALS: key valuation/profitability/leverage ratios (P/E, margins, ROE, debt/equity)
 
-				Propose an ordered research plan, 3-6 steps, each using exactly one data source.
+				Propose an ordered research plan, 3-7 steps, each using exactly one data source.
 				Respond with ONLY a JSON array, no prose: \
-				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS","why":"one sentence"}]
+				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS","why":"one sentence"}]
 				""".formatted(ticker, ticker);
 		try {
 			List<Step> parsed = parseSteps(gateway.generate(prompt, ModelTier.BIG));
@@ -256,6 +271,7 @@ public class ResearchAgentService {
 		steps.add(new Step("s4", "Insider activity", "INSIDER", "Recent Form 4 buys/sells.", "PENDING"));
 		steps.add(new Step("s5", "Web attention", "WEB", "Hacker News + Wikipedia interest.", "PENDING"));
 		steps.add(new Step("s6", "Earnings picture", "EARNINGS", "Next date and recent EPS surprises.", "PENDING"));
+		steps.add(new Step("s7", "Key financial ratios", "FINANCIALS", "Valuation, margins, leverage.", "PENDING"));
 		return steps;
 	}
 
@@ -278,7 +294,7 @@ public class ResearchAgentService {
 				If these findings suggest the remaining plan should change (add a step for a data source not \
 				yet used, remove one that's now clearly unnecessary, or reorder), respond with ONLY a JSON \
 				array of the revised remaining steps, same shape as before: \
-				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS","why":"..."}]
+				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS","why":"..."}]
 				If the plan is still fine as-is, respond with exactly: NO_CHANGE
 				""".formatted(ticker, remaining.get(justCompletedIndex).label(), finding,
 				upcoming.stream().map(Step::label).collect(Collectors.joining(", ")));
@@ -314,6 +330,7 @@ public class ResearchAgentService {
 						ticker, List.of("BUY", "SELL"), LocalDate.now().minusDays(props.dataWindowDays())));
 				case "WEB" -> summarizeWeb(web.findByTickerAndPostedAtAfter(ticker, since));
 				case "EARNINGS" -> summarizeEarnings(ticker);
+				case "FINANCIALS" -> summarizeFinancials(ticker);
 				default -> "Unrecognized data source \"" + dataSource + "\" — skipped.";
 			};
 		}
@@ -392,6 +409,47 @@ public class ResearchAgentService {
 		return sb.toString();
 	}
 
+	/** Key valuation/profitability/leverage ratios from Finnhub's {@code /stock/metric} (fast-follow
+	 * — confirmed available on existing credentials). Best-effort like every other gather step: no key
+	 * configured, a rate-limit drop, or a missing field each degrade to "not available" rather than
+	 * failing the step or inventing a number. Full financial-<em>statement</em> data (line items via
+	 * SEC EDGAR) remains out of scope — see the class javadoc. */
+	private String summarizeFinancials(String ticker) {
+		if (finnhubApiKey == null || finnhubApiKey.isBlank()) {
+			return "No Finnhub API key configured — financial ratios unavailable.";
+		}
+		String url = "https://finnhub.io/api/v1/stock/metric?symbol=" + ticker + "&metric=all&token=" + finnhubApiKey;
+		Optional<String> body = finnhub.get(url);
+		if (body.isEmpty()) {
+			return "Financial ratios unavailable (rate-limited or no data for this symbol).";
+		}
+		JsonNode metric = JSON.readTree(body.get()).path("metric");
+		if (metric.isMissingNode()) {
+			return "Financial ratios unavailable (no data for this symbol).";
+		}
+		List<String> parts = new ArrayList<>();
+		addIfPresent(parts, metric, "peTTM", "P/E (TTM)");
+		addIfPresent(parts, metric, "netProfitMarginTTM", "net margin % (TTM)");
+		addIfPresent(parts, metric, "roeTTM", "ROE % (TTM)");
+		addIfPresent(parts, metric, "totalDebt/totalEquityQuarterly", "debt/equity (quarterly)");
+		addIfPresent(parts, metric, "currentRatioQuarterly", "current ratio (quarterly)");
+		addIfPresent(parts, metric, "revenueGrowthTTMYoy", "revenue growth % YoY (TTM)");
+		addIfPresent(parts, metric, "epsGrowthTTMYoy", "EPS growth % YoY (TTM)");
+		addIfPresent(parts, metric, "52WeekHigh", "52-week high");
+		addIfPresent(parts, metric, "52WeekLow", "52-week low");
+		if (parts.isEmpty()) {
+			return "Financial ratios returned no usable fields for this symbol.";
+		}
+		return "Ratios (no line-item financial statements gathered): " + String.join(", ", parts) + ".";
+	}
+
+	private static void addIfPresent(List<String> parts, JsonNode metric, String field, String label) {
+		JsonNode v = metric.path(field);
+		if (!v.isMissingNode() && !v.isNull()) {
+			parts.add(label + " " + v.asString());
+		}
+	}
+
 	// ---- synthesis (the one paid call) ----
 
 	private String synthesize(String ticker, List<Step> plan, Map<String, String> findings) {
@@ -405,18 +463,20 @@ public class ResearchAgentService {
 		}
 		String prompt = """
 				You are Agent 9, Argus's on-demand research analyst. Write a research report on %s based \
-				ONLY on the findings below. Do not invent financial figures (revenue, profit, debt, ratios) \
-				that aren't given — no financial-statement data was gathered this pass; if that's relevant, \
-				say so honestly rather than guessing.
+				ONLY on the findings below. Do not invent any figure — financial, ratio, or otherwise — \
+				that isn't given; if a ratio finding is present use it, but note that full financial \
+				statements (line-item revenue/profit/debt/balance-sheet figures) were never gathered, so \
+				say so honestly rather than guessing at anything beyond the ratios you were given.
 
 				FINDINGS:
 				%s
 
 				Write a markdown report with these sections, in this order: a one-line headline verdict \
 				(bullish/bearish/neutral lean, and whether the case reads more long-term or short-term), \
-				Sentiment & Momentum, Insider Activity, Macro Backdrop, Key Risks, and a closing "What \
-				wasn't assessed" note (financial statements weren't gathered this pass). Be specific and \
-				cite the findings; say plainly when data was thin or missing rather than padding.
+				Sentiment & Momentum, Insider Activity, Macro Backdrop, Financial Ratios (only if that \
+				finding is present — omit the section otherwise), Key Risks, and a closing "What wasn't \
+				assessed" note (full financial statements and 10-K/10-Q narrative detail weren't gathered). \
+				Be specific and cite the findings; say plainly when data was thin or missing rather than padding.
 				""".formatted(ticker, findingsBlock);
 		try {
 			return gateway.escalate(prompt);
