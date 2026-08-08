@@ -169,6 +169,7 @@ function ReportTable({ report }: { report: CleanupReport }) {
               <th className="pb-1 px-2 text-right font-medium">Kept: recent</th>
               <th className="pb-1 px-2 text-right font-medium">Kept: event-linked</th>
               <th className="pb-1 px-2 text-right font-medium">Rolled-up days</th>
+              <th className="pb-1 px-2 text-right font-medium">Tagged precedent</th>
               <th className="pb-1 pl-2 text-right font-medium">Frees</th>
             </tr>
           </thead>
@@ -186,6 +187,7 @@ function ReportTable({ report }: { report: CleanupReport }) {
                 <td className="py-1 px-2 text-right font-mono tabular-nums">{s.keptRecent.toLocaleString()}</td>
                 <td className="py-1 px-2 text-right font-mono tabular-nums">{s.keptAnchored.toLocaleString()}</td>
                 <td className="py-1 px-2 text-right font-mono tabular-nums">{s.rollupDays.toLocaleString()}</td>
+                <td className="py-1 px-2 text-right font-mono tabular-nums">{s.precedentTagged.toLocaleString()}</td>
                 <td className="py-1 pl-2 text-right font-mono tabular-nums">{formatBytes(s.freedBytes)}</td>
               </tr>
             ))}

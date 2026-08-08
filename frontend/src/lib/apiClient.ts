@@ -1409,6 +1409,8 @@ export interface CleanupSourceReport {
   keptAnchored: number;
   rollupDays: number;
   freedBytes: number;
+  /** Anchored rows newly marked as precedent this run (0 on a dry-run preview). */
+  precedentTagged: number;
 }
 
 /** Mirrors `CleanupService.CleanupReport`. */

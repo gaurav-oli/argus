@@ -68,7 +68,7 @@ public class CleanupService {
 	}
 
 	public record SourceReport(String table, String kind, long rowsTotal, long affected, long keptRecent,
-			long keptAnchored, long rollupDays, long freedBytes) {
+			long keptAnchored, long rollupDays, long freedBytes, long precedentTagged) {
 	}
 
 	public record CleanupReport(boolean dryRun, Instant startedAt, Instant finishedAt, long deletedRows,
@@ -105,7 +105,8 @@ public class CleanupService {
 		return report;
 	}
 
-	/** One firehose table: count the plan, and (live only) roll up then delete its disposable rows. */
+	/** One firehose table: count the plan, and (live only) roll up then delete its disposable rows,
+	 * plus tag any newly-qualifying event-anchored rows as precedent. */
 	private SourceReport process(Source s, boolean dryRun) {
 		long rowsTotal = count("select count(*) from " + s.table());
 		long wouldDelete = count(cte("select count(*) from " + s.table() + " " + s.alias() + " where " + s.candidate()));
@@ -117,11 +118,19 @@ public class CleanupService {
 		long freed = rowsTotal == 0 ? 0 : size * wouldDelete / rowsTotal;
 
 		long affected = wouldDelete;
-		if (!dryRun && wouldDelete > 0) {
-			jdbc.update(cte(s.rollupInsert()));
-			affected = jdbc.update(cte("delete from " + s.table() + " " + s.alias() + " where " + s.candidate()));
+		long precedentTagged = 0;
+		if (!dryRun) {
+			if (wouldDelete > 0) {
+				jdbc.update(s.rollupInsert());
+				affected = jdbc.update(cte("delete from " + s.table() + " " + s.alias() + " where " + s.candidate()));
+			}
+			// Independent of this cycle's disposal candidates — an event can newly anchor rows that
+			// aren't otherwise being touched. "not is_precedent" keeps the count meaningful (newly
+			// tagged, not re-tagging rows a prior run already marked) and the UPDATE idempotent.
+			precedentTagged = jdbc.update(s.tagPrecedentSql());
 		}
-		return new SourceReport(s.table(), s.kind(), rowsTotal, affected, keptRecent, keptAnchored, rollupDays, freed);
+		return new SourceReport(s.table(), s.kind(), rowsTotal, affected, keptRecent, keptAnchored, rollupDays, freed,
+				precedentTagged);
 	}
 
 	private long count(String sql) {
@@ -218,6 +227,14 @@ public class CleanupService {
 							+ " and " + alias + "." + timeCol + " + interval '" + anchorDays + " days')";
 		}
 
+		/** Mark rows as precedent — old enough to have otherwise been cleanup candidates, but spared
+		 * by an event anchor (data-retention deferred enhancement). Idempotent via the {@code not
+		 * is_precedent} guard, so re-running only counts/touches newly-qualifying rows. */
+		String tagPrecedentSql() {
+			return "with " + EVENTS + " update " + table + " " + alias + " set is_precedent = true"
+					+ " where " + olderThanCutoff() + " and " + anchored() + " and not " + alias + ".is_precedent";
+		}
+
 		String distinctTickerDay() {
 			if ("NEWS".equals(kind)) {
 				return "select distinct t as ticker, " + alias + ".published_at::date as day from " + table + " "
@@ -227,7 +244,9 @@ public class CleanupService {
 					+ alias + " where " + candidate;
 		}
 
-		/** INSERT ... SELECT that folds the disposable rows into sentiment_daily (accumulating). */
+		/** INSERT ... SELECT that folds the disposable rows into sentiment_daily (accumulating).
+		 * Each branch supplies its own leading {@code with} clause (rather than the shared {@link
+		 * #cte} wrapper) since NEWS needs an extra CTE alongside {@code events} (see below). */
 		String rollupInsert() {
 			String head = "insert into sentiment_daily "
 					+ "(kind, ticker, day, post_count, bullish_count, bearish_count, neutral_count,"
@@ -248,7 +267,7 @@ public class CleanupService {
 					+ " count(*) filter (where %1$s.sentiment_label is null"
 					+ "   or %1$s.sentiment_label not in ('BULLISH','BEARISH')),";
 			if ("SOCIAL".equals(kind)) {
-				return head + "'SOCIAL', " + alias + ".ticker, " + alias + ".posted_at::date, "
+				return "with " + EVENTS + " " + head + "'SOCIAL', " + alias + ".ticker, " + alias + ".posted_at::date, "
 						+ String.format(buckets, alias)
 						+ " coalesce(sum(" + alias + ".sentiment_score), 0), 0,"
 						+ " min(" + alias + ".posted_at), max(" + alias + ".posted_at), now()"
@@ -256,7 +275,7 @@ public class CleanupService {
 						+ " group by " + alias + ".ticker, " + alias + ".posted_at::date" + tail;
 			}
 			if ("WEB".equals(kind)) {
-				return head + "'WEB', " + alias + ".ticker, " + alias + ".posted_at::date, "
+				return "with " + EVENTS + " " + head + "'WEB', " + alias + ".ticker, " + alias + ".posted_at::date, "
 						+ String.format(buckets, alias)
 						+ " coalesce(sum(case " + alias + ".sentiment_label when 'BULLISH' then 1"
 						+ "   when 'BEARISH' then -1 else 0 end), 0), 0,"
@@ -265,12 +284,32 @@ public class CleanupService {
 						+ " group by " + alias + ".ticker, " + alias + ".posted_at::date" + tail;
 			}
 			// NEWS — expand the tickers array so each concerned ticker gets the article's signal.
-			return head + "'NEWS', t, " + alias + ".published_at::date, "
-					+ String.format(buckets, alias)
-					+ " coalesce(sum(" + alias + ".sentiment_score), 0), coalesce(sum(" + alias + ".relevance_score), 0),"
-					+ " min(" + alias + ".published_at), max(" + alias + ".published_at), now()"
-					+ " from " + table + " " + alias + ", unnest(" + alias + ".tickers) t where " + candidate
-					+ " group by t, " + alias + ".published_at::date" + tail;
+			// Duplicate stories (same ticker/day, same normalized headline — a wire story syndicated
+			// across sources) collapse to one representative (highest relevance, then earliest id)
+			// before aggregating, via the deduped_<alias> CTE below, so a viral headline picked up by
+			// five feeds doesn't inflate the daily post-count fivefold (data-retention dedup
+			// clustering, deferred enhancement). Deletion is unaffected — every duplicate row is still
+			// individually disposable and gets removed; only the rollup counts them once.
+			String norm = "regexp_replace(lower(trim(" + alias + ".headline)), '[^a-z0-9]+', '', 'g')";
+			String dedup = "deduped_" + alias + " as ("
+					+ "select distinct on (t, " + alias + ".published_at::date, " + norm + ")"
+					+ " t as ticker, " + alias + ".published_at as published_at,"
+					+ " " + alias + ".sentiment_label as sentiment_label,"
+					+ " " + alias + ".sentiment_score as sentiment_score,"
+					+ " " + alias + ".relevance_score as relevance_score"
+					+ " from " + table + " " + alias + ", unnest(" + alias + ".tickers) t"
+					+ " where " + candidate
+					+ " order by t, " + alias + ".published_at::date, " + norm + ","
+					+ " coalesce(" + alias + ".relevance_score, 0) desc, " + alias + ".id)";
+			return "with " + EVENTS + ", " + dedup + " " + head
+					+ "'NEWS', ticker, published_at::date,"
+					+ " count(*), count(*) filter (where sentiment_label = 'BULLISH'),"
+					+ " count(*) filter (where sentiment_label = 'BEARISH'),"
+					+ " count(*) filter (where sentiment_label is null or sentiment_label not in ('BULLISH','BEARISH')),"
+					+ " coalesce(sum(sentiment_score), 0), coalesce(sum(relevance_score), 0),"
+					+ " min(published_at), max(published_at), now()"
+					+ " from deduped_" + alias
+					+ " group by ticker, published_at::date" + tail;
 		}
 	}
 
@@ -293,6 +332,7 @@ public class CleanupService {
 			m.put("keptAnchored", s.keptAnchored());
 			m.put("rollupDays", s.rollupDays());
 			m.put("freedBytes", s.freedBytes());
+			m.put("precedentTagged", s.precedentTagged());
 			tables.add(m);
 		}
 		reportJson.put("tables", tables);
