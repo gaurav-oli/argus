@@ -15,6 +15,12 @@ import org.springframework.validation.annotation.Validated;
  * They are kept here for a future move to gateway-owned model config; tune the {@code spring.ai.*}
  * keys (or {@code ARGUS_MODEL_KEEP_ALIVE} / {@code ARGUS_BIG_MODEL}) to change runtime behavior.
  *
+ * <p>{@code smallModel} is different — it IS effective. There's only one Spring AI {@link
+ * org.springframework.ai.chat.model.ChatModel} bean (bound to {@code bigModel} via the native keys
+ * above), so {@link DefaultModelGateway} gets a distinct small-tier model by passing {@code
+ * smallModel} as a per-call {@code OllamaChatOptions} override on SMALL-tier generations only —
+ * BIG-tier calls are untouched and keep using the bean's configured default model.
+ *
  * @param concurrency       max concurrent big-model generations (serialized at 1 per Decision 1).
  *                          {@link DefaultModelGateway} also guards this at construction time — a
  *                          value below 1 would create a permanently-unacquirable semaphore, quietly
@@ -31,6 +37,11 @@ import org.springframework.validation.annotation.Validated;
  *                          finite wait instead of starving every queued caller forever.
  * @param keepAlive   informational (see note) — effective key is spring.ai.ollama.chat.options.keep-alive
  * @param bigModel    informational (see note) — effective key is spring.ai.ollama.chat.options.model
+ * @param smallModel  effective (see note above) — the always-resident, small model used for
+ *                    high-frequency SMALL-tier calls (Agent 1/2/3 sentiment/relevance), so they stop
+ *                    contending with and reloading the big model (Epic 4 follow-up, architecture
+ *                    Decision 1). Small enough to sit alongside the big model within the Mini's 28GB
+ *                    without triggering the swap-thrashing a second large model caused.
  * @param devResponse canned response returned by the dev-profile mock model
  */
 @ConfigurationProperties("argus.model")
@@ -40,5 +51,6 @@ public record ModelGatewayProperties(
 		@DefaultValue("150s") Duration callTimeoutSeconds,
 		@DefaultValue("10m") Duration keepAlive,
 		@DefaultValue("gemma3:27b") String bigModel,
+		@DefaultValue("llama3.2:3b") String smallModel,
 		@DefaultValue("[dev-mock] Argus Model Gateway is alive.") String devResponse) {
 }

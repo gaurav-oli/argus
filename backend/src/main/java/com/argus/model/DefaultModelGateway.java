@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.stereotype.Component;
 
 /**
@@ -35,6 +36,7 @@ public class DefaultModelGateway implements ModelGateway {
 	private final com.argus.cost.CostRecorder costRecorder;
 	private final Semaphore permits;
 	private final Duration callTimeout;
+	private final OllamaChatOptions smallModelOptions;
 
 	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
 			com.argus.cost.CostGovernor costGovernor, com.argus.cost.CostRecorder costRecorder,
@@ -51,6 +53,7 @@ public class DefaultModelGateway implements ModelGateway {
 		this.costRecorder = costRecorder;
 		this.permits = new Semaphore(properties.concurrency());
 		this.callTimeout = properties.callTimeoutSeconds();
+		this.smallModelOptions = OllamaChatOptions.builder().model(properties.smallModel()).build();
 	}
 
 	@Override
@@ -90,10 +93,17 @@ public class DefaultModelGateway implements ModelGateway {
 	 * Small-tier: unserialized, no Haiku fallback. High-frequency agents (1/2/3) call this at
 	 * volume, so a per-call paid fallback would blow the budget — failures propagate and the
 	 * caller decides (e.g. default to neutral).
+	 *
+	 * <p>Routed to {@code argus.model.small-model} via a per-call {@code OllamaChatOptions}
+	 * override (Epic 4 follow-up) rather than the bean's default (big) model — this is what lets
+	 * SMALL-tier volume stop contending with and reloading the big model on every call.
 	 */
 	private String generateSmall(String prompt) {
 		long startNanos = System.nanoTime();
-		String content = chatClient.prompt().user(prompt).call().content();
+		// .options() takes a Builder (not a built ChatOptions), and SMALL-tier calls run concurrently
+		// (unserialized) — mutate() hands back a fresh Builder per call so concurrent callers never
+		// share mutable builder state.
+		String content = chatClient.prompt().user(prompt).options(smallModelOptions.mutate()).call().content();
 		log.debug("small model generate ok ({} ms)", (System.nanoTime() - startNanos) / 1_000_000);
 		costRecorder.recordLocalCall("SMALL");
 		return content;

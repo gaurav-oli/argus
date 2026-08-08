@@ -1,6 +1,7 @@
 package com.argus.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -33,7 +34,8 @@ class DefaultModelGatewayTest {
 	}
 
 	private static ModelGatewayProperties propsWithTimeout(int concurrency, Duration callTimeout) {
-		return new ModelGatewayProperties(concurrency, callTimeout, Duration.ofMinutes(10), "gemma3:27b", "unused");
+		return new ModelGatewayProperties(
+				concurrency, callTimeout, Duration.ofMinutes(10), "gemma3:27b", "llama3.2:3b", "unused");
 	}
 
 	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
@@ -188,6 +190,31 @@ class DefaultModelGatewayTest {
 	}
 
 	@Test
+	void smallTierUsesTheConfiguredSmallModelAsAPerCallOverride() {
+		// Epic 4 follow-up: SMALL-tier calls must route to a distinct, always-resident small model
+		// (not the big model's bean default) via a per-call OllamaChatOptions override.
+		CapturingChatModel model = new CapturingChatModel();
+		DefaultModelGateway gateway = new DefaultModelGateway(
+				model, prompt -> "unused", gov(), recorder(), props(1));
+
+		gateway.generate("ping", ModelTier.SMALL);
+
+		assertEquals("llama3.2:3b", model.lastPrompt.getOptions().getModel());
+	}
+
+	@Test
+	void bigTierDoesNotOverrideTheModel() {
+		CapturingChatModel model = new CapturingChatModel();
+		DefaultModelGateway gateway = new DefaultModelGateway(
+				model, prompt -> "unused", gov(), recorder(), props(1));
+
+		gateway.generate("ping");
+
+		assertNull(model.lastPrompt.getOptions().getModel(),
+				"BIG-tier call must keep using the bean's default model, not the small-model override");
+	}
+
+	@Test
 	void constructorRejectsNonPositiveConcurrency() {
 		assertThrows(IllegalArgumentException.class,
 				() -> new DefaultModelGateway(new MockChatModel("pong"), prompt -> "unused", gov(), recorder(), props(0)));
@@ -297,6 +324,23 @@ class DefaultModelGatewayTest {
 				Thread.currentThread().interrupt();
 			}
 			return new ChatResponse(List.of(new Generation(new AssistantMessage("too-late"))));
+		}
+
+		@Override
+		public ChatOptions getDefaultOptions() {
+			return ChatOptions.builder().build();
+		}
+	}
+
+	/** Records the last {@link Prompt} it was called with, so tests can inspect what options
+	 * (e.g. a per-call model override) the gateway attached. */
+	private static final class CapturingChatModel implements ChatModel {
+		volatile Prompt lastPrompt;
+
+		@Override
+		public ChatResponse call(Prompt prompt) {
+			this.lastPrompt = prompt;
+			return new ChatResponse(List.of(new Generation(new AssistantMessage("ok"))));
 		}
 
 		@Override

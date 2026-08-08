@@ -33,3 +33,8 @@ argus:
     # spring.ai.ollama.chat.options.* keys above. Kept for a future gateway-owned config move.
     keep-alive: ${ARGUS_MODEL_KEEP_ALIVE:5m}
     big-model: ${ARGUS_BIG_MODEL:gemma4:26b}
+    # small-model IS effective (Epic 4 follow-up): DefaultModelGateway applies it as a per-call
+    # OllamaChatOptions override on SMALL-tier generations only (Agent 1/2/3 volume), so they stop
+    # contending with / reloading the big model. Small enough to sit resident alongside gemma4
+    # without the swap-thrashing a second large model caused (docs/mac-mini-validation.md).
+    small-model: ${ARGUS_SMALL_MODEL:llama3.2:3b}
