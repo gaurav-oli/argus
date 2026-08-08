@@ -49,6 +49,13 @@ public class NewsArticle {
 	@Column(columnDefinition = "text[]", nullable = false)
 	private String[] tickers = new String[0];
 
+	/** Unfiltered ticker(s) the source itself associates with this article (e.g. Finnhub's
+	 * {@code related} field) — may include symbols outside the held universe, unlike {@link #tickers}.
+	 * Used by {@link StrangerDangerService} (Epic 4 follow-up) for wider stranger-ticker recall. */
+	@JdbcTypeCode(SqlTypes.ARRAY)
+	@Column(name = "related_tickers", columnDefinition = "text[]", nullable = false)
+	private String[] relatedTickers = new String[0];
+
 	@Column(name = "ingested_at", nullable = false)
 	private Instant ingestedAt = Instant.now();
 
@@ -72,6 +79,11 @@ public class NewsArticle {
 
 	public NewsArticle(String source, String externalId, String url, String headline, String summary,
 			Instant publishedAt, String[] tickers) {
+		this(source, externalId, url, headline, summary, publishedAt, tickers, new String[0]);
+	}
+
+	public NewsArticle(String source, String externalId, String url, String headline, String summary,
+			Instant publishedAt, String[] tickers, String[] relatedTickers) {
 		this.source = source;
 		this.externalId = externalId;
 		this.url = url;
@@ -79,6 +91,7 @@ public class NewsArticle {
 		this.summary = summary;
 		this.publishedAt = publishedAt;
 		this.tickers = (tickers == null) ? new String[0] : tickers;
+		this.relatedTickers = (relatedTickers == null) ? new String[0] : relatedTickers;
 	}
 
 	public Long getId() {
@@ -111,6 +124,10 @@ public class NewsArticle {
 
 	public String[] getTickers() {
 		return tickers;
+	}
+
+	public String[] getRelatedTickers() {
+		return relatedTickers;
 	}
 
 	public Instant getIngestedAt() {

@@ -87,7 +87,8 @@ public class FinnhubNewsSource implements NewsSource {
 				}
 				items.add(new RawArticle(NAME, String.valueOf(n.path("id").asLong()),
 						emptyToNull(n.path("url").asString("")), headline,
-						emptyToNull(n.path("summary").asString("")), published, List.of(ticker)));
+						emptyToNull(n.path("summary").asString("")), published, List.of(ticker),
+						relatedTickers(n)));
 			}
 			return items;
 		} catch (RuntimeException ex) {
@@ -98,5 +99,22 @@ public class FinnhubNewsSource implements NewsSource {
 
 	private static String emptyToNull(String s) {
 		return (s == null || s.isBlank()) ? null : s;
+	}
+
+	/** Finnhub's {@code related} field: a comma-separated symbol list, sometimes naming other
+	 * tickers sharing the story (Epic 4 follow-up — feeds Stranger Danger's wider recall). */
+	private static List<String> relatedTickers(JsonNode n) {
+		String related = n.path("related").asString("");
+		if (related.isBlank()) {
+			return List.of();
+		}
+		List<String> out = new ArrayList<>();
+		for (String part : related.split(",")) {
+			String t = part.trim().toUpperCase();
+			if (!t.isEmpty()) {
+				out.add(t);
+			}
+		}
+		return out;
 	}
 }

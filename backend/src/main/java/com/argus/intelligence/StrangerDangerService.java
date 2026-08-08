@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -26,6 +28,15 @@ import org.springframework.stereotype.Service;
  * the elevated 6/7 agent-consensus bar Agent 5 must clear, and (on first detection) emits a
  * {@code stranger.detected} signal. Re-detections refresh the row without re-emitting, so Agent 5
  * isn't spammed each cycle.
+ *
+ * <p><b>Detection (Epic 4 follow-up, widened recall):</b> two independent signals, since pro feeds
+ * (Finnhub/WSJ/CNBC/GDELT) rarely emit the {@code $cashtag} form the original detector relied on
+ * exclusively. (1) {@code $cashtags} in the headline/summary (original, still the primary path for
+ * broad/social-style coverage). (2) An article's {@link NewsArticle#getRelatedTickers()} — the
+ * source's own ticker association (e.g. Finnhub company-news {@code related}) — counted only when
+ * the symbol also appears as a whole word in the headline/summary (same precision bar {@link
+ * TickerRelevanceTagger} applies to held tickers), so a merely co-listed related symbol that isn't
+ * actually discussed doesn't get flagged.
  */
 @Service
 public class StrangerDangerService {
@@ -107,18 +118,35 @@ public class StrangerDangerService {
 		return newlyDetected;
 	}
 
-	/** Group window articles by the stranger symbols they mention (cashtags not in the known universe). */
+	// Compiled whole-word matchers, cached per symbol (mirrors TickerRelevanceTagger's own cache) —
+	// used to confirm a related-ticker candidate is actually discussed, not just co-listed.
+	private final Map<String, Pattern> wholeWordCache = new ConcurrentHashMap<>();
+
+	/** Group window articles by the stranger symbols they mention — via {@code $cashtags} or a
+	 * whole-word-confirmed related ticker (see class javadoc) — that aren't in the known universe. */
 	private Map<String, List<NewsArticle>> coverageByStranger(Instant windowStart, Set<String> known) {
 		Map<String, List<NewsArticle>> byStranger = new LinkedHashMap<>();
 		for (NewsArticle article : articles.findByPublishedAtAfterOrderByPublishedAtDesc(windowStart)) {
 			String text = nullToEmpty(article.getHeadline()) + " " + nullToEmpty(article.getSummary());
-			for (String symbol : cashtags.extract(text)) {
+			Set<String> strangers = new java.util.LinkedHashSet<>(cashtags.extract(text));
+			for (String related : article.getRelatedTickers()) {
+				if (!known.contains(related) && mentionsWholeWord(text, related)) {
+					strangers.add(related);
+				}
+			}
+			for (String symbol : strangers) {
 				if (!known.contains(symbol)) {
 					byStranger.computeIfAbsent(symbol, k -> new ArrayList<>()).add(article);
 				}
 			}
 		}
 		return byStranger;
+	}
+
+	private boolean mentionsWholeWord(String haystack, String symbol) {
+		Pattern p = wholeWordCache.computeIfAbsent(symbol,
+				s -> Pattern.compile("\\b" + Pattern.quote(s) + "\\b", Pattern.CASE_INSENSITIVE));
+		return p.matcher(haystack).find();
 	}
 
 	private boolean assess(String ticker, List<NewsArticle> covering, Instant windowStart) {

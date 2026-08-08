@@ -41,6 +41,10 @@ class StrangerDangerServiceTest {
 		return new NewsArticle(source, id, "http://x/" + id, headline, null, Instant.now(), new String[0]);
 	}
 
+	private static NewsArticle articleWithRelated(String source, String id, String headline, String... related) {
+		return new NewsArticle(source, id, "http://x/" + id, headline, null, Instant.now(), new String[0], related);
+	}
+
 	private void recent(NewsArticle... a) {
 		when(articles.findByPublishedAtAfterOrderByPublishedAtDesc(any())).thenReturn(List.of(a));
 		lenient().when(credibility.findBySource(anyString())).thenReturn(Optional.empty());
@@ -59,6 +63,35 @@ class StrangerDangerServiceTest {
 		assertEquals(1, service.scan());
 		verify(alerts).save(any(StrangerAlert.class));
 		verify(events).publish(eq(StrangerDangerService.STREAM_KEY), eq("stranger.detected"), any());
+	}
+
+	@Test
+	void flagsStrangerFromRelatedTickerWhenWholeWordConfirmedInText() {
+		// Epic 4 follow-up: pro feeds rarely emit $cashtags — a source-reported related ticker that's
+		// also genuinely discussed (whole-word match) must recall the stranger too.
+		when(knownUniverse.knownTickers()).thenReturn(Set.of("AAPL"));
+		recent(articleWithRelated("finnhub", "1", "ABCD shares surge on takeover chatter", "ABCD"),
+				articleWithRelated("finnhub", "2", "Analysts weigh in on ABCD rally", "ABCD"),
+				articleWithRelated("finnhub", "3", "ABCD volume spikes premarket", "ABCD"));
+		when(alerts.findByTicker("ABCD")).thenReturn(Optional.empty());
+
+		assertEquals(1, service.scan());
+		verify(alerts).save(any(StrangerAlert.class));
+		verify(events).publish(eq(StrangerDangerService.STREAM_KEY), eq("stranger.detected"), any());
+	}
+
+	@Test
+	void doesNotFlagARelatedTickerThatIsNotActuallyMentionedInTheText() {
+		// A related ticker merely co-listed by the source (not discussed) must not count — precision
+		// bar matches TickerRelevanceTagger's whole-word confirmation for held tickers.
+		when(knownUniverse.knownTickers()).thenReturn(Set.of("AAPL"));
+		recent(articleWithRelated("finnhub", "1", "Market wrap: a quiet session", "ABCD"),
+				articleWithRelated("finnhub", "2", "Fed holds rates steady", "ABCD"),
+				articleWithRelated("finnhub", "3", "Oil prices dip on demand fears", "ABCD"));
+
+		assertEquals(0, service.scan());
+		verify(alerts, never()).save(any());
+		verify(events, never()).publish(anyString(), anyString(), any());
 	}
 
 	@Test
