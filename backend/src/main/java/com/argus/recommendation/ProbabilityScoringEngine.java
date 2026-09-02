@@ -16,15 +16,17 @@ import org.springframework.stereotype.Component;
  *       signal nudges the odds; only broad, strong, consistent signals approach the extremes. With no
  *       directional signal the probability is exactly 0.5 (maximum uncertainty).</li>
  *   <li><b>Confidence</b> = agreement × (0.4 + 0.6 × coverage), where <i>agreement</i> is the directional
- *       consensus |bull − bear| ÷ (bull + bear) and <i>coverage</i> is how many of the 7 agents weighed
- *       in. Conflicting signals drive confidence toward 0; broad consensus drives it toward 1.</li>
+ *       consensus |bull − bear| ÷ (bull + bear) and <i>coverage</i> is how many of the {@value
+ *       #EXPECTED_AGENTS} agents weighed in. Conflicting signals drive confidence toward 0; broad
+ *       consensus drives it toward 1.</li>
  * </ul>
  */
 @Component
 public class ProbabilityScoringEngine {
 
-	/** The full agent fleet — coverage is measured against this (FR-13's signal dots; 8 since Agent 8). */
-	static final int EXPECTED_AGENTS = 8;
+	/** The full agent fleet — coverage is measured against this (FR-13's signal dots; 10 since
+	 * Agents 10/11, technical analysis + cause-of-move classification). */
+	static final int EXPECTED_AGENTS = 10;
 
 	/**
 	 * Pseudo-weight of neutral prior evidence pinned at 0.5. Acts as Bayesian shrinkage: the bull

@@ -8,13 +8,22 @@ import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentLabel;
 import com.argus.internet.WebMention;
 import com.argus.internet.WebMentionRepository;
+import com.argus.notification.Notification;
+import com.argus.notification.NotificationService;
+import com.argus.notification.UrgencyTier;
 import com.argus.sec.SecFiling;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
+import com.argus.technical.CauseClassificationService;
+import com.argus.technical.PriceCandle;
+import com.argus.technical.PriceCandleRepository;
+import com.argus.technical.TechnicalAnalysisProperties;
+import com.argus.technical.TechnicalIndicators;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -60,22 +69,42 @@ public class AgentSignalGatherer {
 	/** Internet buzz is the noisiest, lowest-ROI source — hard-cap its influence below all others. */
 	private static final double INTERNET_MAX_WEIGHT = 0.35;
 
+	/** Deterministic RSI/trend read — a supporting/corroborating signal, same order of magnitude
+	 * as News, not the override mechanism (that's {@link #CAUSE_MAX_WEIGHT} below). */
+	private static final double TECHNICAL_MAX_WEIGHT = 0.7;
+	/** Deliberately higher than every other agent's cap — the concrete mechanism for "a highly
+	 * confident macro-external-and-temporary classification can outweigh a bearish News signal in
+	 * the same weighted average" (no veto/branching logic added to the scoring engine itself; see
+	 * {@link com.argus.recommendation.ProbabilityScoringEngine}). Still bounded, still has to earn
+	 * real trust through {@link AdaptiveTuningService}/Logic Review like every other agent. */
+	private static final double CAUSE_MAX_WEIGHT = 1.5;
+
 	private final NewsArticleRepository news;
 	private final SocialPostRepository social;
 	private final SecFilingRepository sec;
 	private final WebMentionRepository web;
 	private final EarningsQuietPeriodService quietPeriod;
 	private final AdaptiveTuningService tuning;
+	private final PriceCandleRepository candles;
+	private final CauseClassificationService causeClassification;
+	private final TechnicalAnalysisProperties technicalProps;
+	private final NotificationService notifications;
 
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
 			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod,
-			AdaptiveTuningService tuning) {
+			AdaptiveTuningService tuning, PriceCandleRepository candles,
+			CauseClassificationService causeClassification, TechnicalAnalysisProperties technicalProps,
+			NotificationService notifications) {
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
 		this.web = web;
 		this.quietPeriod = quietPeriod;
 		this.tuning = tuning;
+		this.candles = candles;
+		this.causeClassification = causeClassification;
+		this.technicalProps = technicalProps;
+		this.notifications = notifications;
 	}
 
 	public List<AgentSignal> gather(String ticker) {
@@ -86,6 +115,9 @@ public class AgentSignalGatherer {
 		insiderSignal(ticker).ifPresent(signals::add);
 		internetSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
+		List<PriceCandle> ascendingCandles = ascendingCandles(ticker);
+		technicalSignal(ascendingCandles).ifPresent(signals::add);
+		causeSignal(ticker, ascendingCandles).ifPresent(signals::add);
 		// Phase B: scale each agent's weight by its learned reliability (identity when tuning is disabled).
 		List<AgentSignal> tuned = signals.stream().map(this::applyReliability).toList();
 		log.info("gather({}) → [{}]", ticker,
@@ -274,6 +306,116 @@ public class AgentSignalGatherer {
 
 	private static double relevance(NewsArticle a) {
 		return a.getRelevanceScore() == null ? 0 : a.getRelevanceScore().doubleValue();
+	}
+
+	/** Most-recent candles in chronological order — {@link TechnicalIndicators} and {@link
+	 * PriceCandleRepository}'s own "recent N" query convention both need ascending order, but the
+	 * repository (matching every other "recent N" query in the app) returns newest-first. Fetched
+	 * once per {@link #gather} call and shared by {@link #technicalSignal} and {@link #causeSignal}
+	 * so a single gather doesn't hit the candles table twice. */
+	private List<PriceCandle> ascendingCandles(String ticker) {
+		List<PriceCandle> recent = candles.findTop200ByTickerOrderByCandleDateDesc(ticker);
+		List<PriceCandle> ascending = new ArrayList<>(recent);
+		Collections.reverse(ascending);
+		return ascending;
+	}
+
+	/**
+	 * Agent 10 — deterministic technical read: RSI(14) extremes (classic interpretation — below 30
+	 * is oversold/bullish-lean, above 70 is overbought/bearish-lean) corroborated by whether price
+	 * sits above or below its 20/50-day trend. No LLM involved, same "no number comes from an LLM"
+	 * discipline as every other source here.
+	 */
+	private Optional<AgentSignal> technicalSignal(List<PriceCandle> ascending) {
+		if (ascending.isEmpty()) {
+			return Optional.empty();
+		}
+		Optional<TechnicalIndicators.Snapshot> snapOpt = TechnicalIndicators.snapshot(ascending);
+		if (snapOpt.isEmpty()) {
+			return Optional.empty();
+		}
+		TechnicalIndicators.Snapshot snap = snapOpt.get();
+		double rsi = snap.rsi14().doubleValue();
+		double rsiSignal = rsi < 30 ? (30 - rsi) / 30.0
+				: rsi > 70 ? -(rsi - 70) / 30.0
+				: 0.0;
+
+		double trendSum = 0;
+		int trendVotes = 0;
+		if (snap.sma20() != null) {
+			trendSum += snap.lastClose().compareTo(snap.sma20()) > 0 ? 1 : -1;
+			trendVotes++;
+		}
+		if (snap.sma50() != null) {
+			trendSum += snap.lastClose().compareTo(snap.sma50()) > 0 ? 1 : -1;
+			trendVotes++;
+		}
+		double trendNet = trendVotes == 0 ? 0 : trendSum / trendVotes;
+
+		// RSI extremes dominate when present; with no extreme, a clear trend alone is a weaker read.
+		double net = rsiSignal != 0 ? rsiSignal : trendNet * 0.4;
+		if (Math.abs(net) < SIGNAL_DIRECTION_DEADZONE) {
+			return Optional.empty();
+		}
+		SignalDirection dir = net > 0 ? SignalDirection.BULLISH : SignalDirection.BEARISH;
+		double weight = TECHNICAL_MAX_WEIGHT * Math.min(1.0, Math.abs(net));
+		String rationale = String.format("RSI %.1f%s, price %s its 20/50-day trend", rsi,
+				rsi < 30 ? " (oversold)" : rsi > 70 ? " (overbought)" : "",
+				trendNet > 0 ? "above" : trendNet < 0 ? "below" : "mixed vs.");
+		return Optional.of(new AgentSignal("agent-10-technical", dir, weight, rationale));
+	}
+
+	/**
+	 * Agent 11 — only fires on a real, meaningful drawdown ({@code
+	 * argus.technical.cause-trigger-drawdown-pct}), then classifies why via {@link
+	 * CauseClassificationService}. When the classification reads MACRO_EXTERNAL and temporary with
+	 * confidence clearing {@code argus.technical.cause-confidence-floor}, emits a BULLISH signal
+	 * whose weight is computed here from that confidence (never the LLM's own number) — this is the
+	 * concrete "buy the dip" mechanism the rest of the app can weigh against News/Social like any
+	 * other source. Silent (never emitted) on a shallow dip, a low-confidence read, or a
+	 * COMPANY_SPECIFIC classification — same "silence over a wrong guess" discipline as every other
+	 * source here.
+	 */
+	private Optional<AgentSignal> causeSignal(String ticker, List<PriceCandle> ascending) {
+		if (ascending.isEmpty()) {
+			return Optional.empty();
+		}
+		Optional<Double> drawdown =
+				TechnicalIndicators.drawdownFromHighPct(ascending, TechnicalIndicators.DRAWDOWN_LOOKBACK_DAYS);
+		if (drawdown.isEmpty() || drawdown.get() > technicalProps.causeTriggerDrawdownPct()) {
+			return Optional.empty(); // no drawdown, or too shallow to be worth an LLM call
+		}
+		Optional<CauseClassificationService.Classification> classified =
+				causeClassification.classify(ticker, drawdown.get());
+		if (classified.isEmpty()) {
+			return Optional.empty();
+		}
+		CauseClassificationService.Classification c = classified.get();
+		if (c.cause() != CauseClassificationService.Cause.MACRO_EXTERNAL || !c.temporary()
+				|| c.confidence() < technicalProps.causeConfidenceFloor()) {
+			return Optional.empty();
+		}
+		double weight = CAUSE_MAX_WEIGHT * c.confidence();
+		String rationale = String.format("%.1f%% below 60-day high, classified macro-driven & temporary "
+				+ "(%.0f%% confidence): %s", drawdown.get(), c.confidence() * 100, c.reasoning());
+		alertPossibleDipBuy(ticker, drawdown.get(), c);
+		return Optional.of(new AgentSignal("agent-11-cause", SignalDirection.BULLISH, weight, rationale));
+	}
+
+	/** Surfaces the dip-buy thesis directly, not just as one more line in a recommendation's signal
+	 * breakdown — the user explicitly asked to "visualize" a temporary dip as it's detected.
+	 * Best-effort: a push failure must never stop the underlying signal from being returned. */
+	private void alertPossibleDipBuy(String ticker, double drawdownPct, CauseClassificationService.Classification c) {
+		try {
+			notifications.notify(Notification.forTicker(UrgencyTier.IMPORTANT, ticker, "BULLISH",
+					c.confidence(), 1.0, "📉 Possible buying opportunity: " + ticker,
+					String.format("%.1f%% below its 60-day high — looks macro-driven and temporary, "
+							+ "not company-specific: %s", drawdownPct, c.reasoning()),
+					"/recommendations"));
+		}
+		catch (RuntimeException ex) {
+			log.warn("Dip-buy alert for {} failed: {}", ticker, ex.getMessage());
+		}
 	}
 
 	private Optional<AgentSignal> calendarSignal(String ticker) {

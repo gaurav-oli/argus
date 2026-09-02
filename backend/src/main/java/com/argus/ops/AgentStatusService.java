@@ -15,6 +15,7 @@ import com.argus.research.ResearchJob;
 import com.argus.research.ResearchJobRepository;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
+import com.argus.technical.PriceCandleRepository;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,9 +26,12 @@ import org.springframework.util.StringUtils;
  * Per-agent status for the Agents dashboard (Epic 9, Story 9.1). All run on real data: Agent 1
  * (News — which also owns the Source Credibility Engine and the Stranger Danger watch), Agent 2
  * (Social), Agent 3 (Internet), Agent 4 (SEC filings), Agent 5 (Recommender), Agent 6 (Cost
- * Governor — budget governance with auto-switch), Agent 7 (Calendar), and Agent 8 (Macro/political
+ * Governor — budget governance with auto-switch), Agent 7 (Calendar), Agent 8 (Macro/political
  * news — no source of its own; it tags the same articles Agent 1 already ingests, so its coverage
- * is bounded by Agent 1's sources).
+ * is bounded by Agent 1's sources), Agent 9 (on-demand research), and Agent 10 (Technical Analysis
+ * + cause-of-move classification — one card covering two signal identities, {@code
+ * agent-10-technical} and {@code agent-11-cause}, kept distinct for tuning purposes but not
+ * fragmented into two UI cards).
  */
 @Service
 public class AgentStatusService {
@@ -43,6 +47,7 @@ public class AgentStatusService {
 	private final CostGovernor costGovernor;
 	private final MacroKeywordRepository macroKeywords;
 	private final ResearchJobRepository research;
+	private final PriceCandleRepository candles;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
@@ -50,7 +55,7 @@ public class AgentStatusService {
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
 			WebMentionRepository web, CostGovernor costGovernor, MacroKeywordRepository macroKeywords,
-			ResearchJobRepository research,
+			ResearchJobRepository research, PriceCandleRepository candles,
 			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
@@ -64,6 +69,7 @@ public class AgentStatusService {
 		this.costGovernor = costGovernor;
 		this.macroKeywords = macroKeywords;
 		this.research = research;
+		this.candles = candles;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -114,7 +120,13 @@ public class AgentStatusService {
 								+ "macro, social, insider, web, and earnings data, revises the plan mid-run if it "
 								+ "learns something new, then writes a long-term/short-term analysis.",
 						research.countByStatus(ResearchJob.Status.DONE), "reports completed",
-						null, "on demand", agent9Note()));
+						null, "on demand", agent9Note()),
+				active("technical", "Agent 10", "Technical & Setup Analysis",
+						"Computes RSI/moving-average signals from daily price history, and — on a real "
+								+ "drawdown — classifies whether it looks company-specific or a temporary "
+								+ "macro/external shock worth treating as a dip-buying opportunity.",
+						candles.count(), "candles ingested", candles.latestIngestedAt(), "daily · after close",
+						finnhubEnabled ? null : "Needs a Finnhub key (unset — Agent 10 is inactive)"));
 	}
 
 	private static AgentStatusView active(String id, String code, String name, String description,

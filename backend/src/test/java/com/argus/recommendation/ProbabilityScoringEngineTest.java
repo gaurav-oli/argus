@@ -24,7 +24,8 @@ class ProbabilityScoringEngineTest {
 		// (3 + 0.5) / (3 + 1) = 0.875 — strong, but the neutral prior keeps it off a false 100%.
 		assertEquals(0.875, s.bullProbability(), 1e-9);
 		assertEquals(0.125, s.bearProbability(), 1e-9);
-		assertTrue(s.confidence() > 0.6, "unanimous + decent coverage ⇒ high confidence");
+		// agreement 1.0, coverage 3/10 (EXPECTED_AGENTS=10 since Agents 10/11) ⇒ 1.0×(0.4+0.6×0.3)=0.58.
+		assertEquals(0.58, s.confidence(), 1e-9, "unanimous but partial coverage ⇒ moderately high confidence");
 	}
 
 	@Test
