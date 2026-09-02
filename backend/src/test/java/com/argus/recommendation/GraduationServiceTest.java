@@ -7,6 +7,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.argus.notification.Notification;
+import com.argus.notification.NotificationService;
+import com.argus.notification.UrgencyTier;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -83,7 +87,8 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.FROZEN);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class));
+		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class),
+				mock(NotificationService.class));
 
 		GraduationState result = service.resume();
 
@@ -98,11 +103,108 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.ACTIVE);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class));
+		GraduationService service = new GraduationService(repo, mock(PaperTradeRepository.class),
+				mock(NotificationService.class));
 
 		GraduationState result = service.resume();
 
 		assertEquals(GraduationState.ACTIVE, result, "resume() must not skip the earn-your-way-up ladder");
 		verify(repo, never()).save(any());
+	}
+
+	// ---- recordOutcome() freeze alert — the 2026-09-02 incident this session fixed ----
+
+	@Test
+	void recordOutcomePushesACriticalAlertOnFreeze() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		PaperTradeRepository trades = mock(PaperTradeRepository.class);
+		NotificationService notifications = mock(NotificationService.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.ACTIVE);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		when(trades.count()).thenReturn(50L);
+		when(trades.countByWonTrue()).thenReturn(20L);
+		// Rolling-10 window with 2 wins (20%) — below the 30% freeze threshold.
+		List<PaperTrade> rolling = List.of(
+				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost());
+		when(trades.findTop10ByOrderByIdDesc()).thenReturn(rolling);
+		GraduationService service = new GraduationService(repo, trades, notifications);
+
+		GraduationState result = service.recordOutcome(false, 999L);
+
+		assertEquals(GraduationState.FROZEN, result);
+		verify(notifications).notify(any(Notification.class));
+	}
+
+	@Test
+	void recordOutcomeAlertIsCriticalAndNonTicker() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		PaperTradeRepository trades = mock(PaperTradeRepository.class);
+		NotificationService notifications = mock(NotificationService.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.ACTIVE);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		when(trades.count()).thenReturn(50L);
+		when(trades.countByWonTrue()).thenReturn(20L);
+		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost()));
+		GraduationService service = new GraduationService(repo, trades, notifications);
+
+		service.recordOutcome(false, 999L);
+
+		org.mockito.ArgumentCaptor<Notification> captor = org.mockito.ArgumentCaptor.forClass(Notification.class);
+		verify(notifications).notify(captor.capture());
+		assertEquals(UrgencyTier.CRITICAL, captor.getValue().tier());
+		assertEquals(null, captor.getValue().ticker());
+	}
+
+	@Test
+	void recordOutcomeDoesNotAlertWhenNotFreezing() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		PaperTradeRepository trades = mock(PaperTradeRepository.class);
+		NotificationService notifications = mock(NotificationService.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.ACTIVE);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		when(trades.count()).thenReturn(50L);
+		when(trades.countByWonTrue()).thenReturn(30L);
+		// Healthy rolling window (60%) — no state change at all.
+		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+				won(), won(), won(), won(), won(), won(), lost(), lost(), lost(), lost()));
+		GraduationService service = new GraduationService(repo, trades, notifications);
+
+		GraduationState result = service.recordOutcome(true, 999L);
+
+		assertEquals(GraduationState.ACTIVE, result);
+		verify(notifications, never()).notify(any());
+	}
+
+	@Test
+	void recordOutcomeAFailingAlertNeverMasksTheFreezeItself() {
+		AgentGraduationRepository repo = mock(AgentGraduationRepository.class);
+		PaperTradeRepository trades = mock(PaperTradeRepository.class);
+		NotificationService notifications = mock(NotificationService.class);
+		AgentGraduation g = new AgentGraduation();
+		g.setState(GraduationState.ACTIVE);
+		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
+		when(trades.count()).thenReturn(50L);
+		when(trades.countByWonTrue()).thenReturn(20L);
+		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost()));
+		when(notifications.notify(any())).thenThrow(new RuntimeException("push boom"));
+		GraduationService service = new GraduationService(repo, trades, notifications);
+
+		GraduationState result = service.recordOutcome(false, 999L);
+
+		assertEquals(GraduationState.FROZEN, result, "the freeze itself must still take effect");
+		assertEquals(GraduationState.FROZEN, g.getState());
+	}
+
+	private static PaperTrade won() {
+		return new PaperTrade(true, 1L);
+	}
+
+	private static PaperTrade lost() {
+		return new PaperTrade(false, 1L);
 	}
 }

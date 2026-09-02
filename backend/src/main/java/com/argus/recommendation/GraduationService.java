@@ -1,5 +1,8 @@
 package com.argus.recommendation;
 
+import com.argus.notification.Notification;
+import com.argus.notification.NotificationService;
+import com.argus.notification.UrgencyTier;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
  * PROBATION promotes to ACTIVE with sustained performance (≥40 trades, ≥60%); ACTIVE demotes to
  * PROBATION if the rolling last-10 win rate falls below 50%; and any state freezes on a serious-
  * failure pattern (rolling last-10 below 30%). FROZEN is terminal until manually reviewed.
+ *
+ * <p><b>2026-09-02 incident:</b> a real freeze (2/10 rolling win rate) sat unnoticed for two weeks —
+ * {@code RecommendationTrigger} correctly stopped producing new recommendations, but nothing told
+ * the user it had happened; the only surface was a small badge on the Recommendation Cards page.
+ * FROZEN now also pushes a CRITICAL alert (see {@link #recordOutcome}), the same pattern already
+ * used for Stranger Danger / breaking news / lockout alerts, so a freeze is noticed within minutes
+ * instead of discovered two weeks later via a stale-looking win rate.
  */
 @Service
 public class GraduationService {
@@ -28,10 +38,13 @@ public class GraduationService {
 
 	private final AgentGraduationRepository graduation;
 	private final PaperTradeRepository trades;
+	private final NotificationService notifications;
 
-	public GraduationService(AgentGraduationRepository graduation, PaperTradeRepository trades) {
+	public GraduationService(AgentGraduationRepository graduation, PaperTradeRepository trades,
+			NotificationService notifications) {
 		this.graduation = graduation;
 		this.trades = trades;
+		this.notifications = notifications;
 	}
 
 	/** Agent 5's trust posture for the UI: state, badge, and the real track record behind it. */
@@ -86,14 +99,35 @@ public class GraduationService {
 		int rollingWins = (int) last.stream().filter(PaperTrade::isWon).count();
 
 		AgentGraduation g = graduation.findById(AgentGraduation.SINGLETON_ID).orElseGet(AgentGraduation::new);
-		GraduationState next = evaluate(g.getState(), total, wins, rollingWins, last.size());
-		if (next != g.getState()) {
+		GraduationState previous = g.getState();
+		GraduationState next = evaluate(previous, total, wins, rollingWins, last.size());
+		if (next != previous) {
 			log.info("Agent 5 graduation: {} -> {} ({} trades, {}% overall)",
-					g.getState(), next, total, total == 0 ? 0 : Math.round(100.0 * wins / total));
+					previous, next, total, total == 0 ? 0 : Math.round(100.0 * wins / total));
 			g.setState(next);
 			graduation.save(g);
+			if (next == GraduationState.FROZEN) {
+				alertFrozen(rollingWins, last.size());
+			}
 		}
 		return next;
+	}
+
+	/** CRITICAL, non-ticker push (bypasses the fatigue gate + quiet hours, never dedups) — a freeze
+	 * means Agent 5 has stopped producing ANY new recommendation until someone reviews and calls
+	 * {@link #resume()}; that must be noticed immediately, not discovered later via a stale-looking
+	 * win rate. Best-effort: a push failure must never mask the freeze itself. */
+	private void alertFrozen(int rollingWins, int rollingCount) {
+		try {
+			notifications.notify(Notification.of(UrgencyTier.CRITICAL,
+					"🧊 Agent 5 has frozen — no new recommendations",
+					"Only " + rollingWins + "/" + rollingCount + " of the last " + rollingCount
+							+ " calls won, so Agent 5 stopped recommending until reviewed. Check the "
+							+ "recent losing trades, then resume it from the Recommendations page when ready.",
+					"/recommendations"));
+		} catch (RuntimeException ex) {
+			log.warn("Agent 5 freeze alert failed: {}", ex.getMessage());
+		}
 	}
 
 	/** Pure transition rule (visible for testing). */
