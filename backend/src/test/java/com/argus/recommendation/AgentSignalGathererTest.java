@@ -254,6 +254,39 @@ class AgentSignalGathererTest {
 	}
 
 	@Test
+	void technicalRationaleIncludesMacdAndBollingerWhenEnoughHistoryExists() {
+		// risingThenSharpDrop() is 35 candles — exactly enough for both the ta4j-backed MACD(35) and
+		// Bollinger(20) reads to fire and fold into the composite rationale.
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
+				.thenReturn(descendingCandles(risingThenSharpDrop()));
+
+		List<AgentSignal> signals = gatherer.gather("AAPL");
+
+		AgentSignal technical = signals.stream().filter(s -> s.agent().equals("agent-10-technical"))
+				.findFirst().orElseThrow();
+		assertTrue(technical.rationale().contains("MACD"), "35 candles must be enough for a MACD read");
+	}
+
+	@Test
+	void technicalRationaleOmitsMacdWithTooLittleHistory() {
+		// The same 15-candle fixture as the oversold-RSI test — below MACD's 35-candle floor, so the
+		// composite rationale must not claim a MACD read it couldn't actually compute.
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		double[] declining = new double[15];
+		for (int i = 0; i < 15; i++) {
+			declining[i] = 24 - i;
+		}
+		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL")).thenReturn(descendingCandles(declining));
+
+		List<AgentSignal> signals = gatherer.gather("AAPL");
+
+		AgentSignal technical = signals.stream().filter(s -> s.agent().equals("agent-10-technical"))
+				.findFirst().orElseThrow();
+		assertTrue(!technical.rationale().contains("MACD"), "15 candles is below the 35-candle MACD floor");
+	}
+
+	@Test
 	void noTechnicalOrCauseSignalWithoutCandleHistory() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
 		// candles left unstubbed -> empty list, matching "not enough history yet" for a new ticker.

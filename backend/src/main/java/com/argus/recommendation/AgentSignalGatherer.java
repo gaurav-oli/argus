@@ -321,10 +321,20 @@ public class AgentSignalGatherer {
 	}
 
 	/**
-	 * Agent 10 — deterministic technical read: RSI(14) extremes (classic interpretation — below 30
-	 * is oversold/bullish-lean, above 70 is overbought/bearish-lean) corroborated by whether price
-	 * sits above or below its 20/50-day trend. No LLM involved, same "no number comes from an LLM"
-	 * discipline as every other source here.
+	 * Agent 10 — deterministic technical read, two families of evidence (no LLM involved anywhere,
+	 * same "no number comes from an LLM" discipline as every other source here):
+	 * <ul>
+	 *   <li><b>Mean-reversion</b> — RSI(14) extremes (below 30 oversold/bullish-lean, above 70
+	 *       overbought/bearish-lean) corroborated by Bollinger %B (ta4j-backed): below the lower
+	 *       band reads the same direction as oversold RSI, above the upper band the same as
+	 *       overbought. The two are averaged when both fire, so Bollinger can also trigger a read on
+	 *       its own when RSI alone sits inside its deadzone.</li>
+	 *   <li><b>Trend</b> — whether price sits above/below its 20/50-day SMA, plus the MACD histogram
+	 *       sign (ta4j-backed: positive = the MACD line running above its own signal line, bullish
+	 *       momentum) as a third vote in the same average.</li>
+	 * </ul>
+	 * Mean-reversion dominates when it fires (an extreme is a stronger, rarer read); with no extreme,
+	 * the trend vote alone is a weaker corroborating read.
 	 */
 	private Optional<AgentSignal> technicalSignal(List<PriceCandle> ascending) {
 		if (ascending.isEmpty()) {
@@ -340,6 +350,19 @@ public class AgentSignalGatherer {
 				: rsi > 70 ? -(rsi - 70) / 30.0
 				: 0.0;
 
+		Double pctB = snap.bollingerPercentB();
+		double bollingerSignal = 0.0;
+		if (pctB != null) {
+			if (pctB < 0) {
+				bollingerSignal = Math.min(1.0, -pctB); // below the lower band -> bullish (oversold-style)
+			}
+			else if (pctB > 1) {
+				bollingerSignal = -Math.min(1.0, pctB - 1); // above the upper band -> bearish (overbought-style)
+			}
+		}
+		double meanReversionSignal = (rsiSignal != 0 && bollingerSignal != 0) ? (rsiSignal + bollingerSignal) / 2.0
+				: rsiSignal != 0 ? rsiSignal : bollingerSignal;
+
 		double trendSum = 0;
 		int trendVotes = 0;
 		if (snap.sma20() != null) {
@@ -350,18 +373,27 @@ public class AgentSignalGatherer {
 			trendSum += snap.lastClose().compareTo(snap.sma50()) > 0 ? 1 : -1;
 			trendVotes++;
 		}
+		if (snap.macdHistogram() != null) {
+			trendSum += snap.macdHistogram() > 0 ? 1 : -1;
+			trendVotes++;
+		}
 		double trendNet = trendVotes == 0 ? 0 : trendSum / trendVotes;
 
-		// RSI extremes dominate when present; with no extreme, a clear trend alone is a weaker read.
-		double net = rsiSignal != 0 ? rsiSignal : trendNet * 0.4;
+		// Mean-reversion extremes dominate when present; with no extreme, the trend vote alone is a
+		// weaker read.
+		double net = meanReversionSignal != 0 ? meanReversionSignal : trendNet * 0.4;
 		if (Math.abs(net) < SIGNAL_DIRECTION_DEADZONE) {
 			return Optional.empty();
 		}
 		SignalDirection dir = net > 0 ? SignalDirection.BULLISH : SignalDirection.BEARISH;
 		double weight = TECHNICAL_MAX_WEIGHT * Math.min(1.0, Math.abs(net));
-		String rationale = String.format("RSI %.1f%s, price %s its 20/50-day trend", rsi,
+		String rationale = String.format("RSI %.1f%s%s, price %s its trend%s", rsi,
 				rsi < 30 ? " (oversold)" : rsi > 70 ? " (overbought)" : "",
-				trendNet > 0 ? "above" : trendNet < 0 ? "below" : "mixed vs.");
+				pctB != null && (pctB < 0 || pctB > 1)
+						? String.format(", Bollinger %%B %.2f (%s band)", pctB, pctB < 0 ? "below" : "above") : "",
+				trendNet > 0 ? "above" : trendNet < 0 ? "below" : "mixed vs.",
+				snap.macdHistogram() != null
+						? String.format(", MACD %s", snap.macdHistogram() > 0 ? "bullish" : "bearish") : "");
 		return Optional.of(new AgentSignal("agent-10-technical", dir, weight, rationale));
 	}
 

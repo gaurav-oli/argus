@@ -132,7 +132,7 @@ class TechnicalIndicatorsTest {
 
 	@Test
 	void snapshotPresentWithPartialSmasWhenShortOnHistory() {
-		// 20 candles: enough for RSI(15) and SMA20, not enough for SMA50.
+		// 20 candles: enough for RSI(15), SMA20, and Bollinger %B(20); not enough for SMA50 or MACD(35).
 		double[] values = new double[20];
 		for (int i = 0; i < 20; i++) {
 			values[i] = 100 + i;
@@ -142,6 +142,81 @@ class TechnicalIndicatorsTest {
 		assertTrue(snap.isPresent());
 		assertTrue(snap.get().sma20() != null);
 		assertNull(snap.get().sma50(), "50-period SMA must be null with only 20 candles");
+		assertNull(snap.get().macdHistogram(), "MACD needs 35 candles, must be null with only 20");
+		assertTrue(snap.get().bollingerPercentB() != null, "Bollinger %B only needs 20 candles");
 		assertEquals(0, BigDecimal.valueOf(100).compareTo(snap.get().rsi14()), "all-gains window");
+	}
+
+	// ---- macdHistogram (ta4j-backed) ----
+
+	@Test
+	void macdHistogramIsExactlyZeroOnAFlatPriceSeries() {
+		// A constant price, however EMA is seeded, stays at that same constant at every bar — so
+		// MACD (fast EMA − slow EMA) is 0 at every bar, and the signal line (EMA of a constant-zero
+		// series) is 0 too. Histogram = 0 − 0 = 0. True regardless of ta4j's internal seeding rule.
+		double[] flat = new double[40];
+		java.util.Arrays.fill(flat, 100.0);
+
+		Optional<Double> histogram = TechnicalIndicators.macdHistogram(closes(flat));
+
+		assertTrue(histogram.isPresent());
+		assertEquals(0.0, histogram.get(), 0.0001);
+	}
+
+	@Test
+	void macdHistogramIsPositiveDuringASustainedUptrend() {
+		// Textbook MACD behavior: in a steady uptrend the fast EMA leads the slow EMA upward, and
+		// the MACD line runs above its own lagging signal line — a positive histogram.
+		double[] rising = new double[40];
+		for (int i = 0; i < 40; i++) {
+			rising[i] = 100 + i;
+		}
+
+		Optional<Double> histogram = TechnicalIndicators.macdHistogram(closes(rising));
+
+		assertTrue(histogram.isPresent());
+		assertTrue(histogram.get() > 0, "a sustained uptrend must read as positive MACD momentum");
+	}
+
+	@Test
+	void macdHistogramEmptyBelowThirtyFiveCandles() {
+		assertTrue(TechnicalIndicators.macdHistogram(closes(new double[34])).isEmpty());
+	}
+
+	// ---- bollingerPercentB (ta4j-backed) ----
+
+	@Test
+	void bollingerPercentBAboveOneOnABreakoutSpike() {
+		// 19 flat candles at 100, then one sharp spike to 130 — the spike must read above the upper
+		// band (%B > 1), a real breakout beyond the bands the flat history established.
+		double[] values = new double[20];
+		java.util.Arrays.fill(values, 100.0);
+		values[19] = 130;
+
+		Optional<Double> pctB = TechnicalIndicators.bollingerPercentB(closes(values));
+
+		assertTrue(pctB.isPresent());
+		assertTrue(pctB.get() > 1.0, "a sharp spike above 19 flat candles must breach the upper band");
+	}
+
+	@Test
+	void bollingerPercentBWithinBandsForOrdinaryFluctuation() {
+		// Oscillates between 98 and 102, ending at a middling value — normal noise, not a breakout,
+		// so %B should stay within the 0..1 band range.
+		double[] values = new double[20];
+		for (int i = 0; i < 19; i++) {
+			values[i] = i % 2 == 0 ? 98 : 102;
+		}
+		values[19] = 100;
+
+		Optional<Double> pctB = TechnicalIndicators.bollingerPercentB(closes(values));
+
+		assertTrue(pctB.isPresent());
+		assertTrue(pctB.get() > 0.0 && pctB.get() < 1.0, "ordinary fluctuation must stay within the bands");
+	}
+
+	@Test
+	void bollingerPercentBEmptyBelowTwentyCandles() {
+		assertTrue(TechnicalIndicators.bollingerPercentB(closes(new double[19])).isEmpty());
 	}
 }
