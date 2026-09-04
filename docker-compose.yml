@@ -124,6 +124,10 @@ services:
       # empty string — the beans use @ConditionalOnExpression to require a NON-EMPTY value, so empty
       # safely means "off" (degrade to free GDELT/RSS), matching the no-key design.
       ARGUS_FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      # Agent 10 (technical analysis): daily OHLC candles from Alpha Vantage, not Finnhub — the free
+      # Finnhub tier 403s on /stock/candle. Same relaxed-binding alias pattern as Finnhub above;
+      # CandleIngestionService gates on a non-empty argus.alpha-vantage.api-key.
+      ARGUS_ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
       # Agent 2 (social). StockTwits works with no key; the token just raises its rate limit. Reddit
       # is key-gated (RedditSource requires a non-empty client id). Relaxed-binding aliases.
       ARGUS_STOCKTWITS_ACCESS_TOKEN: ${STOCKTWITS_ACCESS_TOKEN:-}
