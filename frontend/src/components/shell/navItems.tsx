@@ -85,6 +85,11 @@ export const navItems: NavItem[] = [
   { label: "Profile", href: "/profile", Icon: ProfileIcon },
 ];
 
+/** Demo Mode hides Portfolio from navigation entirely (its content is masked/hidden anyway). */
+export function visibleNavItems(demoMode: boolean): NavItem[] {
+  return demoMode ? navItems.filter((item) => item.href !== "/portfolio") : navItems;
+}
+
 /** Active when the path matches exactly, or is a sub-route (non-root). */
 export function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";

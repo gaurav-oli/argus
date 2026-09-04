@@ -162,6 +162,16 @@ export const getSessionTimeout = (): Promise<SessionTimeout> =>
 export const setSessionTimeout = (seconds: number | null): Promise<void> =>
   apiPut("/api/settings/session-timeout", { seconds });
 
+/** Demo Mode: hide the Portfolio section and mask $ amounts/holdings everywhere else. */
+export interface DemoMode {
+  demoMode: boolean;
+}
+
+export const getDemoMode = (): Promise<DemoMode> => apiGet<DemoMode>("/api/settings/demo-mode");
+
+export const setDemoMode = (demoMode: boolean): Promise<DemoMode> =>
+  apiPut<DemoMode>("/api/settings/demo-mode", { demoMode });
+
 // ---- Biometric / WebAuthn (Story 2.2) ----
 
 // The JSON-based WebAuthn helpers (iOS 17.4+/modern browsers) aren't in every TS DOM lib yet.

@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { PanicProvider } from "@/features/panic/PanicProvider";
+import { DemoModeProvider } from "@/features/privacy/DemoModeProvider";
 import { PrivacyProvider } from "@/features/privacy/PrivacyProvider";
 
 /**
@@ -23,6 +24,7 @@ export default function DashboardLayout({
   return (
     <AuthGate>
       <PanicProvider>
+      <DemoModeProvider>
       <PrivacyProvider>
         {/* Private Bank Editorial (approved 2026-07-22) — the whole shell, not just Home, re-skins
             via the same CSS-variable mechanism that powers light/dark mode. See globals.css. */}
@@ -45,6 +47,7 @@ export default function DashboardLayout({
           </div>
         </div>
       </PrivacyProvider>
+      </DemoModeProvider>
       </PanicProvider>
     </AuthGate>
   );

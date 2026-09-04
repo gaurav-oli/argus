@@ -2,6 +2,7 @@
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatementDialog } from "@/features/portfolio/ImportStatementDialog";
 import { PortfolioOverview } from "@/features/portfolio/PortfolioOverview";
@@ -18,6 +19,26 @@ import { useState } from "react";
  */
 export default function PortfolioPage() {
   const [importOpen, setImportOpen] = useState(false);
+  const { demoMode, loaded } = useDemoMode();
+
+  if (demoMode) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <PageHeader eyebrow="Holdings" title="Portfolio" subtitle="Hidden while Demo Mode is on." />
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-6 py-16 text-center">
+          <span className="font-mono text-2xl tracking-widest text-text-secondary select-none">••••••</span>
+          <p className="text-sm text-text-secondary">
+            Portfolio is hidden while Demo Mode is on — turn it off in Profile to view.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Avoid a flash of real data before the initial demo-mode GET resolves.
+  if (!loaded) {
+    return <div className="mx-auto max-w-6xl" />;
+  }
 
   return (
     <div className="mx-auto max-w-6xl">

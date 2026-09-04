@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { cn } from "@/lib/utils";
-import { isActive, navItems } from "./navItems";
+import { isActive, visibleNavItems } from "./navItems";
 
 /**
  * Mobile 5-tab bottom navigation (PRD §12). The shell layout shows this only
@@ -11,10 +12,11 @@ import { isActive, navItems } from "./navItems";
  */
 export function BottomNav() {
   const pathname = usePathname();
+  const { demoMode } = useDemoMode();
 
   return (
     <nav className="flex min-h-16 shrink-0 items-stretch border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
-      {navItems.map(({ label, href, Icon }) => {
+      {visibleNavItems(demoMode).map(({ label, href, Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link

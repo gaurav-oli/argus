@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import {
   getJournal,
   getJournalEntry,
@@ -77,7 +78,9 @@ function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: stri
       <button onClick={toggle} className="flex w-full items-center justify-between gap-3 text-left">
         <div className="flex items-center gap-2">
           <CompanyIcon ticker={entry.ticker} logoUrl={logoUrl} title={entry.ticker} size={20} />
-          <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
+          <Sensitive className="text-sm font-semibold">
+            <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
+          </Sensitive>
           <span
             className={cn(
               "text-xs font-medium",
@@ -139,9 +142,13 @@ function JournalDetail({ detail }: { detail: JournalDetailView }) {
 
       {(detail.entryPrice != null || detail.positionSize != null) && (
         <p className="text-text-secondary">
-          {detail.entryPrice != null && <>Entry ${detail.entryPrice.toFixed(2)}</>}
-          {detail.entryPrice != null && detail.positionSize != null && " · "}
-          {detail.positionSize != null && <>{detail.positionSize} shares</>}
+          <Sensitive>
+            <>
+              {detail.entryPrice != null && <>Entry ${detail.entryPrice.toFixed(2)}</>}
+              {detail.entryPrice != null && detail.positionSize != null && " · "}
+              {detail.positionSize != null && <>{detail.positionSize} shares</>}
+            </>
+          </Sensitive>
         </p>
       )}
 

@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { cn } from "@/lib/utils";
-import { isActive, navItems } from "./navItems";
+import { isActive, visibleNavItems } from "./navItems";
 
 /**
  * Fixed left navigation — desktop only. The shell layout hides it below `lg`.
  */
 export function Sidebar() {
   const pathname = usePathname();
+  const { demoMode } = useDemoMode();
 
   return (
     <aside className="glass-chrome hidden h-full w-60 shrink-0 flex-col border-r border-[var(--glass-border)] lg:flex">
@@ -25,7 +27,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-        {navItems.map(({ label, href, Icon }) => {
+        {visibleNavItems(demoMode).map(({ label, href, Icon }) => {
           const active = isActive(pathname, href);
           return (
             <Link

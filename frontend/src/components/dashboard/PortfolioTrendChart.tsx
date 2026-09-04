@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import { getValueHistory, type ValuePoint } from "@/lib/apiClient";
+import { useDemoMode } from "@/features/privacy/DemoModeProvider";
+import { DemoPlaceholder } from "@/features/privacy/DemoPlaceholder";
 import { usd } from "@/lib/format";
 import { useMounted } from "@/lib/useMounted";
 
@@ -26,6 +28,7 @@ function ChartTooltip({ active, payload }: TooltipProps) {
 export function PortfolioTrendChart() {
   const mounted = useMounted();
   const reduce = useReducedMotion();
+  const { demoMode } = useDemoMode();
   const [series, setSeries] = useState<ValuePoint[] | null>(null);
 
   useEffect(() => {
@@ -56,7 +59,9 @@ export function PortfolioTrendChart() {
         )}
       </div>
       <div className="mt-3 h-48 w-full">
-        {series && series.length > 1 ? (
+        {demoMode ? (
+          <DemoPlaceholder label="Hidden while Demo Mode is on" />
+        ) : series && series.length > 1 ? (
           mounted && (
             <ResponsiveContainer width="100%" height="100%" minHeight={180}>
               <AreaChart data={series} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>

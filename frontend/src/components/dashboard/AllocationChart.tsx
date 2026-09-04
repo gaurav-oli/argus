@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { getPortfolioValue, type PortfolioSnapshot } from "@/lib/apiClient";
+import { useDemoMode } from "@/features/privacy/DemoModeProvider";
+import { DemoPlaceholder } from "@/features/privacy/DemoPlaceholder";
 
 const CATS = [
   "var(--cat-1)",
@@ -16,6 +18,7 @@ const CATS = [
 /** Allocation by holding weight (Story 3.4) — a single stacked rule + inline labels, driven by real positions. */
 export function AllocationChart() {
   const reduce = useReducedMotion();
+  const { demoMode } = useDemoMode();
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
 
   useEffect(() => {
@@ -43,7 +46,9 @@ export function AllocationChart() {
     <div className="flex h-full flex-col">
       <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Allocation</h3>
 
-      {allocation.length === 0 ? (
+      {demoMode ? (
+        <DemoPlaceholder className="mt-4 flex-1" label="Hidden while Demo Mode is on" />
+      ) : allocation.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-center text-xs text-text-secondary">
           {snap === null ? "Loading…" : "No holdings yet — import a statement to see your mix."}
         </div>

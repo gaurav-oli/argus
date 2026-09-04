@@ -7,6 +7,7 @@ import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 import { NotificationsSetting } from "@/features/notifications/NotificationsSetting";
 import { InvestorProfileSetting } from "@/features/profile/InvestorProfileSetting";
 import { PanicSettings } from "@/features/panic/PanicSettings";
+import { DemoModeSetting } from "@/features/privacy/DemoModeSetting";
 
 export default function ProfilePage() {
   return (
@@ -87,6 +88,21 @@ export default function ProfilePage() {
           }
         >
           <SessionManager />
+        </SettingsCard>
+
+        <SettingsCard
+          index={5}
+          title="Demo Mode"
+          desc="Hide your real portfolio when showing Argus to someone else."
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M4 4l16 16" />
+            </svg>
+          }
+        >
+          <DemoModeSetting />
         </SettingsCard>
 
         <div className="mt-2 flex justify-end">

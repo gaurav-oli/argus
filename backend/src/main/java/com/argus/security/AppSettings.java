@@ -22,6 +22,9 @@ public class AppSettings {
 	@Column(name = "session_timeout_seconds")
 	private Long sessionTimeoutSeconds;
 
+	@Column(name = "demo_mode", nullable = false)
+	private boolean demoMode = false;
+
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt = Instant.now();
 
@@ -39,6 +42,17 @@ public class AppSettings {
 
 	public void setSessionTimeoutSeconds(Long sessionTimeoutSeconds) {
 		this.sessionTimeoutSeconds = sessionTimeoutSeconds;
+		this.updatedAt = Instant.now();
+	}
+
+	public boolean isDemoMode() {
+		return demoMode;
+	}
+
+	/** Hide the Portfolio section and mask $ amounts/holdings elsewhere, for showing the product to
+	 * someone else without exposing real financial data. */
+	public void setDemoMode(boolean demoMode) {
+		this.demoMode = demoMode;
 		this.updatedAt = Instant.now();
 	}
 

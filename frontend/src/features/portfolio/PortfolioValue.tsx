@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { getPortfolioValue, type PortfolioSnapshot } from "@/lib/apiClient";
 import { subscribeToTopic } from "@/lib/wsClient";
 import { useEffect, useState } from "react";
@@ -52,16 +53,18 @@ export function PortfolioValue() {
       {value == null ? (
         <p className="text-3xl font-bold tracking-tight text-text-secondary tabular-nums">—</p>
       ) : (
-        <>
-          <AnimatedNumber
-            value={value}
-            format={cad}
-            className="text-3xl font-bold tracking-tight text-text-primary tabular-nums"
-          />
-          {valueUsd != null && (
-            <span className="text-sm text-text-secondary tabular-nums">≈ {usd(valueUsd)} USD</span>
-          )}
-        </>
+        <Sensitive className="text-3xl font-bold tracking-tight tabular-nums">
+          <>
+            <AnimatedNumber
+              value={value}
+              format={cad}
+              className="text-3xl font-bold tracking-tight text-text-primary tabular-nums"
+            />
+            {valueUsd != null && (
+              <span className="text-sm text-text-secondary tabular-nums">≈ {usd(valueUsd)} USD</span>
+            )}
+          </>
+        </Sensitive>
       )}
 
       {pnl != null && (
@@ -69,7 +72,9 @@ export function PortfolioValue() {
           className={`flex items-center gap-1 text-sm font-medium tabular-nums ${gain ? "text-gains" : "text-losses"}`}
         >
           {gain ? "▲" : "▼"}
-          <AnimatedNumber value={Math.abs(pnl)} format={cad} />
+          <Sensitive>
+            <AnimatedNumber value={Math.abs(pnl)} format={cad} />
+          </Sensitive>
           <span className="text-text-secondary">total P&amp;L</span>
         </span>
       )}

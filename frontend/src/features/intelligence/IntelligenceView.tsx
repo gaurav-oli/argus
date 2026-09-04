@@ -20,6 +20,7 @@ import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { riskColorClass } from "@/lib/scoreBands";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
@@ -120,7 +121,9 @@ function SocialSection({ items, logos }: { items: TickerSentiment[] | null; logo
           return (
             <li key={t.ticker} className="flex items-center gap-3">
               <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={20} />
-              <span className="w-14 shrink-0 font-mono text-sm font-semibold text-text-primary">{t.ticker}</span>
+              <Sensitive className="w-14 shrink-0 font-mono text-sm font-semibold">
+                <span className="w-14 shrink-0 font-mono text-sm font-semibold text-text-primary">{t.ticker}</span>
+              </Sensitive>
               <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[var(--hairline)]">
                 <div className="h-full bg-gains" style={{ width: `${bullPct}%` }} />
                 <div className="h-full bg-losses" style={{ width: `${100 - bullPct}%` }} />
@@ -165,7 +168,9 @@ function InsiderSection({ items, logos }: { items: InsiderActivity[] | null; log
         {items.slice(0, 12).map((x, i) => (
           <li key={i} className="flex items-center gap-3 py-2 text-sm">
             <CompanyIcon ticker={x.ticker} logoUrl={logos[x.ticker]} title={x.ticker} size={18} />
-            <span className="w-12 shrink-0 font-mono font-semibold text-text-primary">{x.ticker}</span>
+            <Sensitive className="w-12 shrink-0 font-mono font-semibold">
+              <span className="w-12 shrink-0 font-mono font-semibold text-text-primary">{x.ticker}</span>
+            </Sensitive>
             <span
               className="w-14 shrink-0 text-xs font-semibold uppercase"
               style={{ color: tone(x.transactionType) }}
@@ -216,7 +221,9 @@ function WebBuzzSection({ items, logos }: { items: TickerBuzz[] | null; logos: R
         {items.slice(0, 10).map((t) => (
           <li key={t.ticker} className="flex items-center gap-3 py-2 text-sm">
             <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
-            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
+            <Sensitive className="w-14 shrink-0 font-mono font-semibold">
+              <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
+            </Sensitive>
             <span className="min-w-0 flex-1 text-text-secondary">
               {t.hnStories > 0 ? (
                 <>

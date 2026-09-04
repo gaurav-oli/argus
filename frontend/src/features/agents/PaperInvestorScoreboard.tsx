@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { getPaperTrades, type PaperTradeScoreboard } from "@/lib/apiClient";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { absTime } from "@/lib/time";
@@ -53,8 +54,8 @@ export function PaperInvestorScoreboard() {
             The Investor’s track record
           </h3>
           <p className="mt-0.5 text-xs text-text-secondary">
-            ${fmt(board.notionalPerTrade, 0)} paper-traded on every call, marked to market at the horizon —
-            no input needed.
+            <Sensitive className="text-xs">${fmt(board.notionalPerTrade, 0)}</Sensitive> paper-traded on every
+            call, marked to market at the horizon — no input needed.
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-[var(--hairline)] px-2 py-0.5 text-[10px] font-medium text-text-secondary">
@@ -73,12 +74,14 @@ export function PaperInvestorScoreboard() {
           value={board.bookReturnPct === null ? "—" : `${signed(board.bookReturnPct)}%`}
           tone={board.bookReturnPct}
           sub={`$${fmt(board.deployed, 0)} deployed`}
+          maskSub
         />
         <Tile
           label="Realized P&L"
           value={board.realizedPnl === 0 && noneClosed ? "—" : `$${signed(board.realizedPnl, 2)}`}
           tone={board.realizedPnl}
           sub="pretend money"
+          maskValue
         />
       </div>
 
@@ -100,7 +103,9 @@ export function PaperInvestorScoreboard() {
               <li key={i} className="flex flex-col gap-1">
                 <div className="flex items-center gap-3 text-sm">
                   <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
-                  <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
+                  <Sensitive className="w-14 shrink-0 font-mono font-semibold">
+                    <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
+                  </Sensitive>
                   <span
                     className="w-16 shrink-0 text-[11px] font-semibold uppercase"
                     style={{ color: t.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
@@ -149,7 +154,7 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
           Open book · held until horizon
         </p>
         <p className="font-mono text-xs tabular-nums text-text-secondary">
-          {board.openTrades} pos · ${fmt(board.openDeployed, 0)} in
+          {board.openTrades} pos · <Sensitive className="text-xs">${fmt(board.openDeployed, 0)}</Sensitive> in
           {u != null && (
             <span
               className="ml-2 font-semibold"
@@ -164,16 +169,20 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
         {board.openByTicker.map((p) => (
           <li key={p.ticker} className="flex items-center gap-3 text-sm">
             <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
-            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
+            <Sensitive className="w-14 shrink-0 font-mono font-semibold">
+              <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
+            </Sensitive>
             <span
               className="w-14 shrink-0 text-[11px] font-semibold uppercase"
               style={{ color: p.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
             >
               {p.direction === "BEARISH" ? "short" : "long"}
             </span>
-            <span className="w-24 shrink-0 font-mono text-[11px] text-text-secondary">
-              {p.positions}× · ${fmt(p.notional, 0)}
-            </span>
+            <Sensitive className="w-24 shrink-0 font-mono text-[11px]">
+              <span className="w-24 shrink-0 font-mono text-[11px] text-text-secondary">
+                {p.positions}× · ${fmt(p.notional, 0)}
+              </span>
+            </Sensitive>
             <span
               className="ml-auto shrink-0 font-mono tabular-nums"
               style={{
@@ -201,11 +210,15 @@ function Tile({
   value,
   sub,
   tone,
+  maskValue,
+  maskSub,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: number | null;
+  maskValue?: boolean;
+  maskSub?: boolean;
 }) {
   const color =
     tone == null || tone === 0
@@ -213,13 +226,17 @@ function Tile({
       : tone > 0
         ? "var(--color-gains)"
         : "var(--color-losses)";
+  const valueEl = (
+    <p className="mt-1 font-display text-2xl font-bold tabular-nums" style={{ color }}>
+      {value}
+    </p>
+  );
+  const subEl = <p className="mt-0.5 text-xs text-text-secondary">{sub}</p>;
   return (
     <div className="rounded-xl border border-[var(--hairline)] bg-[var(--hover-wash)] px-4 py-3">
       <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">{label}</p>
-      <p className="mt-1 font-display text-2xl font-bold tabular-nums" style={{ color }}>
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs text-text-secondary">{sub}</p>
+      {maskValue ? <Sensitive className="text-2xl font-bold">{valueEl}</Sensitive> : valueEl}
+      {maskSub ? <Sensitive className="text-xs">{subEl}</Sensitive> : subEl}
     </div>
   );
 }
