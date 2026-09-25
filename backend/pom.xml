@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.7</version>
+		<version>4.1.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.argus</groupId>
@@ -28,9 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
-		<spring-ai.version>2.0.0</spring-ai.version>
-		<resilience4j.version>2.3.0</resilience4j.version>
-		<ta4j.version>0.24.1</ta4j.version>
+		<spring-ai.version>2.0.1</spring-ai.version>
+		<resilience4j.version>2.4.0</resilience4j.version>
+		<ta4j.version>0.25.0</ta4j.version>
 		<commons-math3.version>3.6.1</commons-math3.version>
 	</properties>
 	<dependencyManagement>
@@ -129,7 +129,7 @@
 			     (the 2.x static PDDocument.load was removed); extract with PDFTextStripper. -->
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
-			<version>3.0.7</version>
+			<version>3.0.8</version>
 		</dependency>
 
 		<dependency>
@@ -143,7 +143,7 @@
 			<!-- Argon2PasswordEncoder requires BouncyCastle on the classpath. -->
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
-			<version>1.81</version>
+			<version>1.86</version>
 		</dependency>
 		<dependency>
 			<!-- WebAuthn/passkey ceremonies (Story 2.2). Standalone — no Spring Security
@@ -161,7 +161,7 @@
 			     docs/mac-mini-validation.md). -->
 			<groupId>nl.martijndwars</groupId>
 			<artifactId>web-push</artifactId>
-			<version>5.1.1</version>
+			<version>5.1.2</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.bouncycastle</groupId>
@@ -174,10 +174,25 @@
 			</exclusions>
 		</dependency>
 		<dependency>
-			<!-- PKIX helpers the web-push library needs, matched to bcprov-jdk18on:1.81. -->
+			<!-- PKIX helpers the web-push library needs, matched to bcprov-jdk18on:1.86. -->
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcpkix-jdk18on</artifactId>
-			<version>1.81</version>
+			<version>1.86</version>
+		</dependency>
+		<dependency>
+			<!-- web-push 5.1.2 resolves this transitively as runtime-only, but WebPushSender reads
+			     the org.apache.http.HttpResponse PushService.send() returns, which needs it at
+			     compile time too. Pinned to the version web-push's own tree already resolves. -->
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.13</version>
+		</dependency>
+		<dependency>
+			<!-- Same runtime-vs-compile issue as httpclient above: PushService.send() declares a
+			     checked org.jose4j.lang.JoseException, which needs jose4j on the compile classpath. -->
+			<groupId>org.bitbucket.b_c</groupId>
+			<artifactId>jose4j</artifactId>
+			<version>0.7.9</version>
 		</dependency>
 
 		<dependency>
