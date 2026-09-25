@@ -43,6 +43,11 @@ import org.springframework.validation.annotation.Validated;
  *                    Decision 1). Small enough to sit alongside the big model within the Mini's 28GB
  *                    without triggering the swap-thrashing a second large model caused.
  * @param devResponse canned response returned by the dev-profile mock model
+ * @param bigThinking whether the big local model may emit hidden "thinking" tokens. Default {@code false}: with the
+ *                    1024-token generation cap (see application-prod.yml) the gemma4 build spent the ENTIRE budget on
+ *                    invisible reasoning and returned an empty string ({@code done_reason=length, eval_count=1024,
+ *                    response=""}), which the gateway then paid Haiku to redo. With thinking off the same prompt
+ *                    answers in a few hundred tokens with valid JSON. Turn on only to experiment.
  */
 @ConfigurationProperties("argus.model")
 @Validated
@@ -52,5 +57,6 @@ public record ModelGatewayProperties(
 		@DefaultValue("10m") Duration keepAlive,
 		@DefaultValue("gemma3:27b") String bigModel,
 		@DefaultValue("llama3.2:3b") String smallModel,
-		@DefaultValue("[dev-mock] Argus Model Gateway is alive.") String devResponse) {
+		@DefaultValue("[dev-mock] Argus Model Gateway is alive.") String devResponse,
+		@DefaultValue("false") boolean bigThinking) {
 }

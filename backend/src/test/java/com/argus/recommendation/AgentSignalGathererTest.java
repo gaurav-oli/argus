@@ -18,20 +18,24 @@ import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.intelligence.SentimentAnalysis;
 import com.argus.intelligence.SentimentLabel;
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisRepository;
+import com.argus.deepanalysis.DeepVerdict;
+import com.argus.fundamentals.Fundamentals;
+import com.argus.fundamentals.FundamentalsService;
 import com.argus.internet.WebMentionRepository;
-import com.argus.notification.Notification;
-import com.argus.notification.NotificationService;
+import com.argus.regime.MarketRegime;
+import com.argus.regime.MarketRegimeService;
+import com.argus.regime.Sector;
+import com.argus.regime.SectorClassifier;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPostRepository;
-import com.argus.technical.CauseClassificationService;
-import com.argus.technical.PriceCandle;
-import com.argus.technical.PriceCandleRepository;
-import com.argus.technical.TechnicalAnalysisProperties;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -45,16 +49,20 @@ class AgentSignalGathererTest {
 	private final WebMentionRepository web = mock(WebMentionRepository.class);
 	private final EarningsQuietPeriodService quietPeriod = mock(EarningsQuietPeriodService.class);
 	private final AdaptiveTuningService tuning = mock(AdaptiveTuningService.class);
-	private final PriceCandleRepository candles = mock(PriceCandleRepository.class);
-	private final CauseClassificationService causeClassification = mock(CauseClassificationService.class);
-	private final TechnicalAnalysisProperties technicalProps = new TechnicalAnalysisProperties(200, -8.0, 0.6);
-	private final NotificationService notifications = mock(NotificationService.class);
+	private final ChartStudyService chartStudies = mock(ChartStudyService.class);
+	private final FundamentalsService fundamentals = mock(FundamentalsService.class);
+	private final DeepAnalysisRepository deepAnalyses = mock(DeepAnalysisRepository.class);
+	private final SectorClassifier sectors = mock(SectorClassifier.class);
+	private final MarketRegimeService regimes = mock(MarketRegimeService.class);
 	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod,
-			tuning, candles, causeClassification, technicalProps, notifications);
+			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes);
 
 	{
 		// Tuning off by default in these tests → identity weight multipliers.
 		when(tuning.weightMultiplier(anyString())).thenReturn(1.0);
+		// Neutral sector + no market-regime data by default (macro is sector-aware and regime-muted).
+		when(sectors.sectorOf(anyString())).thenReturn(Sector.BROAD_MARKET);
+		when(regimes.current()).thenReturn(MarketRegime.unavailable());
 		// No macro coverage by default — tests that only care about ticker-specific news don't have
 		// to think about the macro query too. Tests exercising macro override this explicitly.
 		when(news.findAnalyzedForTicker(eq(MacroRelevanceTagger.MACRO_TAG), any())).thenReturn(List.of());
@@ -154,6 +162,25 @@ class AgentSignalGathererTest {
 		assertTrue(gatherer.gather("AAPL").isEmpty());
 	}
 
+	@Test
+	void newsWeightScalesWithSentimentStrengthNotJustStoryCount() {
+		// Same coverage and relevance; only the sentiment magnitude differs. A barely-positive 0.11
+		// average must not carry the same weight as a decisive read.
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		List<NewsArticle> weak = new ArrayList<>();
+		List<NewsArticle> strong = new ArrayList<>();
+		for (int i = 0; i < 6; i++) {
+			weak.add(analyzed("weak story " + i, "Reuters", SentimentLabel.BULLISH, 0.12, 0.8));
+			strong.add(analyzed("strong story " + i, "Reuters", SentimentLabel.BULLISH, 0.6, 0.8));
+		}
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(weak);
+		double weakWeight = gatherer.gather("AAPL").get(0).weight();
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(strong);
+		double strongWeight = gatherer.gather("AAPL").get(0).weight();
+
+		assertTrue(strongWeight > weakWeight * 2.5, "weak=" + weakWeight + " strong=" + strongWeight);
+	}
+
 	// ---- macro/political news (Agent 8) ----
 
 	@Test
@@ -169,13 +196,13 @@ class AgentSignalGathererTest {
 		assertEquals(1, signals.size());
 		assertEquals("agent-8-macro", signals.get(0).agent());
 		assertEquals(SignalDirection.BEARISH, signals.get(0).direction());
-		assertTrue(signals.get(0).rationale().contains("Macro/political"));
+		assertTrue(signals.get(0).rationale().startsWith("Macro ("));
 	}
 
 	@Test
-	void macroSignalIsIdenticalAcrossDifferentTickersInOneCycle() {
-		// The whole point: a macro story isn't about any one ticker, so every ticker's gather() call
-		// in the same cycle sees the same macro read.
+	void macroSignalIsIdenticalAcrossTickersInTheSameSector() {
+		// A macro story isn't about any one ticker, so two tickers in the same sector see the same read
+		// (the mock classifier puts both in BROAD_MARKET). Different sectors are covered below.
 		when(news.findAnalyzedForTicker(eq(MacroRelevanceTagger.MACRO_TAG), any())).thenReturn(List.of(
 				analyzed("Fed signals rate cut", "Reuters", SentimentLabel.BULLISH, 0.6, 0.9,
 						new String[] {MacroRelevanceTagger.MACRO_TAG})));
@@ -206,169 +233,223 @@ class AgentSignalGathererTest {
 		assertTrue(signals.stream().anyMatch(s -> s.agent().equals("agent-8-macro")));
 	}
 
-	// ---- technical analysis + cause classification (Agents 10/11) ----
+	@Test
+	void macroReadDiffersBySector() {
+		// An oil-supply shock is bad news for the market but good for energy names — the old code
+		// stamped one identical number on every ticker and could not express that.
+		when(sectors.sectorOf("XOM")).thenReturn(Sector.ENERGY);
+		when(sectors.sectorOf("AAPL")).thenReturn(Sector.TECHNOLOGY);
+		when(news.findAnalyzedForTicker(eq(MacroRelevanceTagger.MACRO_TAG), any())).thenReturn(List.of(
+				analyzed("Oil prices surge as OPEC cuts output", "Reuters", SentimentLabel.BEARISH, -0.6, 0.9,
+						new String[] {MacroRelevanceTagger.MACRO_TAG})));
+		when(news.findAnalyzedForTicker(eq("XOM"), any())).thenReturn(List.of());
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(List.of());
+		when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
 
-	/** Builds candles oldest→newest from {@code closes}, then returns them newest-first — matching
-	 * what {@link PriceCandleRepository#findTop200ByTickerOrderByCandleDateDesc} actually returns
-	 * (the gatherer reverses it internally). */
-	private static List<PriceCandle> descendingCandles(double... closes) {
-		List<PriceCandle> ascending = new ArrayList<>();
-		LocalDate start = LocalDate.of(2026, 1, 1);
-		for (int i = 0; i < closes.length; i++) {
-			BigDecimal price = BigDecimal.valueOf(closes[i]);
-			ascending.add(new PriceCandle("AAPL", start.plusDays(i), price, price, price, price, 1000L));
-		}
-		Collections.reverse(ascending);
-		return ascending;
-	}
+		AgentSignal energy = gatherer.gather("XOM").get(0);
+		AgentSignal tech = gatherer.gather("AAPL").get(0);
 
-	/** 20 rising candles (100..119, setting a ~119 high) then 15 sharply declining ones down to
-	 * ~95 — a real ~20% drawdown crossing the -8% default trigger, with enough history for both
-	 * RSI(14) and the 60-day-lookback drawdown check (the empty-check only needs half the window). */
-	private static double[] risingThenSharpDrop() {
-		double[] values = new double[35];
-		for (int i = 0; i < 20; i++) {
-			values[i] = 100 + i;
-		}
-		for (int i = 0; i < 15; i++) {
-			values[20 + i] = 119 - (i + 1) * 1.6;
-		}
-		return values;
+		assertEquals(SignalDirection.BULLISH, energy.direction(), "oil shock reads bullish for energy");
+		assertEquals(SignalDirection.BEARISH, tech.direction(), "…and bearish for a non-energy name");
 	}
 
 	@Test
-	void technicalSignalFromOversoldRsiIsBullish() {
-		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		double[] declining = new double[15];
-		for (int i = 0; i < 15; i++) {
-			declining[i] = 24 - i; // strictly decreasing, 14 losses -> RSI = 0 (maximally oversold)
-		}
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL")).thenReturn(descendingCandles(declining));
+	void macroWeightIsMutedOnABroadSelloffDay() {
+		when(news.findAnalyzedForTicker(eq(MacroRelevanceTagger.MACRO_TAG), any())).thenReturn(List.of(
+				analyzed("Trump speech rattles markets", "Reuters", SentimentLabel.BEARISH, -0.7, 0.9,
+						new String[] {MacroRelevanceTagger.MACRO_TAG})));
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(List.of());
+		when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		double calm = gatherer.gather("AAPL").get(0).weight();
+		when(regimes.current()).thenReturn(
+				new MarketRegime(Instant.now(), -2.0, -2.6, 30.0, 20.0, null, java.util.Map.of()));
+		AgentSignal shock = gatherer.gather("AAPL").get(0);
 
-		AgentSignal technical = signals.stream().filter(s -> s.agent().equals("agent-10-technical"))
-				.findFirst().orElseThrow();
-		assertEquals(SignalDirection.BULLISH, technical.direction());
-		assertTrue(technical.weight() > 0);
+		assertTrue(shock.weight() < calm * 0.5, "shock-day headlines fade — weight must be cut sharply");
+		assertTrue(shock.rationale().contains("muted"));
 	}
 
 	@Test
-	void technicalRationaleIncludesMacdAndBollingerWhenEnoughHistoryExists() {
-		// risingThenSharpDrop() is 35 candles — exactly enough for both the ta4j-backed MACD(35) and
-		// Bollinger(20) reads to fire and fold into the composite rationale.
-		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
-				.thenReturn(descendingCandles(risingThenSharpDrop()));
+	void euphoricCrowdIsTreatedAsCautionNotAVoteForTheCall() {
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(List.of());
+		when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
+		when(social.sentimentCountsForTicker(eq("AAPL"), any())).thenReturn(List.of(
+				new Object[] {SentimentLabel.BULLISH, 45L}, new Object[] {SentimentLabel.BEARISH, 3L}));
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		AgentSignal crowd = gatherer.gather("AAPL").get(0);
 
-		AgentSignal technical = signals.stream().filter(s -> s.agent().equals("agent-10-technical"))
-				.findFirst().orElseThrow();
-		assertTrue(technical.rationale().contains("MACD"), "35 candles must be enough for a MACD read");
+		assertEquals("agent-2-social", crowd.agent());
+		assertEquals(SignalDirection.NEUTRAL, crowd.direction(), "a ~unanimous crowd is euphoria, not conviction");
+		assertTrue(crowd.rationale().contains("contrarian"));
 	}
 
 	@Test
-	void technicalRationaleOmitsMacdWithTooLittleHistory() {
-		// The same 15-candle fixture as the oversold-RSI test — below MACD's 35-candle floor, so the
-		// composite rationale must not claim a MACD read it couldn't actually compute.
-		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		double[] declining = new double[15];
-		for (int i = 0; i < 15; i++) {
-			declining[i] = 24 - i;
-		}
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL")).thenReturn(descendingCandles(declining));
+	void moderatelyBullishCrowdStillVotesBullishButWithLowCap() {
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(List.of());
+		when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
+		when(social.sentimentCountsForTicker(eq("AAPL"), any())).thenReturn(List.of(
+				new Object[] {SentimentLabel.BULLISH, 24L}, new Object[] {SentimentLabel.BEARISH, 12L}));
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		AgentSignal crowd = gatherer.gather("AAPL").get(0);
 
-		AgentSignal technical = signals.stream().filter(s -> s.agent().equals("agent-10-technical"))
-				.findFirst().orElseThrow();
-		assertTrue(!technical.rationale().contains("MACD"), "15 candles is below the 35-candle MACD floor");
+		assertEquals(SignalDirection.BULLISH, crowd.direction());
+		assertTrue(crowd.weight() <= 0.3, "social influence is capped at 0.3");
 	}
 
 	@Test
-	void noTechnicalOrCauseSignalWithoutCandleHistory() {
+	void signalsCarryAnEvidenceHorizonHint() {
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(
+				List.of(analyzed(SentimentLabel.BULLISH, 0.6, 0.8)));
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		// candles left unstubbed -> empty list, matching "not enough history yet" for a new ticker.
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		AgentSignal newsSignal = gatherer.gather("AAPL").get(0);
 
-		assertTrue(signals.stream().noneMatch(
-				s -> s.agent().equals("agent-10-technical") || s.agent().equals("agent-11-cause")));
+		assertEquals(10, newsSignal.horizonHintDays(), "a headline is a ~week-scale edge");
+	}
+
+	// ---- Agent 10: the chart study ----
+
+	private static ChartStudy chart(double score, ChartStudy.Trend trend, Double sma200) {
+		String bias = score >= 0.25 ? "BULLISH" : score <= -0.25 ? "BEARISH" : "NEUTRAL";
+		return new ChartStudy(300, LocalDate.now(), 100, 1.0, 2.0, 3.0, 100.0, 98.0, sma200, trend, 55.0, 0.5, 0.5, 2.0, 1.0,
+				1.0, 50.0, -3.0, 95.0, 105.0, List.of(), 1.0, 2.0, score, bias, List.of(
+						"Trend: " + trend + " — close 100.00 vs SMA20 100.00 / SMA50 98.00.",
+						"Candlestick (2026-09-23): Hammer — bullish, after a 3.0% decline.",
+						"Relative strength vs S&P 500: +2.0 pts over 20 sessions, +5.0 pts over 60 sessions."));
 	}
 
 	@Test
-	void causeSignalFiresWhenClassificationIsConfidentMacroExternalAndTemporary() {
+	void aDecisiveBullishChartBecomesABullishTechnicalSignalWithTheStudysEvidence() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
-				.thenReturn(descendingCandles(risingThenSharpDrop()));
-		when(causeClassification.classify(eq("AAPL"), anyDouble())).thenReturn(Optional.of(
-				new CauseClassificationService.Classification(CauseClassificationService.Cause.MACRO_EXTERNAL,
-						true, 0.8, "Broad market selloff, unrelated to this company")));
+		when(chartStudies.studyFor("AAPL")).thenReturn(Optional.of(chart(0.6, ChartStudy.Trend.UPTREND, 90.0)));
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		AgentSignal t = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-10-technical")).findFirst().orElseThrow();
 
-		AgentSignal cause = signals.stream().filter(s -> s.agent().equals("agent-11-cause"))
-				.findFirst().orElseThrow();
-		assertEquals(SignalDirection.BULLISH, cause.direction());
-		assertEquals(1.5 * 0.8, cause.weight(), 0.001,
-				"weight must be computed here from confidence, never the LLM's own number");
-		verify(notifications).notify(any(Notification.class));
+		assertEquals(SignalDirection.BULLISH, t.direction());
+		assertEquals(0.7 * (0.6 / 0.7), t.weight(), 1e-9);
+		assertTrue(t.rationale().contains("Trend:") && t.rationale().contains("Candlestick") && t.rationale().contains("Relative strength"));
+		assertEquals(30, t.horizonHintDays(), "a trend-led read (with a 200-day average) is a slower edge");
 	}
 
 	@Test
-	void noAlertWhenCauseSignalDoesNotFire() {
+	void aChartWithoutATrendCarriesAShortHorizonHint() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
-				.thenReturn(descendingCandles(risingThenSharpDrop()));
-		when(causeClassification.classify(eq("AAPL"), anyDouble())).thenReturn(Optional.of(
-				new CauseClassificationService.Classification(CauseClassificationService.Cause.COMPANY_SPECIFIC,
-						true, 0.9, "Real earnings miss")));
+		when(chartStudies.studyFor("AAPL")).thenReturn(Optional.of(chart(0.4, ChartStudy.Trend.SIDEWAYS, null)));
 
-		gatherer.gather("AAPL");
+		AgentSignal t = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-10-technical")).findFirst().orElseThrow();
 
-		verify(notifications, never()).notify(any());
+		assertEquals(10, t.horizonHintDays(), "pattern / mean-reversion reads resolve within about two weeks");
 	}
 
 	@Test
-	void causeClassificationNeverCalledOnAShallowDip() {
+	void aBearishChartIsABearishSignal() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		double[] mild = new double[35];
-		for (int i = 0; i < 35; i++) {
-			mild[i] = 100 + (i % 2 == 0 ? 1 : 0); // oscillates near the high — shallower than -8%
-		}
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL")).thenReturn(descendingCandles(mild));
+		when(chartStudies.studyFor("AAPL")).thenReturn(Optional.of(chart(-0.5, ChartStudy.Trend.DOWNTREND, 110.0)));
 
-		gatherer.gather("AAPL");
+		AgentSignal t = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-10-technical")).findFirst().orElseThrow();
 
-		verify(causeClassification, never()).classify(anyString(), anyDouble());
+		assertEquals(SignalDirection.BEARISH, t.direction());
 	}
 
 	@Test
-	void causeSignalAbsentWhenClassifiedCompanySpecific() {
+	void anIndecisiveChartOrNoChartEmitsNothing() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
-				.thenReturn(descendingCandles(risingThenSharpDrop()));
-		when(causeClassification.classify(eq("AAPL"), anyDouble())).thenReturn(Optional.of(
-				new CauseClassificationService.Classification(CauseClassificationService.Cause.COMPANY_SPECIFIC,
-						true, 0.9, "Real earnings miss")));
+		when(chartStudies.studyFor("AAPL")).thenReturn(Optional.of(chart(0.1, ChartStudy.Trend.SIDEWAYS, null)));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-10-technical")));
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		when(chartStudies.studyFor("AAPL")).thenReturn(Optional.empty()); // not enough history yet
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-10-technical")));
+	}
 
-		assertTrue(signals.stream().noneMatch(s -> s.agent().equals("agent-11-cause")));
+	// ---- Agent 12: fundamentals ----
+
+	private static Fundamentals fundamentalsOf(boolean applicable, double score) {
+		return new Fundamentals("AAPL", applicable, "Apple", "Tech", 3000.0, java.util.Map.of(), List.of(), List.of(), null, null, score,
+				score >= 0.2 ? "BULLISH" : score <= -0.2 ? "BEARISH" : "NEUTRAL",
+				List.of("Growth: revenue +12.0% year-over-year.", "Profitability: net margin 25.0%."), Instant.now());
 	}
 
 	@Test
-	void causeSignalAbsentWhenConfidenceBelowFloor() {
+	void strongFundamentalsBecomeALongHorizonBullishSignal() {
 		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
-		when(candles.findTop200ByTickerOrderByCandleDateDesc("AAPL"))
-				.thenReturn(descendingCandles(risingThenSharpDrop()));
-		when(causeClassification.classify(eq("AAPL"), anyDouble())).thenReturn(Optional.of(
-				new CauseClassificationService.Classification(CauseClassificationService.Cause.MACRO_EXTERNAL,
-						true, 0.4, "Somewhat macro-related")));
+		when(fundamentals.latestFresh(eq("AAPL"), any())).thenReturn(Optional.of(fundamentalsOf(true, 0.5)));
 
-		List<AgentSignal> signals = gatherer.gather("AAPL");
+		AgentSignal f = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-12-fundamental")).findFirst().orElseThrow();
 
-		assertTrue(signals.stream().noneMatch(s -> s.agent().equals("agent-11-cause")));
+		assertEquals(SignalDirection.BULLISH, f.direction());
+		assertEquals(90, f.horizonHintDays(), "fundamentals move over quarters — this argues for a long hold");
+		assertEquals(0.6 * (0.5 / 0.6), f.weight(), 1e-9);
+	}
+
+	@Test
+	void etfsStaleSnapshotsAndWeakScoresEmitNoFundamentalSignal() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(fundamentals.latestFresh(eq("AAPL"), any())).thenReturn(Optional.of(fundamentalsOf(false, 0.0)));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-12-fundamental")), "ETF / no company data");
+
+		when(fundamentals.latestFresh(eq("AAPL"), any())).thenReturn(Optional.of(fundamentalsOf(true, 0.1)));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-12-fundamental")), "inside the deadzone");
+
+		when(fundamentals.latestFresh(eq("AAPL"), any())).thenReturn(Optional.empty());
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-12-fundamental")), "stale / missing");
+	}
+
+	// ---- Agent 11: the deep analyst's stored verdict ----
+
+	private static DeepAnalysis deep(DeepVerdict verdict, Integer hold, int conviction, java.time.Duration ttl) {
+		DeepAnalysis d = new DeepAnalysis("AAPL", "TEST");
+		d.complete(verdict, hold, conviction, "Headline", "Thesis", "Bull", "Bear", "", "", "", "", ttl);
+		return d;
+	}
+
+	@Test
+	void aFreshWorthBuyingVerdictIsABullishSignalCarryingItsHoldPeriod() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE))
+				.thenReturn(Optional.of(deep(DeepVerdict.WORTH_BUYING, 30, 80, java.time.Duration.ofDays(3))));
+
+		AgentSignal d = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-11-deep")).findFirst().orElseThrow();
+
+		assertEquals(SignalDirection.BULLISH, d.direction());
+		assertEquals(1.2 * 0.8, d.weight(), 1e-9);
+		assertEquals(30, d.horizonHintDays());
+		assertTrue(d.rationale().contains("hold ~30 days"));
+	}
+
+	@Test
+	void aNotWorthBuyingVerdictIsABearishSignal() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE))
+				.thenReturn(Optional.of(deep(DeepVerdict.NOT_WORTH_BUYING, null, 70, java.time.Duration.ofDays(3))));
+
+		AgentSignal d = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-11-deep")).findFirst().orElseThrow();
+
+		assertEquals(SignalDirection.BEARISH, d.direction());
+	}
+
+	@Test
+	void waitExpiredOrMissingDeepVerdictsEmitNothing() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE))
+				.thenReturn(Optional.of(deep(DeepVerdict.WAIT, null, 50, java.time.Duration.ofDays(3))));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")), "WAIT is not a signal");
+
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE))
+				.thenReturn(Optional.of(deep(DeepVerdict.WORTH_BUYING, 30, 80, java.time.Duration.ofDays(-1))));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")), "an expired verdict is stale");
+
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE)).thenReturn(Optional.empty());
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")));
+	}
+
+	@Test
+	void gatherBaseExcludesAgent11SoTheDeepAnalystReasonsOverTheOtherAgentsNotItself() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE))
+				.thenReturn(Optional.of(deep(DeepVerdict.WORTH_BUYING, 30, 80, java.time.Duration.ofDays(3))));
+
+		assertTrue(gatherer.gatherBase("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")));
+		assertTrue(gatherer.gather("AAPL").stream().anyMatch(x -> x.agent().equals("agent-11-deep")));
 	}
 }

@@ -15,11 +15,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.argus.calendar.CalendarEventRepository;
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisRunner;
+import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.deepanalysis.DeepVerdict;
+import com.argus.fundamentals.Fundamentals;
+import com.argus.fundamentals.FundamentalsService;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import com.argus.common.BadRequestException;
 import com.argus.common.LivePushService;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.internet.WebMentionRepository;
-import com.argus.marketdata.FinnhubRest;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.research.ResearchAgentService.Step;
@@ -46,10 +53,13 @@ class ResearchAgentServiceTest {
 	private final ModelGateway gateway = mock(ModelGateway.class);
 	private final LivePushService livePush = mock(LivePushService.class);
 	private final ResearchJobProperties props = new ResearchJobProperties(2, 30);
-	private final FinnhubRest finnhub = mock(FinnhubRest.class);
+	private final ChartStudyService charts = mock(ChartStudyService.class);
+	private final FundamentalsService fundamentals = mock(FundamentalsService.class);
+	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
+	private final DeepAnalysisRunner deepRunner = mock(DeepAnalysisRunner.class);
 
 	private final ResearchAgentService service = new ResearchAgentService(
-			jobs, news, social, sec, web, calendar, gateway, livePush, props, finnhub, "test-key");
+			jobs, news, social, sec, web, calendar, gateway, livePush, props, charts, fundamentals, deepAnalyses, deepRunner);
 
 	{
 		// Default every raw-data source to empty unless a test overrides it — keeps each test focused
@@ -60,7 +70,9 @@ class ResearchAgentServiceTest {
 		when(web.findByTickerAndPostedAtAfter(anyString(), any())).thenReturn(List.of());
 		when(calendar.findByTickerAndTypeAndEventDateBetweenOrderByEventDateAsc(anyString(), any(), any(), any()))
 				.thenReturn(List.of());
-		when(finnhub.get(anyString())).thenReturn(Optional.empty());
+		when(charts.studyFor(anyString())).thenReturn(Optional.empty());
+		when(fundamentals.getOrRefresh(anyString(), any())).thenReturn(Optional.empty());
+		when(deepAnalyses.latestDone(anyString())).thenReturn(Optional.empty());
 	}
 
 	// ---- ticker validation ----
@@ -182,53 +194,117 @@ class ResearchAgentServiceTest {
 		verify(livePush, org.mockito.Mockito.atLeastOnce()).publish(anyString(), any());
 	}
 
-	@Test
-	void gatherFinancialsSummarizesKeyRatiosFromFinnhub() {
+	private ResearchJob runSingleStep(String dataSource) {
 		ResearchJob job = new ResearchJob("SPCX");
 		when(jobs.findById(1L)).thenReturn(Optional.of(job));
 		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
-				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
-		when(finnhub.get(contains("stock/metric"))).thenReturn(
-				Optional.of("{\"metric\":{\"peTTM\":25.4,\"netProfitMarginTTM\":12.3}}"));
+				.thenReturn("[{\"label\":\"Step\",\"dataSource\":\"" + dataSource + "\",\"why\":\"x\"}]");
 		when(gateway.escalate(anyString())).thenReturn("report");
-
 		service.runPipeline(1L);
+		return job;
+	}
 
-		assertEquals(ResearchJob.Status.DONE, job.getStatus());
-		assertTrue(job.getFindings().contains("25.4"), "the P/E ratio must appear in the findings");
-		assertTrue(job.getFindings().contains("12.3"), "the net margin must appear in the findings");
+	private static Fundamentals fundamentalsOf() {
+		return new Fundamentals("SPCX", true, "SpaceCo", "Aerospace", 5000.0, java.util.Map.of(), List.of(), List.of(), null, null, 0.42,
+				"BULLISH", List.of("Growth: revenue +31.0% year-over-year.", "Earnings: beat EPS estimates in 4 of the last 4 quarters."),
+				java.time.Instant.now());
 	}
 
 	@Test
-	void gatherFinancialsDegradesGracefullyWithNoApiKey() {
-		ResearchAgentService noKeyService = new ResearchAgentService(
-				jobs, news, social, sec, web, calendar, gateway, livePush, props, finnhub, "");
-		ResearchJob job = new ResearchJob("SPCX");
-		when(jobs.findById(1L)).thenReturn(Optional.of(job));
-		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
-				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
-		when(gateway.escalate(anyString())).thenReturn("report");
+	void financialsNowReturnsAgent12sFullFundamentalAnalysis() {
+		when(fundamentals.getOrRefresh(eq("SPCX"), any())).thenReturn(Optional.of(fundamentalsOf()));
 
-		noKeyService.runPipeline(1L);
+		ResearchJob job = runSingleStep("FINANCIALS");
 
 		assertEquals(ResearchJob.Status.DONE, job.getStatus());
-		assertTrue(job.getFindings().contains("No Finnhub API key configured"));
-		verify(finnhub, never()).get(anyString());
+		assertTrue(job.getFindings().contains("revenue +31.0% year-over-year"), "the growth analysis must appear");
+		assertTrue(job.getFindings().contains("beat EPS estimates in 4 of the last 4"), "and the earnings track record");
 	}
 
 	@Test
-	void gatherFinancialsDegradesGracefullyWhenFinnhubReturnsNothing() {
-		ResearchJob job = new ResearchJob("SPCX");
-		when(jobs.findById(1L)).thenReturn(Optional.of(job));
-		when(gateway.generate(contains("Propose an ordered research plan"), eq(ModelTier.BIG)))
-				.thenReturn("[{\"label\":\"Ratios\",\"dataSource\":\"FINANCIALS\",\"why\":\"x\"}]");
-		when(finnhub.get(contains("stock/metric"))).thenReturn(Optional.empty());
-		when(gateway.escalate(anyString())).thenReturn("report");
-
-		service.runPipeline(1L);
+	void financialsDegradesGracefullyWhenNoFundamentalsAreAvailable() {
+		ResearchJob job = runSingleStep("FINANCIALS");
 
 		assertEquals(ResearchJob.Status.DONE, job.getStatus());
-		assertTrue(job.getFindings().contains("unavailable"));
+		assertTrue(job.getFindings().contains("Financial data unavailable"));
+	}
+
+	private static ChartStudy chart() {
+		return new ChartStudy(300, java.time.LocalDate.now(), 100, 1.0, 2.0, 3.0, 100.0, 98.0, 90.0, ChartStudy.Trend.UPTREND, 55.0, 0.5, 0.5,
+				2.0, 1.0, 1.2, 50.0, -3.0, 95.0, 105.0, List.of(), 1.0, 2.0, 0.5, "BULLISH",
+				List.of("Trend: UPTREND — close 100.00 vs SMA20 100.00.", "Candlestick (2026-09-23): Hammer — bullish, after a 3.0% decline."));
+	}
+
+	@Test
+	void technicalReturnsAgent10sChartStudy() {
+		when(charts.studyFor("SPCX")).thenReturn(Optional.of(chart()));
+
+		ResearchJob job = runSingleStep("TECHNICAL");
+
+		assertTrue(job.getFindings().contains("Trend: UPTREND") && job.getFindings().contains("Hammer"), job.getFindings());
+	}
+
+	@Test
+	void technicalSaysSoWhenThereIsNotEnoughPriceHistory() {
+		ResearchJob job = runSingleStep("TECHNICAL");
+
+		assertTrue(job.getFindings().contains("not enough daily price history"));
+	}
+
+	private static DeepAnalysis deepDone(java.time.Duration ttl) {
+		DeepAnalysis d = new DeepAnalysis("SPCX", "TEST");
+		d.complete(DeepVerdict.WORTH_BUYING, 30, 74, "A durable grower on a dip", "It is a good business.", "Strong growth", "Rich valuation",
+				"macro shock\nlosing a contract", "", "a close below 90", "Conviction capped at 65.", ttl);
+		return d;
+	}
+
+	@Test
+	void deepReturnsAgent11sLatestVerdictWithItsReasoning() {
+		when(deepAnalyses.latestDone("SPCX")).thenReturn(Optional.of(deepDone(java.time.Duration.ofDays(3))));
+
+		ResearchJob job = runSingleStep("DEEP");
+
+		assertTrue(job.getFindings().contains("Worth buying") && job.getFindings().contains("hold about 30 days"), job.getFindings());
+		assertTrue(job.getFindings().contains("A durable grower on a dip") && job.getFindings().contains("Rich valuation"));
+		assertTrue(job.getFindings().contains("a close below 90") && job.getFindings().contains("Conviction capped at 65."));
+		verify(deepRunner, never()).enqueue(anyString(), anyString());
+	}
+
+	@Test
+	void deepFlagsAStaleVerdict() {
+		when(deepAnalyses.latestDone("SPCX")).thenReturn(Optional.of(deepDone(java.time.Duration.ofDays(-1))));
+
+		ResearchJob job = runSingleStep("DEEP");
+
+		assertTrue(job.getFindings().contains("now stale"));
+	}
+
+	@Test
+	void deepQueuesAnAnalysisAndSaysItIsNotInTheReportWhenNoneExists() {
+		ResearchJob job = runSingleStep("DEEP");
+
+		verify(deepRunner).enqueue("SPCX", "RESEARCH");
+		assertTrue(job.getFindings().contains("has not analysed this ticker yet") && job.getFindings().contains("NOT part of this report"));
+		assertEquals(ResearchJob.Status.DONE, job.getStatus(), "Agent 9 never waits on Agent 11");
+	}
+
+	@Test
+	void deepStillCompletesWhenQueuingFails() {
+		org.mockito.Mockito.doThrow(new RuntimeException("queue down")).when(deepRunner).enqueue(anyString(), anyString());
+
+		ResearchJob job = runSingleStep("DEEP");
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+	}
+
+	@Test
+	void theSynthesisPromptAsksToReconcileWithAgent11AndForbidsInventing() {
+		ResearchJob job = runSingleStep("NEWS");
+
+		org.mockito.ArgumentCaptor<String> prompt = org.mockito.ArgumentCaptor.forClass(String.class);
+		verify(gateway).escalate(prompt.capture());
+		assertTrue(prompt.getValue().contains("Agent 11's verdict") && prompt.getValue().contains("Do not invent any figure"));
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
 	}
 
 	@Test
@@ -241,7 +317,7 @@ class ResearchAgentServiceTest {
 		service.runPipeline(1L);
 
 		List<Step> finalPlan = ResearchAgentService.readPlan(job.getPlan());
-		assertEquals(7, finalPlan.size(), "the default (all 7 sources) plan is used when planning fails");
+		assertEquals(9, finalPlan.size(), "the default (all 9 sources) plan is used when planning fails");
 		assertEquals(ResearchJob.Status.DONE, job.getStatus(),
 				"a failed plan call must not fail the whole job — the default plan carries it through");
 	}

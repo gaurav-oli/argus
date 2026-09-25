@@ -15,6 +15,12 @@ public interface RecommendationSignalRepository extends JpaRepository<Recommenda
 			group by s.agent""")
 	List<AgentWeightAggregate> aggregateByAgent();
 
+	/** (recommendation_id, agent, direction, weight) rows for a set of recommendations — lets the Trade Learner
+	 * reconstruct what older calls rested on without loading each recommendation's lazy signal list. */
+	@Query(value = "select recommendation_id, agent, direction, weight from recommendation_signals where recommendation_id in (:ids)",
+			nativeQuery = true)
+	List<Object[]> rowsFor(@org.springframework.data.repository.query.Param("ids") java.util.Collection<Long> ids);
+
 	/** Projection for {@link #aggregateByAgent()}. */
 	interface AgentWeightAggregate {
 		String getAgent();

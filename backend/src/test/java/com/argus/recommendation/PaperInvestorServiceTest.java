@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,9 +14,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.deepanalysis.DeepVerdict;
+import com.argus.learning.LessonEffect;
+import com.argus.learning.Lessons;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.LivePortfolioService;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -35,15 +45,24 @@ class PaperInvestorServiceTest {
 	private final GraduationService graduation = mock(GraduationService.class);
 	private final TradeConfirmationService confirmations = mock(TradeConfirmationService.class);
 	private final ModelGateway gateway = mock(ModelGateway.class);
+	private final com.argus.regime.SectorClassifier sectors = mock(com.argus.regime.SectorClassifier.class);
+	private final Lessons lessons = mock(Lessons.class);
+	private final ChartStudyService charts = mock(ChartStudyService.class);
+	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
+	private final RecommendationRepository recommendationRepo = mock(RecommendationRepository.class);
+
+	{
+		when(lessons.evaluate(any())).thenReturn(LessonEffect.none());
+	}
 
 	// Default horizons (7/30/90); the close tests construct their own horizon-0 trades so they are
 	// immediately due. Benchmark is absent unless a test sets it.
 	private final PaperInvestorService investor = new PaperInvestorService(
-			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0);
+			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, lessons, charts, deepAnalyses, recommendationRepo);
 
 	private PaperInvestorService staggeredInvestor() {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "7,30,90", 0);
+				new BigDecimal("100"), "7,30,90", 0, sectors, 4, lessons, charts, deepAnalyses, recommendationRepo);
 	}
 
 	private static Recommendation rec(String ticker, SignalDirection dir, long id) {
@@ -272,7 +291,213 @@ class PaperInvestorServiceTest {
 		assertEquals("Momentum faded; overweighted social buzz.", open.getReview());
 	}
 
+
+
 	private static BigDecimal bd(long v) {
 		return BigDecimal.valueOf(v);
+	}
+
+	// ---- Agent 10 gives every trade a chart-based protective stop ----
+
+	private static ChartStudy chartWith(Double atrPct, Double support, Double resistance) {
+		return new ChartStudy(300, LocalDate.now(), 100, 1.0, 2.0, 3.0, 100.0, 98.0, 90.0, ChartStudy.Trend.UPTREND, 55.0, 0.5, 0.5, atrPct,
+				1.0, 1.0, 50.0, -3.0, support, resistance, List.of(), 1.0, 2.0, 0.4, "BULLISH", List.of());
+	}
+
+	private double stop(SignalDirection dir, ChartStudy chart) {
+		when(charts.studyFor("AAPL")).thenReturn(Optional.ofNullable(chart));
+		return investor.stopFor(dir, "AAPL", bd(100)).doubleValue();
+	}
+
+	@Test
+	void theStopIsTwoAndAHalfAtrsClampedToFiveToFifteenPercent() {
+		assertEquals(95.0, stop(SignalDirection.BULLISH, chartWith(2.0, null, null)), 1e-6, "2.5 × 2% = 5%");
+		assertEquals(95.0, stop(SignalDirection.BULLISH, chartWith(1.0, null, null)), 1e-6, "tiny ATR still gets a 5% floor");
+		assertEquals(85.0, stop(SignalDirection.BULLISH, chartWith(8.0, null, null)), 1e-6, "huge ATR is capped at 15%");
+		assertEquals(110.0, stop(SignalDirection.BEARISH, chartWith(4.0, null, null)), 1e-6, "a short's stop is above entry");
+	}
+
+	@Test
+	void theStopTightensToNearbySupportForALongAndResistanceForAShort() {
+		assertEquals(93.06, stop(SignalDirection.BULLISH, chartWith(4.0, 94.0, null)), 1e-6, "just below support at 94");
+		assertEquals(90.0, stop(SignalDirection.BULLISH, chartWith(4.0, 99.0, null)), 1e-6, "support closer than 3% is too tight to use");
+		assertEquals(107.06, stop(SignalDirection.BEARISH, chartWith(4.0, null, 106.0)), 1e-6);
+	}
+
+	@Test
+	void withNoChartHistoryTheStopIsAFlatTenPercent() {
+		assertEquals(90.0, stop(SignalDirection.BULLISH, null), 1e-6);
+		assertEquals(110.0, stop(SignalDirection.BEARISH, null), 1e-6);
+	}
+
+	@Test
+	void openingATradeStoresItsStop() {
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(100)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getStopPrice().compareTo(new BigDecimal("90.000000")));
+	}
+
+	// ---- learned lessons shape the next trade ----
+
+	@Test
+	void aLessonSizeMultiplierScalesThePositionAndIsRecorded() {
+		when(lessons.evaluate(any())).thenReturn(new LessonEffect(0, null, null, 0.5, List.of()));
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(100)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("50.00")), "half the usual $100");
+		assertEquals(0, leg.getSizeMultiplier().compareTo(new BigDecimal("0.5")));
+	}
+
+	@Test
+	void aLessonBlockRuleStopsTheTradeFromOpeningAtAll() {
+		when(lessons.evaluate(any())).thenReturn(new LessonEffect(0, "this setup keeps losing", null, 1.0, List.of()));
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(100)));
+
+		assertTrue(investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).isEmpty());
+		verify(trades, never()).save(any());
+	}
+
+	// ---- early exits: the stop, and Agent 11 changing its mind ----
+
+	private SimulatedTrade openTrade(SignalDirection dir, double entry, double stop, int horizon) {
+		SimulatedTrade t = new SimulatedTrade(9L, "AAPL", dir, bd(100), BigDecimal.valueOf(entry), horizon, null);
+		t.applyRisk(BigDecimal.valueOf(stop), 1.0);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(t));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(gateway.generate(anyString())).thenReturn("reflection");
+		return t;
+	}
+
+	@Test
+	void aBrokenStopClosesALongEarlyAndSaysWhy() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 45, 30); // 30-day horizon, nowhere near due
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(44)));
+
+		investor.closeDueTrades();
+
+		assertEquals(SimulatedTrade.Status.CLOSED, t.getStatus());
+		assertEquals("STOP", t.getExitReason());
+		verify(graduation).recordOutcome(eq(false), eq(9L));
+	}
+
+	@Test
+	void aShortIsStoppedOutWhenPriceRisesThroughItsStop() {
+		SimulatedTrade t = openTrade(SignalDirection.BEARISH, 50, 55, 30);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(56)));
+
+		investor.closeDueTrades();
+
+		assertEquals("STOP", t.getExitReason());
+	}
+
+	@Test
+	void aTradeThatIsNotDueAndNotStoppedStaysOpen() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 45, 30);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(48)));
+
+		investor.closeDueTrades();
+
+		assertEquals(SimulatedTrade.Status.OPEN, t.getStatus());
+		verify(graduation, never()).recordOutcome(anyBoolean(), any());
+	}
+
+	private static DeepAnalysis deepVerdict(DeepVerdict v, int conviction) {
+		DeepAnalysis d = new DeepAnalysis("AAPL", "TEST");
+		d.complete(v, null, conviction, "h", "t", "b", "b", "", "", "", "", Duration.ofDays(3));
+		return d;
+	}
+
+	private static void pause() {
+		try {
+			Thread.sleep(15);
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	@Test
+	void aConfidentOppositeDeepVerdictAfterEntryClosesTheTradeAsAThesisFlip() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 30, 30);
+		pause();
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(deepVerdict(DeepVerdict.NOT_WORTH_BUYING, 70)));
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(51)));
+
+		investor.closeDueTrades();
+
+		assertEquals(SimulatedTrade.Status.CLOSED, t.getStatus());
+		assertEquals("THESIS_FLIP", t.getExitReason());
+	}
+
+	@Test
+	void aWorthBuyingVerdictFlipsAShortToo() {
+		SimulatedTrade t = openTrade(SignalDirection.BEARISH, 50, 70, 30);
+		pause();
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(deepVerdict(DeepVerdict.WORTH_BUYING, 80)));
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
+
+		investor.closeDueTrades();
+
+		assertEquals("THESIS_FLIP", t.getExitReason());
+	}
+
+	@Test
+	void aWeakAgreeingOrPreEntryDeepVerdictDoesNotFlipAnything() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 30, 30);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(51)));
+
+		// Below the conviction bar.
+		pause();
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(deepVerdict(DeepVerdict.NOT_WORTH_BUYING, 50)));
+		investor.closeDueTrades();
+		assertEquals(SimulatedTrade.Status.OPEN, t.getStatus(), "conviction below 60 is not enough to flip");
+
+		// Agrees with the position.
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(deepVerdict(DeepVerdict.WORTH_BUYING, 90)));
+		investor.closeDueTrades();
+		assertEquals(SimulatedTrade.Status.OPEN, t.getStatus());
+
+		// Finished BEFORE the trade opened: the trade was opened knowing it.
+		DeepAnalysis before = deepVerdict(DeepVerdict.NOT_WORTH_BUYING, 90);
+		pause();
+		SimulatedTrade later = openTrade(SignalDirection.BULLISH, 50, 30, 30);
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(before));
+		investor.closeDueTrades();
+		assertEquals(SimulatedTrade.Status.OPEN, later.getStatus());
+	}
+
+	// ---- post-mortems are grounded in what Argus believed at entry ----
+
+	@Test
+	void thePostMortemPromptCitesTheOriginalThesisAndForbidsInventingCauses() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 45, 30);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(44)));
+		Recommendation rec = mock(Recommendation.class);
+		when(rec.getThesis()).thenReturn("Buy AAPL — news and insiders agree.");
+		when(rec.getReasons()).thenReturn("Company news: strong beat");
+		when(rec.getCaveats()).thenReturn("Earnings are close");
+		when(rec.getFeatures()).thenReturn("[\"dir=BULLISH\"]");
+		when(rec.getLessons()).thenReturn("");
+		when(recommendationRepo.findById(9L)).thenReturn(Optional.of(rec));
+
+		investor.closeDueTrades();
+
+		org.mockito.ArgumentCaptor<String> prompt = org.mockito.ArgumentCaptor.forClass(String.class);
+		verify(gateway).generate(prompt.capture());
+		assertTrue(prompt.getValue().contains("Use ONLY the facts below"));
+		assertTrue(prompt.getValue().contains("Buy AAPL — news and insiders agree.") && prompt.getValue().contains("ended by STOP"));
+		assertTrue(prompt.getValue().contains("ordinary market noise rather than inventing a cause"));
+		assertEquals("reflection", t.getReview());
 	}
 }

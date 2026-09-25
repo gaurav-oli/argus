@@ -11,16 +11,21 @@ import {
   type SignalView,
 } from "@/lib/apiClient";
 import { RecommendationChat } from "@/features/conversation/RecommendationChat";
+import { RecommendationDebate } from "@/features/conversation/RecommendationDebate";
 import { Carousel } from "@/components/ui/Carousel";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MarketRegimeStrip } from "@/features/recommendations/MarketRegimeStrip";
+import { WatchingList } from "@/features/recommendations/WatchingList";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { useEffect, useMemo, useState } from "react";
 
 /**
- * Probability Forecast Cards (Epic 6 — Agent 5). Weather-style cards from /api/recommendations:
- * direction, a bull/bear probability bar, confidence (with the Black-Swan cap), 8-agent signal dots,
- * an expandable diagnostic (Story 6.2), and Taken/Declined actions that snapshot the decision (6.7).
+ * Recommendation cards (Epic 6 — Agent 5) from /api/recommendations. Only calls with a real edge get a
+ * card: an action (Buy / Avoid), a 0–100 conviction score, how long to hold it (short / medium / long),
+ * the reasoning and risks behind it, and an exit plan — plus the raw odds, agent signal dots, an
+ * expandable diagnostic (Story 6.2) and Taken/Declined actions that snapshot the decision (6.7).
+ * Names with no clear edge are listed separately, with the reason, instead of masquerading as calls.
  * Rendered in a horizontal M3-style carousel rather than a stacked grid, so N recommendations don't
  * push the rest of the Intelligence page down the more Agent 5 issues.
  */
@@ -51,7 +56,22 @@ export function RecommendationCards() {
     );
   }
   if (cards.length === 0) {
-    return null; // nothing to show yet — Agent 5 produces these on its trigger/review
+    return (
+      <section className="flex flex-col gap-4">
+        <h2 className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+          Recommendations · Agent 5
+        </h2>
+        <MarketRegimeStrip />
+        <div className="rounded-xl border border-border bg-surface p-5 text-sm text-text-secondary">
+          <p className="font-medium text-text-primary">No high-conviction calls right now.</p>
+          <p className="mt-1 text-xs">
+            Argus only recommends a trade when several independent sources agree strongly enough to act on. Right now
+            none do — that&apos;s the system being selective, not idle. Reasons for each name are below.
+          </p>
+        </div>
+        <WatchingList />
+      </section>
+    );
   }
 
   return (
@@ -68,6 +88,7 @@ export function RecommendationCards() {
           </p>
         )}
       </div>
+      <MarketRegimeStrip />
       <Carousel
         items={cards}
         keyOf={(c) => c.id}
@@ -79,6 +100,7 @@ export function RecommendationCards() {
           />
         )}
       />
+      <WatchingList />
     </section>
   );
 }
@@ -134,7 +156,11 @@ function ForecastCard({
             <CompanyIcon ticker={card.ticker} logoUrl={logoUrl} title={card.ticker} size={24} />
             <span className="text-lg font-bold text-text-primary">{card.ticker}</span>
             <span className={`text-sm font-semibold ${card.direction === "BULLISH" ? "text-gains" : "text-losses"}`}>
-              {card.direction === "BULLISH" ? "▲ Bullish" : "▼ Bearish"}
+              {card.actionLabel
+                ? `${card.direction === "BULLISH" ? "▲" : "▼"} ${card.actionLabel}`
+                : card.direction === "BULLISH"
+                  ? "▲ Bullish"
+                  : "▼ Bearish"}
             </span>
             {card.badge && (
               <span
@@ -149,15 +175,107 @@ function ForecastCard({
               </span>
             )}
           </div>
-          {card.horizon && <p className="text-xs text-text-secondary">Horizon: {card.horizon}</p>}
+          {card.sector && <p className="text-xs text-text-secondary">{card.sector}</p>}
         </div>
         <div className="text-right">
-          <p className="text-xs text-text-secondary">Confidence</p>
-          <p className="text-sm font-bold tabular-nums text-text-primary">
-            {Math.round(card.confidence * 100)}%{card.confidenceCapped && <span className="text-warning"> *</span>}
-          </p>
+          {card.convictionScore != null ? (
+            <>
+              <p className="text-xs text-text-secondary" title="Evidence strength + breadth of independent sources + agreement, minus headwinds. 62+ is needed to act.">
+                Conviction
+              </p>
+              <p className={`text-2xl font-bold leading-none tabular-nums ${card.direction === "BULLISH" ? "text-gains" : "text-losses"}`}>
+                {card.convictionScore}
+                <span className="text-xs font-medium text-text-secondary">/100</span>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-text-secondary">Confidence</p>
+              <p className="text-sm font-bold tabular-nums text-text-primary">
+                {Math.round(card.confidence * 100)}%{card.confidenceCapped && <span className="text-warning"> *</span>}
+              </p>
+            </>
+          )}
         </div>
       </div>
+
+      {card.holdDays != null && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent/10 px-3 py-2 text-xs">
+          <span className="font-semibold text-accent">⏱ Hold about {card.holdDays} days</span>
+          <span className="text-text-secondary">· {card.horizonLabel}</span>
+          {card.reviewOn && <span className="text-text-secondary">· re-check by {formatDay(card.reviewOn)}</span>}
+        </div>
+      )}
+
+      {card.thesis && <p className="text-xs leading-relaxed text-text-primary">{card.thesis}</p>}
+
+      {card.reasons.length > 0 && (
+        <div>
+          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">Why</p>
+          <ul className="flex flex-col gap-1">
+            {card.reasons.map((r, i) => (
+              <li key={i} className="flex gap-2 text-xs text-text-secondary">
+                <span className="text-gains">✓</span>
+                <span>{r}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {card.caveats.length > 0 && (
+        <div>
+          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-warning">Watch out for</p>
+          <ul className="flex flex-col gap-1">
+            {card.caveats.map((c, i) => (
+              <li key={i} className="flex gap-2 text-xs text-text-secondary">
+                <span className="text-warning">!</span>
+                <span>{c}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(card.chart || card.deep) && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2 text-xs">
+          {card.chart && (
+            <p className="text-text-secondary">
+              <span className="font-medium text-text-primary">Chart · Agent 10:</span>{" "}
+              <span className={card.chart.bias === "BULLISH" ? "text-gains" : card.chart.bias === "BEARISH" ? "text-losses" : ""}>
+                {card.chart.bias.toLowerCase()} ({card.chart.score >= 0 ? "+" : ""}
+                {card.chart.score.toFixed(2)})
+              </span>{" "}
+              — {card.chart.notes[0]}
+            </p>
+          )}
+          {card.deep && (
+            <p className="text-text-secondary">
+              <span className="font-medium text-text-primary">Deep analysis · Agent 11:</span>{" "}
+              <span className={card.deep.verdict === "WORTH_BUYING" ? "text-gains" : card.deep.verdict === "NOT_WORTH_BUYING" ? "text-losses" : "text-warning"}>
+                {card.deep.verdictLabel}
+              </span>
+              {card.deep.holdDays != null && card.deep.verdict === "WORTH_BUYING" && <> · hold ~{card.deep.holdDays} days</>} · conviction{" "}
+              {card.deep.conviction}/100{card.deep.headline ? ` — ${card.deep.headline}` : ""}
+            </p>
+          )}
+        </div>
+      )}
+
+      {card.learned.length > 0 && (
+        <div className="rounded-lg bg-accent/10 px-3 py-2">
+          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-accent">Learned from past trades · Agent 13</p>
+          <ul className="flex flex-col gap-1">
+            {card.learned.map((l, i) => (
+              <li key={i} className="text-[11px] text-text-secondary">
+                {l}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {card.exitPlan && <p className="text-[11px] italic text-text-secondary">{card.exitPlan}</p>}
 
       {/* Bull/bear probability bar */}
       <div>
@@ -166,6 +284,9 @@ function ForecastCard({
         </div>
         <div className="mt-1 flex justify-between text-[11px] tabular-nums text-text-secondary">
           <span className="text-gains">{bull}% bull</span>
+          <span title="Model odds after calibration — the conviction score above is the number to act on">
+            odds
+          </span>
           <span className="text-losses">{100 - bull}% bear</span>
         </div>
       </div>
@@ -205,6 +326,8 @@ function ForecastCard({
       )}
 
       <PersonaTakes recId={card.id} />
+
+      <RecommendationDebate recommendationId={card.id} />
 
       {!decided && !takingOpen && (
         <div className="flex gap-2">
@@ -377,19 +500,26 @@ function stanceColor(stance: string): string {
       : "var(--color-text-secondary)";
 }
 
+// Only agents that emit signals into a recommendation (5 is the recommender itself, 6 the cost governor).
 const AGENT_SLOTS = [
-  "agent-1", "agent-2", "agent-3", "agent-4", "agent-5", "agent-6", "agent-7", "agent-8",
+  "agent-1", "agent-2", "agent-3", "agent-4", "agent-7", "agent-8", "agent-10", "agent-11",
 ];
 
 function SignalDots({ signals }: { signals: SignalView[] }) {
   return (
-    <div className="flex items-center gap-1.5" title="8-agent signals">
+    <div className="flex items-center gap-1.5" title="Agent signals: news, social, web, insider, calendar, macro, technical, dip-cause">
       {AGENT_SLOTS.map((slot) => {
-        const s = signals.find((x) => x.agent.startsWith(slot));
+        // "-" suffix so "agent-1" doesn't also match agent-10 / agent-11.
+        const s = signals.find((x) => x.agent.startsWith(`${slot}-`));
         return <span key={slot} className={`h-2.5 w-2.5 rounded-full ${s ? dotColor(s.direction) : "bg-border"}`} />;
       })}
     </div>
   );
+}
+
+function formatDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function dotColor(direction: string): string {

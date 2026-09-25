@@ -5,18 +5,24 @@ import com.argus.calendar.CalendarEventRepository;
 import com.argus.calendar.CalendarEventType;
 import com.argus.common.BadRequestException;
 import com.argus.common.LivePushService;
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisRunner;
+import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.fundamentals.Fundamentals;
+import com.argus.fundamentals.FundamentalsService;
 import com.argus.intelligence.MacroRelevanceTagger;
 import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.internet.WebMention;
 import com.argus.internet.WebMentionRepository;
-import com.argus.marketdata.FinnhubRest;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.sec.SecFiling;
 import com.argus.sec.SecFilingRepository;
 import com.argus.social.SocialPost;
 import com.argus.social.SocialPostRepository;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,21 +48,21 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Agent 9 — on-demand research. Unlike every other agent, this one only runs when asked: given a
  * ticker, it plans its own steps ({@link #plan}), works through them gathering real data from the same
- * sources Agents 1/2/4/8 already collect ({@link #gather}), checks after each step whether the
- * remaining plan should change ({@link #replanCheck}), then synthesizes a report ({@link #synthesize}).
+ * sources the other agents use ({@link #gather}), checks after each step whether the remaining plan
+ * should change ({@link #replanCheck}), then synthesizes a report ({@link #synthesize}).
  *
  * <p>Cost is bounded regardless of how many replans happen: the plan and every replan check use the
  * local model ({@code ModelGateway.generate(..., BIG)}, free); only the single final synthesis call
  * uses {@code escalate()} (paid Haiku) — the same "rare, valuable, user-initiated" idiom
  * {@code ConversationService}'s "deeper analysis" already uses.
  *
- * <p>FINANCIALS (fast-follow) pulls key ratios from Finnhub's {@code /stock/metric} — confirmed
- * available on existing credentials, no new key needed. Full financial-<em>statement</em> data (line-item
- * P&amp;L/balance-sheet figures via SEC EDGAR XBRL company facts) remains deliberately deferred: EDGAR
- * keys off CIK, not ticker, and a ticker→CIK resolver is its own small subsystem, not a one-line
- * addition. Likewise 10-K/10-Q narrative parsing (MD&amp;A/risk factors) and peer/competitor
- * comparison are out of scope for this pass. The synthesis prompt is honest about what it wasn't
- * given rather than inventing numbers.
+ * <p>Besides the news/macro/crowd/insider/web/earnings sources, it draws on the analysis agents:
+ * <b>FINANCIALS</b> is Agent 12's fundamentals (quarterly statements, growth and margin trends, earnings
+ * surprises, analyst consensus, valuation against peers); <b>TECHNICAL</b> is Agent 10's chart study
+ * (candlestick patterns, volume, trend, support/resistance, relative strength); <b>DEEP</b> is Agent 11's
+ * latest verdict. Agent 11 takes minutes to hours, so this step never waits for it: it reads the latest
+ * finished analysis, or — if there is none — queues one and says so honestly. The synthesis prompt stays
+ * strict about not inventing anything that wasn't gathered.
  */
 @Service
 public class ResearchAgentService {
@@ -65,7 +71,7 @@ public class ResearchAgentService {
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private static final Pattern TICKER_PATTERN = Pattern.compile("^[A-Z]{1,6}(\\.[A-Z])?$");
 	private static final List<String> DATA_SOURCES =
-			List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS", "FINANCIALS");
+			List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS", "FINANCIALS", "TECHNICAL", "DEEP");
 	private static final int EARNINGS_LOOKAHEAD_DAYS = 90;
 
 	private final ResearchJobRepository jobs;
@@ -77,15 +83,17 @@ public class ResearchAgentService {
 	private final ModelGateway gateway;
 	private final LivePushService livePush;
 	private final ResearchJobProperties props;
-	private final FinnhubRest finnhub;
-	private final String finnhubApiKey;
+	private final ChartStudyService charts;
+	private final FundamentalsService fundamentals;
+	private final DeepAnalysisService deepAnalyses;
+	private final DeepAnalysisRunner deepRunner;
 	private final ExecutorService executor;
 
 	public ResearchAgentService(ResearchJobRepository jobs, NewsArticleRepository news,
 			SocialPostRepository social, SecFilingRepository sec, WebMentionRepository web,
 			CalendarEventRepository calendar, ModelGateway gateway, LivePushService livePush,
-			ResearchJobProperties props, FinnhubRest finnhub,
-			@org.springframework.beans.factory.annotation.Value("${argus.finnhub.api-key:}") String finnhubApiKey) {
+			ResearchJobProperties props, ChartStudyService charts, FundamentalsService fundamentals,
+			DeepAnalysisService deepAnalyses, DeepAnalysisRunner deepRunner) {
 		this.jobs = jobs;
 		this.news = news;
 		this.social = social;
@@ -95,8 +103,10 @@ public class ResearchAgentService {
 		this.gateway = gateway;
 		this.livePush = livePush;
 		this.props = props;
-		this.finnhub = finnhub;
-		this.finnhubApiKey = finnhubApiKey;
+		this.charts = charts;
+		this.fundamentals = fundamentals;
+		this.deepAnalyses = deepAnalyses;
+		this.deepRunner = deepRunner;
 		AtomicInteger threadNum = new AtomicInteger();
 		this.executor = Executors.newFixedThreadPool(Math.max(1, props.maxConcurrentJobs()), r -> {
 			Thread t = new Thread(r, "research-agent-" + threadNum.incrementAndGet());
@@ -243,11 +253,13 @@ public class ResearchAgentService {
 				- INSIDER: recent insider (Form 4) buy/sell filings
 				- WEB: Hacker News discussion and Wikipedia attention
 				- EARNINGS: next earnings date and recent EPS-surprise history
-				- FINANCIALS: key valuation/profitability/leverage ratios (P/E, margins, ROE, debt/equity)
+				- FINANCIALS: full fundamental analysis — quarterly income statements, revenue/margin trends, earnings surprises, analyst consensus, valuation vs peers
+				- TECHNICAL: the chart study — trend vs the 20/50/200-day averages, momentum, volume, candlestick patterns, support/resistance, strength vs the market
+				- DEEP: Agent 11's most recent deep-analysis verdict (worth buying / wait / not worth buying, and for how long)
 
-				Propose an ordered research plan, 3-7 steps, each using exactly one data source.
+				Propose an ordered research plan, 3-9 steps, each using exactly one data source.
 				Respond with ONLY a JSON array, no prose: \
-				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS","why":"one sentence"}]
+				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|TECHNICAL|DEEP","why":"one sentence"}]
 				""".formatted(ticker, ticker);
 		try {
 			List<Step> parsed = parseSteps(gateway.generate(prompt, ModelTier.BIG));
@@ -271,7 +283,9 @@ public class ResearchAgentService {
 		steps.add(new Step("s4", "Insider activity", "INSIDER", "Recent Form 4 buys/sells.", "PENDING"));
 		steps.add(new Step("s5", "Web attention", "WEB", "Hacker News + Wikipedia interest.", "PENDING"));
 		steps.add(new Step("s6", "Earnings picture", "EARNINGS", "Next date and recent EPS surprises.", "PENDING"));
-		steps.add(new Step("s7", "Key financial ratios", "FINANCIALS", "Valuation, margins, leverage.", "PENDING"));
+		steps.add(new Step("s7", "Fundamentals", "FINANCIALS", "Growth, margins, balance sheet, earnings track record, analysts, valuation.", "PENDING"));
+		steps.add(new Step("s8", "Chart study", "TECHNICAL", "Trend, candlesticks, volume, support/resistance, relative strength.", "PENDING"));
+		steps.add(new Step("s9", "Agent 11's deep analysis", "DEEP", "The deep analyst's latest verdict and reasoning.", "PENDING"));
 		return steps;
 	}
 
@@ -294,7 +308,7 @@ public class ResearchAgentService {
 				If these findings suggest the remaining plan should change (add a step for a data source not \
 				yet used, remove one that's now clearly unnecessary, or reorder), respond with ONLY a JSON \
 				array of the revised remaining steps, same shape as before: \
-				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS","why":"..."}]
+				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|TECHNICAL|DEEP","why":"..."}]
 				If the plan is still fine as-is, respond with exactly: NO_CHANGE
 				""".formatted(ticker, remaining.get(justCompletedIndex).label(), finding,
 				upcoming.stream().map(Step::label).collect(Collectors.joining(", ")));
@@ -331,6 +345,8 @@ public class ResearchAgentService {
 				case "WEB" -> summarizeWeb(web.findByTickerAndPostedAtAfter(ticker, since));
 				case "EARNINGS" -> summarizeEarnings(ticker);
 				case "FINANCIALS" -> summarizeFinancials(ticker);
+				case "TECHNICAL" -> summarizeChart(ticker);
+				case "DEEP" -> summarizeDeep(ticker);
 				default -> "Unrecognized data source \"" + dataSource + "\" — skipped.";
 			};
 		}
@@ -409,45 +425,56 @@ public class ResearchAgentService {
 		return sb.toString();
 	}
 
-	/** Key valuation/profitability/leverage ratios from Finnhub's {@code /stock/metric} (fast-follow
-	 * — confirmed available on existing credentials). Best-effort like every other gather step: no key
-	 * configured, a rate-limit drop, or a missing field each degrade to "not available" rather than
-	 * failing the step or inventing a number. Full financial-<em>statement</em> data (line items via
-	 * SEC EDGAR) remains out of scope — see the class javadoc. */
+	/**
+	 * Agent 12's fundamentals — quarterly statements, growth and margin trends, earnings surprises, analyst
+	 * consensus and valuation against peers — refreshed live if the stored snapshot is more than a day old
+	 * (this is a slow, user-initiated job, so the ~10 Finnhub calls are affordable). Best-effort like every
+	 * gather step: no key, a rate-limit drop, or an ETF each degrade to an honest line, never a guess.
+	 */
 	private String summarizeFinancials(String ticker) {
-		if (finnhubApiKey == null || finnhubApiKey.isBlank()) {
-			return "No Finnhub API key configured — financial ratios unavailable.";
+		Optional<Fundamentals> f = fundamentals.getOrRefresh(ticker, Duration.ofHours(24));
+		if (f.isEmpty()) {
+			return "Financial data unavailable (no Finnhub key, rate-limited, or the symbol is not covered).";
 		}
-		String url = "https://finnhub.io/api/v1/stock/metric?symbol=" + ticker + "&metric=all&token=" + finnhubApiKey;
-		Optional<String> body = finnhub.get(url);
-		if (body.isEmpty()) {
-			return "Financial ratios unavailable (rate-limited or no data for this symbol).";
-		}
-		JsonNode metric = JSON.readTree(body.get()).path("metric");
-		if (metric.isMissingNode()) {
-			return "Financial ratios unavailable (no data for this symbol).";
-		}
-		List<String> parts = new ArrayList<>();
-		addIfPresent(parts, metric, "peTTM", "P/E (TTM)");
-		addIfPresent(parts, metric, "netProfitMarginTTM", "net margin % (TTM)");
-		addIfPresent(parts, metric, "roeTTM", "ROE % (TTM)");
-		addIfPresent(parts, metric, "totalDebt/totalEquityQuarterly", "debt/equity (quarterly)");
-		addIfPresent(parts, metric, "currentRatioQuarterly", "current ratio (quarterly)");
-		addIfPresent(parts, metric, "revenueGrowthTTMYoy", "revenue growth % YoY (TTM)");
-		addIfPresent(parts, metric, "epsGrowthTTMYoy", "EPS growth % YoY (TTM)");
-		addIfPresent(parts, metric, "52WeekHigh", "52-week high");
-		addIfPresent(parts, metric, "52WeekLow", "52-week low");
-		if (parts.isEmpty()) {
-			return "Financial ratios returned no usable fields for this symbol.";
-		}
-		return "Ratios (no line-item financial statements gathered): " + String.join(", ", parts) + ".";
+		return f.get().render();
 	}
 
-	private static void addIfPresent(List<String> parts, JsonNode metric, String field, String label) {
-		JsonNode v = metric.path(field);
-		if (!v.isMissingNode() && !v.isNull()) {
-			parts.add(label + " " + v.asString());
+	/** Agent 10's chart study, from stored candles. */
+	private String summarizeChart(String ticker) {
+		Optional<ChartStudy> s = charts.studyFor(ticker);
+		return s.map(ChartStudy::render).orElse("No chart study: not enough daily price history is stored for this symbol yet.");
+	}
+
+	/**
+	 * Agent 11's latest verdict. Never waits for it (a full analysis takes minutes to hours): reads the newest
+	 * finished analysis, flagging its age, or — if there is none — queues one and says plainly that it is not
+	 * part of this report.
+	 */
+	private String summarizeDeep(String ticker) {
+		Optional<DeepAnalysis> latest = deepAnalyses.latestDone(ticker);
+		if (latest.isEmpty()) {
+			try {
+				deepRunner.enqueue(ticker, "RESEARCH");
+			}
+			catch (RuntimeException ex) {
+				log.debug("Agent 9: could not queue a deep analysis for {}: {}", ticker, ex.getMessage());
+			}
+			return "Agent 11 has not analysed this ticker yet. A deep analysis has been queued (it can take a while) and is NOT part of this report.";
 		}
+		DeepAnalysis d = latest.get();
+		long ageDays = Duration.between(d.getFinishedAt(), Instant.now()).toDays();
+		StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "Agent 11's verdict (analysed %d day(s) ago%s): %s%s, conviction %s/100.%n",
+				ageDays, d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()) ? ", now stale" : "",
+				d.getVerdict() == null ? "no verdict" : d.getVerdict().label(),
+				d.getHoldDays() == null ? "" : " — hold about " + d.getHoldDays() + " days", d.getConviction()));
+		if (d.getHeadline() != null) sb.append("Headline: ").append(d.getHeadline()).append('\n');
+		if (d.getThesis() != null) sb.append("Thesis: ").append(d.getThesis()).append('\n');
+		if (d.getBullCase() != null) sb.append("Bull case: ").append(d.getBullCase()).append('\n');
+		if (d.getBearCase() != null) sb.append("Bear case: ").append(d.getBearCase()).append('\n');
+		if (d.getRisks() != null && !d.getRisks().isBlank()) sb.append("Risks: ").append(d.getRisks().replace('\n', ';')).append('\n');
+		if (d.getInvalidation() != null && !d.getInvalidation().isBlank()) sb.append("What would change its mind: ").append(d.getInvalidation()).append('\n');
+		if (d.getGuardNotes() != null && !d.getGuardNotes().isBlank()) sb.append("Guardrail notes: ").append(d.getGuardNotes().replace('\n', ';')).append('\n');
+		return sb.toString();
 	}
 
 	// ---- synthesis (the one paid call) ----
@@ -463,20 +490,22 @@ public class ResearchAgentService {
 		}
 		String prompt = """
 				You are Agent 9, Argus's on-demand research analyst. Write a research report on %s based \
-				ONLY on the findings below. Do not invent any figure — financial, ratio, or otherwise — \
-				that isn't given; if a ratio finding is present use it, but note that full financial \
-				statements (line-item revenue/profit/debt/balance-sheet figures) were never gathered, so \
-				say so honestly rather than guessing at anything beyond the ratios you were given.
+				ONLY on the findings below. Do not invent any figure, ratio, level or event that isn't given. \
+				Where a finding says data was unavailable, thin or missing, say so plainly rather than padding. \
+				Some findings come from Argus's other analysis agents (the chart study, the fundamentals, and \
+				Agent 11's deep-analysis verdict): cite them as such, and if Agent 11's verdict is stale or \
+				absent say so.
 
 				FINDINGS:
 				%s
 
 				Write a markdown report with these sections, in this order: a one-line headline verdict \
-				(bullish/bearish/neutral lean, and whether the case reads more long-term or short-term), \
-				Sentiment & Momentum, Insider Activity, Macro Backdrop, Financial Ratios (only if that \
-				finding is present — omit the section otherwise), Key Risks, and a closing "What wasn't \
-				assessed" note (full financial statements and 10-K/10-Q narrative detail weren't gathered). \
-				Be specific and cite the findings; say plainly when data was thin or missing rather than padding.
+				(bullish/bearish/neutral lean, whether it reads as worth buying, and if so short-, medium- or \
+				long-term — reconcile it explicitly with Agent 11's verdict when one exists), Chart & Technicals \
+				(only if that finding is present), Fundamentals (only if present), Sentiment & Momentum, \
+				Insider Activity, Macro Backdrop, Agent 11's Deep Analysis (only if present), Key Risks, and a \
+				closing "What wasn't assessed" note (10-K/10-Q narrative, competitive positioning and anything \
+				marked unavailable above). Be specific and cite the findings.
 				""".formatted(ticker, findingsBlock);
 		try {
 			return gateway.escalate(prompt);

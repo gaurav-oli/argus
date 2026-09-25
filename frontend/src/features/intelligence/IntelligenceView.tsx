@@ -17,6 +17,9 @@ import {
 } from "@/lib/apiClient";
 import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
 import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
+import { ChartStudyPanel } from "@/features/intelligence/ChartStudyPanel";
+import { DeepAnalysisPanel } from "@/features/intelligence/DeepAnalysisPanel";
+import { LearningPanel } from "@/features/intelligence/LearningPanel";
 import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
@@ -73,14 +76,17 @@ export function IntelligenceView() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Agents 1–4"
+        eyebrow="Agents 1–4 · 10–13"
         title="Intelligence"
-        subtitle="News, social chatter, insider filings, web buzz, source trust, and pump-and-dump watch."
+        subtitle="Recommendations, deep analysis, chart studies and what Argus has learned — plus news, social chatter, insider filings, web buzz, source trust, and pump-and-dump watch."
       />
 
       <div className="flex flex-col gap-6">
       <BreakingAlerts />
       <RecommendationCards />
+      <DeepAnalysisPanel />
+      <ChartStudyPanel />
+      <LearningPanel />
       <Watchlist />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} logos={logos} />}
       <SocialSection items={social} logos={logos} />

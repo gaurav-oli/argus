@@ -697,10 +697,75 @@ export interface RecommendationCard {
   blackSwanActive: boolean;
   createdAt: string;
   signals: SignalView[];
+  /** The call: STRONG_BUY | BUY | AVOID | STRONG_AVOID (WATCH never reaches the card list). Null on legacy rows. */
+  action: "STRONG_BUY" | "BUY" | "WATCH" | "AVOID" | "STRONG_AVOID" | null;
+  actionLabel: string | null;
+  /** 0–100 conviction: evidence strength + breadth of independent sources + agreement, minus headwinds. */
+  convictionScore: number | null;
+  /** Recommended holding period in days (7 / 30 / 90) and its human label. */
+  holdDays: number | null;
+  horizonLabel: string | null;
+  /** ISO date (yyyy-mm-dd) to re-check the call by. */
+  reviewOn: string | null;
+  thesis: string | null;
+  reasons: string[];
+  caveats: string[];
+  exitPlan: string | null;
+  sector: string | null;
+  /** Lessons learned from past trades that shaped this call (Agent 13), one line each. */
+  learned: string[];
+  /** What Agent 10 (the chart) contributed. */
+  chart: ChartSummary | null;
+  /** What Agent 11 (the deep analyst) said, when it has a fresh verdict. */
+  deep: DeepSummary | null;
 }
+
+export interface ChartSummary {
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  score: number;
+  trend: "UPTREND" | "DOWNTREND" | "SIDEWAYS";
+  notes: string[];
+  support: number | null;
+  resistance: number | null;
+}
+
+export interface DeepSummary {
+  verdict: DeepVerdictName;
+  verdictLabel: string;
+  holdDays: number | null;
+  conviction: number;
+  headline: string | null;
+  ageDays: number;
+}
+
+export type DeepVerdictName = "WORTH_BUYING" | "WAIT" | "NOT_WORTH_BUYING";
 
 export const getRecommendations = (): Promise<RecommendationCard[]> =>
   apiGet<RecommendationCard[]>("/api/recommendations");
+
+/** A name Argus is watching but has no clear edge on — with the reason, so silence is explained. */
+export interface WatchItem {
+  id: number;
+  ticker: string;
+  convictionScore: number | null;
+  reason: string | null;
+  sector: string | null;
+  createdAt: string;
+}
+
+export const getWatching = (): Promise<WatchItem[]> => apiGet<WatchItem[]>("/api/recommendations/watching");
+
+/** What the broad market is doing right now (S&P, VIX, yields, sector ETFs). */
+export interface MarketRegimeView {
+  state: "RISK_ON" | "RISK_OFF" | "NEUTRAL" | "UNKNOWN";
+  summary: string;
+  spy1dPct: number | null;
+  vix: number | null;
+  ratesRising: boolean;
+  sectors: { sector: string; changePct: number }[];
+}
+
+export const getMarketRegime = (): Promise<MarketRegimeView> => apiGet<MarketRegimeView>("/api/market/regime");
 
 /** {@code entryPrice}/{@code positionSize} are optional (Story 11.1, F22) — meaningful only when
  * `decision` is TAKEN; omit for DECLINED. */
@@ -927,6 +992,25 @@ export interface PersonaTake {
 
 export const getPersonas = (recommendationId: number): Promise<PersonaTake[]> =>
   apiGet<PersonaTake[]>(`/api/recommendations/${recommendationId}/personas`);
+
+// ---- Bull-vs-bear researcher debate ----
+
+/** One bull-vs-bear researcher debate on a recommendation (TradingAgents-style Researcher Team,
+ * adapted to a single combined-JSON call). User-triggered only — escalates to Claude Haiku. */
+export interface DebateView {
+  id: number;
+  bullCase: string;
+  bearCase: string;
+  synthesis: string;
+  verdict: "BULL" | "BEAR" | "SPLIT";
+  createdAt: string;
+}
+
+export const runDebate = (recommendationId: number): Promise<DebateView> =>
+  apiPost<DebateView>(`/api/recommendations/${recommendationId}/debate`);
+
+export const getDebateHistory = (recommendationId: number): Promise<DebateView[]> =>
+  apiGet<DebateView[]>(`/api/recommendations/${recommendationId}/debate`);
 
 /** Agent 5's trust posture + track record behind the UNPROVEN/validated badge. */
 export interface GraduationSummary {
@@ -1263,6 +1347,8 @@ export interface ClosedTradeView {
   closedAt: string;
   /** The Analyst's post-mortem on a losing call; null for wins. */
   review: string | null;
+  /** How the trade ended: HORIZON (ran its course), STOP (chart-based stop broke), THESIS_FLIP (Agent 11 turned against it). */
+  exitReason: "HORIZON" | "STOP" | "THESIS_FLIP" | null;
 }
 
 /** Open positions aggregated per ticker, marked to market (unrealizedPct null if unpriced). */
@@ -1521,3 +1607,143 @@ export interface PlatformModeView {
 
 export const getPlatformMode = (): Promise<PlatformModeView> =>
   apiGet<PlatformModeView>("/api/ops/platform-mode");
+
+
+// ---- Agent 11: deep analysis ----
+
+export interface DeepRunStatus {
+  id: number;
+  ticker: string;
+  status: "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+  stage: string | null;
+}
+
+/** One finished deep analysis with all its reasoning (Agent 11). */
+export interface DeepAnalysisView {
+  id: number;
+  ticker: string;
+  verdict: DeepVerdictName | null;
+  verdictLabel: string | null;
+  holdDays: number | null;
+  conviction: number | null;
+  headline: string | null;
+  thesis: string | null;
+  bullCase: string | null;
+  bearCase: string | null;
+  risks: string[];
+  catalysts: string[];
+  invalidation: string | null;
+  technicalSummary: string | null;
+  fundamentalSummary: string | null;
+  catalystSummary: string | null;
+  macroSummary: string | null;
+  skepticView: string | null;
+  guardNotes: string[];
+  technicalScore: number | null;
+  fundamentalScore: number | null;
+  consensusScore: number | null;
+  model: string | null;
+  finishedAt: string | null;
+  expiresAt: string | null;
+  stale: boolean;
+  inProgress: DeepRunStatus | null;
+}
+
+export interface DeepQueue {
+  running: string | null;
+  queued: number;
+  tickers: string[];
+}
+
+export const getDeepAnalyses = (): Promise<DeepAnalysisView[]> => apiGet<DeepAnalysisView[]>("/api/deep-analysis");
+export const getDeepQueue = (): Promise<DeepQueue> => apiGet<DeepQueue>("/api/deep-analysis/queue");
+export const runDeepAnalysis = (ticker: string): Promise<DeepRunStatus> =>
+  apiPost<DeepRunStatus>(`/api/deep-analysis/${encodeURIComponent(ticker)}/run`);
+
+// ---- Agent 10: chart study ----
+
+export interface ChartStudyRow {
+  ticker: string;
+  asOf: string;
+  lastClose: number;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  score: number;
+  trend: "UPTREND" | "DOWNTREND" | "SIDEWAYS";
+  ret5d: number | null;
+  ret20d: number | null;
+  rsi14: number | null;
+  relStrength60d: number | null;
+  patterns: string[];
+  support: number | null;
+  resistance: number | null;
+  headlineNotes: string[];
+}
+
+export interface ChartBar {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartPoint {
+  time: string;
+  value: number;
+}
+
+export interface ChartDetail {
+  study: ChartStudyRow;
+  notes: string[];
+  support: number | null;
+  resistance: number | null;
+  candles: ChartBar[];
+  sma20: ChartPoint[];
+  sma50: ChartPoint[];
+  sma200: ChartPoint[];
+}
+
+export const getChartStudies = (): Promise<ChartStudyRow[]> => apiGet<ChartStudyRow[]>("/api/technical/studies");
+export const getChartDetail = (ticker: string): Promise<ChartDetail> =>
+  apiGet<ChartDetail>(`/api/technical/${encodeURIComponent(ticker)}`);
+
+// ---- Agent 13: the trade learner ----
+
+export interface LearnedRuleView {
+  id: number;
+  kind: "PENALTY" | "BOOST" | "BLOCK" | "CAP_HOLD" | "SIZE";
+  status: "PROPOSED" | "ACTIVE" | "RETIRED" | "REJECTED";
+  description: string;
+  explanation: string | null;
+  effect: number;
+  bets: number;
+  winRate: number | null;
+  meanExcess: number | null;
+  holdoutBets: number | null;
+  holdoutMeanExcess: number | null;
+  note: string | null;
+  activatedAt: string | null;
+}
+
+export interface LearningReportView {
+  tradesAnalyzed: number;
+  independentBets: number;
+  baselineWin: number | null;
+  baselineExcess: number | null;
+  losses: string | null;
+  wins: string | null;
+  narrative: string | null;
+  model: string | null;
+  at: string;
+}
+
+export interface LearningView {
+  report: LearningReportView | null;
+  activeRules: LearnedRuleView[];
+  otherRules: LearnedRuleView[];
+  running: boolean;
+}
+
+export const getLearning = (): Promise<LearningView> => apiGet<LearningView>("/api/learning");
+export const runLearning = (): Promise<{ started: boolean }> => apiPost<{ started: boolean }>("/api/learning/run");

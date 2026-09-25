@@ -47,6 +47,15 @@ public class AdaptiveTuningService {
 	// In-memory read caches, refreshed at startup and after each recompute.
 	private final Map<String, Double> weightMultipliers = new ConcurrentHashMap<>();
 	private volatile double[] calibratedByBin = identityBins();
+	private volatile int[] samplesByBin = new int[BINS];
+
+	/**
+	 * Pseudo-count of "the stated probability is right" evidence a calibration bin must overcome. A bin
+	 * with n realized trades moves the stated probability only by n/(n+K) of the way to its hit rate —
+	 * so a thin (or one-episode) bin can no longer flatten every stated probability to a coin flip,
+	 * which is what pure isotonic calibration did once two early clustered dates dominated the bins.
+	 */
+	static final double CALIBRATION_PRIOR_STRENGTH = 150.0;
 
 	public AdaptiveTuningService(SimulatedTradeRepository trades, RecommendationRepository recommendations,
 			AgentReliabilityRepository reliabilities, ProbabilityCalibrationRepository calibrations,
@@ -62,12 +71,16 @@ public class AdaptiveTuningService {
 	void loadCache() {
 		reliabilities.findAll().forEach(r -> weightMultipliers.put(r.getAgent(), r.getWeightMultiplier().doubleValue()));
 		double[] bins = identityBins();
+		int[] samples = new int[BINS];
 		calibrations.findAll().forEach(b -> {
 			if (b.getCalibrated() != null) {
-				bins[binIndex(b.getBinLow() / 100.0)] = b.getCalibrated().doubleValue();
+				int idx = binIndex(b.getBinLow() / 100.0);
+				bins[idx] = b.getCalibrated().doubleValue();
+				samples[idx] = b.getSampleSize();
 			}
 		});
 		calibratedByBin = bins;
+		samplesByBin = samples;
 	}
 
 	// ---- Read side (hot path — no DB) ----
@@ -90,17 +103,22 @@ public class AdaptiveTuningService {
 			return statedDirectional;
 		}
 		double[] bins = calibratedByBin;
+		int[] samples = samplesByBin;
 		int bin = binIndex(statedDirectional);
 		Double mapped = null;
+		int n = 0;
 		for (int i = bin; i >= 0; i--) { // nearest populated bin at or below
 			if (!Double.isNaN(bins[i])) {
 				mapped = bins[i];
+				n = samples[i];
 				break;
 			}
 		}
 		if (mapped == null) {
 			return statedDirectional; // no calibration data yet → identity
 		}
+		// Partial pooling: trust the bin's realized hit rate only in proportion to its sample size.
+		mapped = statedDirectional + (mapped - statedDirectional) * (n / (n + CALIBRATION_PRIOR_STRENGTH));
 		return Math.max(0.5, Math.min(1.0, mapped));
 	}
 

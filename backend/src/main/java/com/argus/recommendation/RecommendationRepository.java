@@ -12,6 +12,11 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 	/** Recommendations newest-first for the feed/UI. */
 	List<Recommendation> findTop50ByOrderByCreatedAtDesc();
 
+	/** The newest recommendation for each ticker since {@code since} — what each name currently says. */
+	@Query(value = "select distinct on (ticker) * from recommendations where created_at > :since "
+			+ "order by ticker, created_at desc, id desc", nativeQuery = true)
+	List<Recommendation> latestPerTickerSince(@org.springframework.data.repository.query.Param("since") Instant since);
+
 	/** Most-recent recommendation time — Agent 5 "last run" (Operations dashboard). */
 	@Query("select max(r.createdAt) from Recommendation r")
 	Instant latestCreatedAt();

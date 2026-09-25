@@ -35,7 +35,7 @@ class DefaultModelGatewayTest {
 
 	private static ModelGatewayProperties propsWithTimeout(int concurrency, Duration callTimeout) {
 		return new ModelGatewayProperties(
-				concurrency, callTimeout, Duration.ofMinutes(10), "gemma3:27b", "llama3.2:3b", "unused");
+				concurrency, callTimeout, Duration.ofMinutes(10), "gemma3:27b", "llama3.2:3b", "unused", false);
 	}
 
 	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
@@ -210,7 +210,7 @@ class DefaultModelGatewayTest {
 
 		gateway.generate("ping");
 
-		assertNull(model.lastPrompt.getOptions().getModel(),
+		assertTrue(!"llama3.2:3b".equals(model.lastPrompt.getOptions().getModel()),
 				"BIG-tier call must keep using the bean's default model, not the small-model override");
 	}
 

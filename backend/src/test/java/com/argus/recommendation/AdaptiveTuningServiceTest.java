@@ -74,7 +74,7 @@ class AdaptiveTuningServiceTest {
 
 		assertEquals(1.4, s.weightMultiplier("agent-1-news"), 1e-9);
 		assertEquals(1.0, s.weightMultiplier("agent-unseen"), 1e-9); // default identity
-		assertEquals(0.58, s.calibrateDirectionalProbability(0.75), 1e-9); // bin 70 → 0.58
+		assertEquals(0.58, s.calibrateDirectionalProbability(0.75), 1e-4); // bin 70 → 0.58
 	}
 
 	@Test
@@ -84,7 +84,34 @@ class AdaptiveTuningServiceTest {
 		AdaptiveTuningService s = service(true);
 		s.loadCache();
 		// A bullish 0.62 call whose band realized only 30% is floored to a coin flip, not reversed.
-		assertEquals(0.5, s.calibrateDirectionalProbability(0.62), 1e-9);
+		assertEquals(0.5, s.calibrateDirectionalProbability(0.62), 1e-4);
+	}
+
+	@Test
+	void aThinCalibrationBinBarelyMovesTheStatedProbability() {
+		// The live failure: two early, clustered dates put 17 trades in the 60-70 bin at a 29% hit rate,
+		// pooled with its neighbours down to 0.5167 — and pure isotonic calibration then flattened EVERY
+		// stated probability to ~52%, so the Intelligence page showed a coin flip for everything.
+		when(reliabilities.findAll()).thenReturn(List.of());
+		when(calibrations.findAll()).thenReturn(List.of(calBin(60, 0.5167, 17)));
+		AdaptiveTuningService s = service(true);
+		s.loadCache();
+
+		double out = s.calibrateDirectionalProbability(0.628);
+
+		double expected = 0.628 + (0.5167 - 0.628) * (17.0 / (17.0 + AdaptiveTuningService.CALIBRATION_PRIOR_STRENGTH));
+		assertEquals(expected, out, 1e-9);
+		assertTrue(out > 0.60, "17 clustered trades must not erase a 62.8% stated read");
+	}
+
+	@Test
+	void aWellSampledBinIsTrustedMoreThanAThinOne() {
+		when(reliabilities.findAll()).thenReturn(List.of());
+		when(calibrations.findAll()).thenReturn(List.of(calBin(60, 0.52, 600)));
+		AdaptiveTuningService s = service(true);
+		s.loadCache();
+
+		assertTrue(s.calibrateDirectionalProbability(0.65) < 0.56, "600 trades earn most of the correction");
 	}
 
 	// ---- recompute: attribution → multipliers ----
@@ -176,9 +203,14 @@ class AdaptiveTuningServiceTest {
 		return r;
 	}
 
+	/** A bin backed by an effectively unlimited sample, so the shrinkage weight is ~1 and the map is exact. */
 	private static ProbabilityCalibrationBin calBin(int low, double calibrated) {
+		return calBin(low, calibrated, 10_000_000);
+	}
+
+	private static ProbabilityCalibrationBin calBin(int low, double calibrated, int sampleSize) {
 		ProbabilityCalibrationBin b = new ProbabilityCalibrationBin(low);
-		b.update(5, calibrated, calibrated);
+		b.update(sampleSize, calibrated, calibrated);
 		return b;
 	}
 }

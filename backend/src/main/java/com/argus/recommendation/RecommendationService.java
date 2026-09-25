@@ -34,6 +34,16 @@ public class RecommendationService {
 		return repository.save(new Recommendation(ticker, score, signals, priceTarget, horizon));
 	}
 
+	/** Score {@code signals}, attach the policy's {@code verdict}, and persist (the trigger's path). */
+	@Transactional
+	public Recommendation create(String ticker, List<AgentSignal> signals, java.util.function.Function<ProbabilityScore,
+			RecommendationPolicy.Verdict> verdictFor, String sector, String horizon) {
+		ProbabilityScore score = calibrate(engine.score(signals));
+		Recommendation rec = new Recommendation(ticker, score, signals, null, horizon);
+		rec.applyVerdict(verdictFor.apply(score), sector);
+		return repository.save(rec);
+	}
+
 	/**
 	 * Phase B: nudge the stated directional probability toward the realized hit rate (isotonic
 	 * calibration). The engine stays pure — this adjusts only the reported probability, never the
@@ -51,19 +61,35 @@ public class RecommendationService {
 				s.contributions());
 	}
 
+	/** How far back a ticker's latest read still counts as "current" for the feed. */
+	private static final java.time.Duration CURRENT_WINDOW = java.time.Duration.ofDays(3);
+
+	/**
+	 * The current, <b>actionable</b> calls: each ticker's latest recommendation, kept only if it is a
+	 * BUY/AVOID (or a legacy verdict-less row), strongest conviction first. A ticker whose latest read is
+	 * WATCH is deliberately absent — see {@link #watching()}.
+	 */
 	@Transactional(readOnly = true)
 	public List<Recommendation> recent() {
-		// One current card per ticker. Each trigger (6h review, stranger event) appends a new row, so
-		// the feed would otherwise show the same holding many times. Among a ticker's recent rows show
-		// the RICHEST one — most agent signals — with newest as the tiebreaker, so a thin rec (e.g. a
-		// burst where one trigger only caught news) never hides the complete analysis beside it.
-		java.util.Map<String, Recommendation> bestByTicker = new java.util.LinkedHashMap<>();
-		for (Recommendation r : repository.findTop50ByOrderByCreatedAtDesc()) {
-			r.getSignals().size(); // initialize the diagnostic within the tx
-			bestByTicker.merge(r.getTicker(), r,
-					(newer, older) -> older.getSignals().size() > newer.getSignals().size() ? older : newer);
-		}
-		return new java.util.ArrayList<>(bestByTicker.values());
+		return latestPerTicker().stream().filter(Recommendation::isActionable)
+				.sorted(java.util.Comparator
+						.comparing((Recommendation r) -> r.getConvictionScore() == null ? -1 : r.getConvictionScore())
+						.thenComparing(Recommendation::getCreatedAt).thenComparing(Recommendation::getId).reversed())
+				.toList();
+	}
+
+	/** Tickers Argus is watching but has no clear edge on, most-recent first, with the reason why. */
+	@Transactional(readOnly = true)
+	public List<Recommendation> watching() {
+		return latestPerTicker().stream().filter(r -> !r.isActionable())
+				.sorted(java.util.Comparator.comparing(Recommendation::getTicker)).toList();
+	}
+
+	private List<Recommendation> latestPerTicker() {
+		List<Recommendation> latest = repository.latestPerTickerSince(
+				java.time.Instant.now().minus(CURRENT_WINDOW));
+		latest.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx
+		return latest;
 	}
 
 	/** IDs of the currently-surfaced recommendations (one per ticker) — for persona pre-warming. */

@@ -89,6 +89,18 @@ public class SimulatedTrade {
 	@Column(name = "excess_return_pct")
 	private BigDecimal excessReturnPct;
 
+	/** Protective stop set at entry from Agent 10's chart (ATR-based, tightened to nearby support/resistance). */
+	@Column(name = "stop_price")
+	private BigDecimal stopPrice;
+
+	/** HORIZON (ran its full holding period), STOP (protective stop hit) or THESIS_FLIP (Agent 11 turned against it). */
+	@Column(name = "exit_reason", nullable = false)
+	private String exitReason = "HORIZON";
+
+	/** Size multiplier the learned lessons applied to the base notional (1.0 = unchanged). */
+	@Column(name = "size_multiplier", nullable = false)
+	private BigDecimal sizeMultiplier = BigDecimal.ONE;
+
 	/** How many later recommendations re-affirmed this open thesis instead of duplicating it. */
 	@Column(nullable = false)
 	private int reaffirmations;
@@ -142,6 +154,26 @@ public class SimulatedTrade {
 		this.closedAt = Instant.now();
 	}
 
+	/** Record the entry-time risk controls: the protective stop and the lesson-driven size multiplier. */
+	public void applyRisk(BigDecimal stopPrice, double sizeMultiplier) {
+		this.stopPrice = stopPrice;
+		this.sizeMultiplier = BigDecimal.valueOf(sizeMultiplier).setScale(3, RoundingMode.HALF_UP);
+	}
+
+	/** Whether {@code price} has crossed the protective stop against this position's direction. */
+	public boolean isStopHit(BigDecimal price) {
+		if (stopPrice == null || price == null || status != Status.OPEN) {
+			return false;
+		}
+		return direction == SignalDirection.BULLISH ? price.compareTo(stopPrice) <= 0 : price.compareTo(stopPrice) >= 0;
+	}
+
+	/** Close ahead of the horizon (or at it), recording why. */
+	public void close(BigDecimal exit, BigDecimal benchmarkExit, String reason) {
+		this.exitReason = reason;
+		close(exit, benchmarkExit);
+	}
+
 	/** Another recommendation restated this open thesis — count it rather than duplicate the trade. */
 	public void reaffirm() {
 		this.reaffirmations++;
@@ -157,6 +189,18 @@ public class SimulatedTrade {
 
 	public Long getId() {
 		return id;
+	}
+
+	public BigDecimal getStopPrice() {
+		return stopPrice;
+	}
+
+	public String getExitReason() {
+		return exitReason;
+	}
+
+	public BigDecimal getSizeMultiplier() {
+		return sizeMultiplier;
 	}
 
 	public Long getRecommendationId() {

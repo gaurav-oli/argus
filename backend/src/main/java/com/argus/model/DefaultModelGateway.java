@@ -37,6 +37,8 @@ public class DefaultModelGateway implements ModelGateway {
 	private final Semaphore permits;
 	private final Duration callTimeout;
 	private final OllamaChatOptions smallModelOptions;
+	/** Per-call override for BIG generations: no hidden "thinking" tokens (see {@link ModelGatewayProperties#bigThinking()}); null = leave the default. */
+	private final OllamaChatOptions bigModelOptions;
 
 	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
 			com.argus.cost.CostGovernor costGovernor, com.argus.cost.CostRecorder costRecorder,
@@ -54,6 +56,12 @@ public class DefaultModelGateway implements ModelGateway {
 		this.permits = new Semaphore(properties.concurrency());
 		this.callTimeout = properties.callTimeoutSeconds();
 		this.smallModelOptions = OllamaChatOptions.builder().model(properties.smallModel()).build();
+		// Derived from the model's OWN default options (model, keep-alive, token cap) with only thinking switched off. A
+		// freshly-built OllamaChatOptions carries Spring AI's default model ("mistral") and would silently override the
+		// configured one — found the hard way against the live model: every BIG call 404'd. Non-Ollama models (the
+		// dev mock) get no override.
+		this.bigModelOptions = !properties.bigThinking() && chatModel.getDefaultOptions() instanceof OllamaChatOptions defaults
+				? defaults.mutate().disableThinking().build() : null;
 	}
 
 	@Override
@@ -175,8 +183,9 @@ public class DefaultModelGateway implements ModelGateway {
 	 * (caught by {@link #generateBig}'s catch-all, which falls through to Haiku) rather than
 	 * propagating {@link TimeoutException} directly, so callers see one consistent failure path. */
 	private String callWithTimeout(String prompt) {
-		CompletableFuture<String> future =
-				CompletableFuture.supplyAsync(() -> chatClient.prompt().user(prompt).call().content());
+		CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> bigModelOptions == null
+				? chatClient.prompt().user(prompt).call().content()
+				: chatClient.prompt().user(prompt).options(bigModelOptions.mutate()).call().content());
 		try {
 			return future.get(callTimeout.toMillis(), TimeUnit.MILLISECONDS);
 		}

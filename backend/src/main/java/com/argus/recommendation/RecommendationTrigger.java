@@ -6,6 +6,15 @@ import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
 import com.argus.intelligence.KnownUniverse;
 import com.argus.intelligence.StrangerDangerService;
+import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.deepanalysis.DeepView;
+import com.argus.portfolio.LivePortfolioService;
+import com.argus.regime.MarketRegime;
+import com.argus.regime.MarketRegimeService;
+import com.argus.regime.Sector;
+import com.argus.regime.SectorClassifier;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -32,16 +41,30 @@ public class RecommendationTrigger implements Agent {
 	private final EarningsQuietPeriodService quietPeriod;
 	private final KnownUniverse universe;
 	private final PaperInvestorService investor;
+	private final RecommendationPolicy policy;
+	private final SectorClassifier sectors;
+	private final MarketRegimeService regimes;
+	private final LivePortfolioService prices;
+	private final ChartStudyService charts;
+	private final DeepAnalysisService deepAnalyses;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
 			GraduationService graduation, EarningsQuietPeriodService quietPeriod, KnownUniverse universe,
-			PaperInvestorService investor) {
+			PaperInvestorService investor, RecommendationPolicy policy, SectorClassifier sectors,
+			MarketRegimeService regimes, LivePortfolioService prices, ChartStudyService charts,
+			DeepAnalysisService deepAnalyses) {
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
 		this.graduation = graduation;
 		this.quietPeriod = quietPeriod;
 		this.universe = universe;
 		this.investor = investor;
+		this.policy = policy;
+		this.sectors = sectors;
+		this.regimes = regimes;
+		this.prices = prices;
+		this.charts = charts;
+		this.deepAnalyses = deepAnalyses;
 	}
 
 	@Override
@@ -83,7 +106,8 @@ public class RecommendationTrigger implements Agent {
 			log.debug("Agent 5 FROZEN — suppressing recommendation for {}", ticker);
 			return Optional.empty();
 		}
-		if (quietPeriod.statusFor(ticker).status() == QuietPeriodStatus.Status.QUIET) {
+		QuietPeriodStatus quiet = quietPeriod.statusFor(ticker);
+		if (quiet.status() == QuietPeriodStatus.Status.QUIET) {
 			log.info("Earnings ahead for {} — suppressing probability card (quiet period)", ticker);
 			return Optional.empty();
 		}
@@ -91,9 +115,25 @@ public class RecommendationTrigger implements Agent {
 		if (signals.isEmpty()) {
 			return Optional.empty();
 		}
-		Recommendation rec = recommendations.create(ticker, signals, null, "6h review");
-		log.info("Agent 5 produced recommendation for {} ({} signals)", ticker, signals.size());
-		investor.open(rec); // the Investor persona opens a simulated position to validate this call
+		// Context the raw scoring engine cannot see: what sector this is, what the tape is doing, where
+		// the stock trades and how far it has already moved today.
+		Sector sector = sectors.sectorOf(ticker);
+		MarketRegime regime = regimes.current();
+		Double lastPrice = prices.latestPrice(ticker).map(java.math.BigDecimal::doubleValue).orElse(null);
+		Double move1d = regimes.moveOf(ticker).map(MarketRegimeService.StockMove::changePct1d).orElse(null);
+		boolean earningsSoon = quiet.status() == QuietPeriodStatus.Status.NOTE;
+		ChartStudy chart = charts.studyFor(ticker).orElse(null);
+		DeepView deep = deepAnalyses.viewFor(ticker).orElse(null);
+
+		Recommendation rec = recommendations.create(ticker, signals,
+				score -> policy.evaluate(new RecommendationPolicy.Context(ticker, score, signals, sector, regime,
+						lastPrice, move1d, earningsSoon, chart, deep)),
+				sector.name(), "6h review");
+		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
+				rec.getConvictionScore(), rec.getHoldDays(), signals.size());
+		if (rec.getAction().actionable()) {
+			investor.open(rec); // only a call with a real edge earns a paper position to validate it
+		}
 		return Optional.of(rec);
 	}
 }

@@ -127,6 +127,16 @@ export function PaperInvestorScoreboard() {
                   >
                     {t.won ? "WON" : "LOST"}
                   </span>
+                  {t.exitReason === "STOP" && (
+                    <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning" title="Agent 10's chart-based protective stop was hit before the horizon">
+                      stopped out
+                    </span>
+                  )}
+                  {t.exitReason === "THESIS_FLIP" && (
+                    <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning" title="Agent 11 re-analysed the stock and turned against the position">
+                      Agent 11 flipped
+                    </span>
+                  )}
                   <span className="ml-auto shrink-0 font-mono text-[10px] text-text-secondary">
                     {absTime(t.closedAt)}
                   </span>

@@ -3,6 +3,15 @@ package com.argus.recommendation;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.LivePortfolioService;
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.deepanalysis.DeepVerdict;
+import com.argus.learning.FeatureTokens;
+import com.argus.learning.LessonEffect;
+import com.argus.learning.Lessons;
+import com.argus.regime.SectorClassifier;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import com.argus.recommendation.TradeDecision.Decision;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,13 +49,25 @@ public class PaperInvestorService {
 	private final ModelGateway gateway;
 	private final BigDecimal notional;
 	private final List<Integer> horizons;
+	/** True when the legacy single-horizon validation knob is forcing one horizon for every call. */
+	private final boolean horizonForced;
+	private final SectorClassifier sectors;
+	private final int maxOpenPerSectorDirection;
+	private final Lessons lessons;
+	private final ChartStudyService charts;
+	private final DeepAnalysisService deepAnalyses;
+	private final RecommendationRepository recommendations;
 
 	public PaperInvestorService(SimulatedTradeRepository trades, LivePortfolioService prices,
 			BenchmarkPriceSource benchmark, GraduationService graduation,
 			TradeConfirmationService confirmations, ModelGateway gateway,
 			@Value("${argus.paper-investor.notional:100}") BigDecimal notional,
 			@Value("${argus.paper-investor.horizon-days-list:}") String horizonList,
-			@Value("${argus.paper-investor.horizon-days:0}") int legacySingleHorizon) {
+			@Value("${argus.paper-investor.horizon-days:0}") int legacySingleHorizon,
+			SectorClassifier sectors,
+			@Value("${argus.paper-investor.max-open-per-sector-direction:4}") int maxOpenPerSectorDirection,
+			Lessons lessons, ChartStudyService charts, DeepAnalysisService deepAnalyses,
+			RecommendationRepository recommendations) {
 		this.trades = trades;
 		this.prices = prices;
 		this.benchmark = benchmark;
@@ -55,6 +76,96 @@ public class PaperInvestorService {
 		this.gateway = gateway;
 		this.notional = notional;
 		this.horizons = resolveHorizons(horizonList, legacySingleHorizon);
+		this.horizonForced = legacySingleHorizon > 0;
+		this.sectors = sectors;
+		this.maxOpenPerSectorDirection = maxOpenPerSectorDirection;
+		this.lessons = lessons;
+		this.charts = charts;
+		this.deepAnalyses = deepAnalyses;
+		this.recommendations = recommendations;
+	}
+
+	// ---- entry-time intelligence: lessons, size, and a chart-based protective stop ----
+
+	private static final double MIN_STOP = 0.05;
+	private static final double MAX_STOP = 0.15;
+	private static final double DEFAULT_STOP = 0.10;
+	private static final double ATR_MULTIPLE = 2.5;
+	/** Deep verdict must be at least this convincing to flip an open position. */
+	private static final int FLIP_MIN_CONVICTION = 60;
+
+	/**
+	 * A protective stop from Agent 10's chart: {@value #ATR_MULTIPLE}× the average daily range (clamped to 5–15%),
+	 * tightened to just beyond the nearest support (for a long) or resistance (for a short) when that level is
+	 * closer but not closer than 3% — a level the chart says should hold, and whose break says the setup failed.
+	 * With no chart history, a flat 10%.
+	 */
+	BigDecimal stopFor(SignalDirection direction, String ticker, BigDecimal entry) {
+		double e = entry.doubleValue();
+		double d = DEFAULT_STOP;
+		ChartStudy chart = null;
+		try {
+			chart = charts.studyFor(ticker).orElse(null);
+		}
+		catch (RuntimeException ex) {
+			log.debug("Investor: chart unavailable for {} stop: {}", ticker, ex.getMessage());
+		}
+		if (chart != null && chart.atrPct() != null) {
+			d = Math.max(MIN_STOP, Math.min(MAX_STOP, ATR_MULTIPLE * chart.atrPct() / 100.0));
+		}
+		double stop = direction == SignalDirection.BULLISH ? e * (1 - d) : e * (1 + d);
+		if (chart != null) {
+			if (direction == SignalDirection.BULLISH && chart.support() != null) {
+				double level = chart.support() * 0.99;
+				if (level < e * 0.97 && level > stop) stop = level;
+			}
+			else if (direction == SignalDirection.BEARISH && chart.resistance() != null) {
+				double level = chart.resistance() * 1.01;
+				if (level > e * 1.03 && level < stop) stop = level;
+			}
+		}
+		return BigDecimal.valueOf(stop).setScale(6, java.math.RoundingMode.HALF_UP);
+	}
+
+	/** Agent 11 has, since this trade opened, reached a confident verdict that opposes the position. */
+	private boolean thesisFlipped(SimulatedTrade trade) {
+		try {
+			return deepAnalyses.latestDone(trade.getTicker())
+					.filter(d -> d.getFinishedAt() != null && d.getFinishedAt().isAfter(trade.getEntryAt()))
+					.filter(d -> d.getConviction() != null && d.getConviction() >= FLIP_MIN_CONVICTION)
+					.map(DeepAnalysis::getVerdict)
+					.map(v -> trade.getDirection() == SignalDirection.BULLISH ? v == DeepVerdict.NOT_WORTH_BUYING : v == DeepVerdict.WORTH_BUYING)
+					.orElse(false);
+		}
+		catch (RuntimeException ex) {
+			return false;
+		}
+	}
+
+	/**
+	 * The legs to open for a call: the recommended holding period when the recommendation carries one
+	 * (so the feedback loop tests the horizon call itself, not a fixed 7/30/90 fan-out), otherwise the
+	 * configured list; the legacy validation knob overrides both.
+	 */
+	private List<Integer> horizonsFor(Recommendation rec) {
+		if (!horizonForced && rec.getHoldDays() != null && rec.getHoldDays() > 0) {
+			return List.of(rec.getHoldDays());
+		}
+		return horizons;
+	}
+
+	/** Whether the book already holds as many same-direction positions in this sector as we allow —
+	 * about 120 near-identical bullish calls a day was one market bet counted 120 times. */
+	private boolean sectorFull(Recommendation rec) {
+		if (maxOpenPerSectorDirection <= 0) {
+			return false;
+		}
+		var sector = sectors.sectorOf(rec.getTicker());
+		long open = trades.findByStatus(SimulatedTrade.Status.OPEN).stream()
+				.filter(t -> t.getDirection() == rec.getDirection() && !t.getTicker().equals(rec.getTicker())
+						&& sectors.sectorOf(t.getTicker()) == sector)
+				.map(SimulatedTrade::getTicker).distinct().count();
+		return open >= maxOpenPerSectorDirection;
 	}
 
 	/** Staggered horizons from the list prop; the legacy single-horizon knob (validation) wins when set. */
@@ -106,15 +217,32 @@ public class PaperInvestorService {
 				return List.of();
 			}
 			BigDecimal spy = benchmark.latest().orElse(null);
+			// What has this kind of situation cost or earned before? The same lessons that shaped the call
+			// now shape how much is put on it (and can stop it outright).
+			LessonEffect fx = lessons.evaluate(FeatureTokens.fromJson(rec.getFeatures()));
+			if (fx.blockReason() != null) {
+				log.info("Investor: lesson blocks {} {} — {}", rec.getDirection(), rec.getTicker(), fx.blockReason());
+				return List.of();
+			}
+			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(fx.sizeMultiplier())).setScale(2, java.math.RoundingMode.HALF_UP);
+			BigDecimal stop = stopFor(rec.getDirection(), rec.getTicker(), entry);
+			if (sectorFull(rec)) {
+				log.info("Investor: {} book already holds {} {} names — not stacking {}",
+						sectors.sectorOf(rec.getTicker()).label(), maxOpenPerSectorDirection, rec.getDirection(),
+						rec.getTicker());
+				return List.of();
+			}
 
 			List<SimulatedTrade> opened = new java.util.ArrayList<>();
-			for (int horizon : horizons) {
+			for (int horizon : horizonsFor(rec)) {
 				if (trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
 						rec.getTicker(), rec.getDirection(), horizon, SimulatedTrade.Status.OPEN)) {
 					continue; // this leg of the thesis is already on the book
 				}
-				opened.add(trades.save(new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
-						notional, entry, horizon, spy)));
+				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
+						tradeNotional, entry, horizon, spy);
+				leg.applyRisk(stop, fx.sizeMultiplier());
+				opened.add(trades.save(leg));
 			}
 			if (opened.isEmpty()) {
 				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatus(
@@ -125,8 +253,8 @@ public class PaperInvestorService {
 						rec.getDirection(), rec.getTicker(), existing.size());
 			}
 			else {
-				log.info("Investor opened {} × ${} {} leg(s) on {} @ {} (horizons {}, SPY {})",
-						opened.size(), notional, rec.getDirection(), rec.getTicker(), entry,
+				log.info("Investor opened {} × ${} {} leg(s) on {} @ {} (stop {}, horizons {}, SPY {})",
+						opened.size(), tradeNotional, rec.getDirection(), rec.getTicker(), entry, stop,
 						opened.stream().map(t -> String.valueOf(t.getHorizonDays()))
 								.reduce((a, b) -> a + "/" + b).orElse("-"),
 						spy == null ? "n/a" : spy);
@@ -150,16 +278,19 @@ public class PaperInvestorService {
 		Instant now = Instant.now();
 		BigDecimal spy = benchmark.latest().orElse(null); // one benchmark quote per pass
 		for (SimulatedTrade trade : trades.findByStatus(SimulatedTrade.Status.OPEN)) {
-			if (!trade.isDue(now)) {
-				continue;
-			}
 			BigDecimal exit = prices.latestPrice(trade.getTicker()).orElse(null);
 			if (exit == null || exit.signum() <= 0) {
-				log.debug("Investor: {} due but unpriced — retrying next pass", trade.getTicker());
+				log.debug("Investor: {} unpriced — retrying next pass", trade.getTicker());
+				continue;
+			}
+			// Three ways a position ends: it ran its horizon, the chart-based stop broke, or Agent 11
+			// re-analysed the stock and now argues the opposite with real conviction.
+			String reason = trade.isDue(now) ? "HORIZON" : trade.isStopHit(exit) ? "STOP" : thesisFlipped(trade) ? "THESIS_FLIP" : null;
+			if (reason == null) {
 				continue;
 			}
 			try {
-				closeOne(trade, exit, spy);
+				closeOne(trade, exit, spy, reason);
 			} catch (RuntimeException ex) {
 				log.warn("Investor: failed to close paper trade {} ({}): {}",
 						trade.getId(), trade.getTicker(), ex.getMessage());
@@ -172,8 +303,8 @@ public class PaperInvestorService {
 	 * its win/loss) and {@link GraduationService#recordOutcome} each persist in their own transaction;
 	 * the row is saved first so the scoreboard stays correct even if the graduation feed hiccups.
 	 */
-	private void closeOne(SimulatedTrade trade, BigDecimal exit, BigDecimal benchmarkExit) {
-		trade.close(exit, benchmarkExit);
+	private void closeOne(SimulatedTrade trade, BigDecimal exit, BigDecimal benchmarkExit, String reason) {
+		trade.close(exit, benchmarkExit, reason);
 		boolean won = Boolean.TRUE.equals(trade.getWon());
 		if (!won) {
 			trade.recordReview(postMortem(trade));
@@ -187,29 +318,51 @@ public class PaperInvestorService {
 			log.debug("Investor: decision-outcome mirror failed for rec {}: {}",
 					trade.getRecommendationId(), ex.getMessage());
 		}
-		log.info("Investor closed {} paper trade on {} ({}d): {}% abs, {} vs SPY ({}) @ {}",
-				trade.getDirection(), trade.getTicker(), trade.getHorizonDays(), trade.getReturnPct(),
+		log.info("Investor closed {} paper trade on {} ({}d, {}): {}% abs, {} vs SPY ({}) @ {}",
+				trade.getDirection(), trade.getTicker(), trade.getHorizonDays(), reason, trade.getReturnPct(),
 				trade.getExcessReturnPct() == null ? "unbenchmarked" : trade.getExcessReturnPct() + "%",
 				won ? "WON" : "LOST", exit);
 	}
 
-	/** Ask the model why a losing call likely went wrong — the Analyst learning from the Investor. */
+	/**
+	 * Ask the model why a losing call went wrong — grounded in what Argus actually believed at entry (thesis,
+	 * evidence, risks it flagged, the situation tokens, the lessons that applied) and how the trade ended. The
+	 * old prompt gave the model only prices, so it invented causes ("the Fed's hawkish pivot", "volume spikes")
+	 * that were never in the data and that nothing ever acted on. The model may now cite only what it is given,
+	 * and is told to say so when the facts do not explain the loss.
+	 */
 	private String postMortem(SimulatedTrade t) {
 		try {
 			String vsMarket = t.getExcessReturnPct() == null ? ""
 					: " (%s%% vs the S&P 500 over the same window — the call %s the market)"
 							.formatted(t.getExcessReturnPct(),
 									t.getExcessReturnPct().signum() > 0 ? "beat" : "lagged");
+			Recommendation rec = t.getRecommendationId() == null ? null
+					: recommendations.findById(t.getRecommendationId()).orElse(null);
+			String belief = rec == null ? "(the original recommendation is no longer available)" : """
+					Thesis at entry: %s
+					Evidence it rested on: %s
+					Risks it flagged: %s
+					Situation tokens: %s
+					Learned lessons that applied: %s""".formatted(nz(rec.getThesis()), nz(rec.getReasons()), nz(rec.getCaveats()),
+					nz(rec.getFeatures()), nz(rec.getLessons()));
 			String prompt = """
 					You are Argus, an investing analyst reviewing your own recommendation that lost money in a \
 					paper trade. Be honest and specific, 1-2 sentences, no disclaimers.
 
-					Call: %s on %s
-					Entry price: %s, exit after %d days: %s (direction-adjusted return %s%%%s)
-					In 1-2 sentences: what most likely went wrong, and what signal you'd weight differently next time?
+					Use ONLY the facts below. Do not cite news, macro events, indicators or numbers that are not \
+					listed here. If the facts do not explain the loss, say the loss looks like ordinary market \
+					noise rather than inventing a cause.
+
+					Call: %s on %s, held %d days, ended by %s.
+					Entry price %s, exit price %s (direction-adjusted return %s%%%s). Protective stop was %s.
+					%s
+
+					In 1-2 sentences: which part of the original reasoning failed (or that none clearly did), \
+					and what one concrete thing to weigh differently next time.
 					Respond with ONLY the reflection text.
-					""".formatted(t.getDirection(), t.getTicker(), t.getEntryPrice(), t.getHorizonDays(),
-					t.getExitPrice(), t.getReturnPct(), vsMarket);
+					""".formatted(t.getDirection(), t.getTicker(), t.getHorizonDays(), t.getExitReason(), t.getEntryPrice(),
+					t.getExitPrice(), t.getReturnPct(), vsMarket, t.getStopPrice() == null ? "not set" : t.getStopPrice(), belief);
 			String out = gateway.generate(prompt);
 			if (out != null && !out.isBlank()) {
 				String clean = out.replace("```", "").strip();
@@ -219,6 +372,10 @@ public class PaperInvestorService {
 			log.warn("Investor: post-mortem model call failed for {}: {}", t.getTicker(), ex.getMessage());
 		}
 		return null;
+	}
+
+	private static String nz(String s) {
+		return s == null || s.isBlank() ? "(none recorded)" : s;
 	}
 
 	// ---- Read side for the scoreboard ----
@@ -327,12 +484,12 @@ public class PaperInvestorService {
 
 	/** {@code excessReturnPct} is the vs-SPY figure that decided the win; null when unbenchmarked. */
 	public record ClosedTradeView(String ticker, String direction, BigDecimal returnPct,
-			BigDecimal excessReturnPct, int horizonDays, boolean won, Instant closedAt, String review) {
+			BigDecimal excessReturnPct, int horizonDays, boolean won, Instant closedAt, String review, String exitReason) {
 
 		static ClosedTradeView from(SimulatedTrade t) {
 			return new ClosedTradeView(t.getTicker(), t.getDirection().name(), t.getReturnPct(),
 					t.getExcessReturnPct(), t.getHorizonDays(), Boolean.TRUE.equals(t.getWon()),
-					t.getClosedAt(), t.getReview());
+					t.getClosedAt(), t.getReview(), t.getExitReason());
 		}
 	}
 }
