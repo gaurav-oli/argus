@@ -8,6 +8,9 @@ import com.argus.common.LivePushService;
 import com.argus.deepanalysis.DeepAnalysis;
 import com.argus.deepanalysis.DeepAnalysisRunner;
 import com.argus.deepanalysis.DeepAnalysisService;
+import com.argus.deepanalysis.DeepScorecardService;
+import com.argus.filings.FilingDigestService;
+import com.argus.filings.FilingView;
 import com.argus.fundamentals.Fundamentals;
 import com.argus.fundamentals.FundamentalsService;
 import com.argus.intelligence.MacroRelevanceTagger;
@@ -59,8 +62,9 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>Besides the news/macro/crowd/insider/web/earnings sources, it draws on the analysis agents:
  * <b>FINANCIALS</b> is Agent 12's fundamentals (quarterly statements, growth and margin trends, earnings
  * surprises, analyst consensus, valuation against peers); <b>TECHNICAL</b> is Agent 10's chart study
- * (candlestick patterns, volume, trend, support/resistance, relative strength); <b>DEEP</b> is Agent 11's
- * latest verdict. Agent 11 takes minutes to hours, so this step never waits for it: it reads the latest
+ * (candlestick patterns, volume, trend, support/resistance, relative strength); <b>FILINGS</b> is Agent 14's read
+ * of the company's own earnings releases and 10-Q/10-K; <b>DEEP</b> is Agent 11's latest verdict with its thesis status
+ * and track record. Agent 11 takes minutes to hours, so this step never waits for it: it reads the latest
  * finished analysis, or — if there is none — queues one and says so honestly. The synthesis prompt stays
  * strict about not inventing anything that wasn't gathered.
  */
@@ -71,7 +75,7 @@ public class ResearchAgentService {
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private static final Pattern TICKER_PATTERN = Pattern.compile("^[A-Z]{1,6}(\\.[A-Z])?$");
 	private static final List<String> DATA_SOURCES =
-			List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS", "FINANCIALS", "TECHNICAL", "DEEP");
+			List.of("NEWS", "MACRO", "SOCIAL", "INSIDER", "WEB", "EARNINGS", "FINANCIALS", "FILINGS", "TECHNICAL", "DEEP");
 	private static final int EARNINGS_LOOKAHEAD_DAYS = 90;
 
 	private final ResearchJobRepository jobs;
@@ -87,13 +91,18 @@ public class ResearchAgentService {
 	private final FundamentalsService fundamentals;
 	private final DeepAnalysisService deepAnalyses;
 	private final DeepAnalysisRunner deepRunner;
+	private final FilingDigestService filings;
+	private final DeepScorecardService scorecard;
 	private final ExecutorService executor;
 
 	public ResearchAgentService(ResearchJobRepository jobs, NewsArticleRepository news,
 			SocialPostRepository social, SecFilingRepository sec, WebMentionRepository web,
 			CalendarEventRepository calendar, ModelGateway gateway, LivePushService livePush,
 			ResearchJobProperties props, ChartStudyService charts, FundamentalsService fundamentals,
-			DeepAnalysisService deepAnalyses, DeepAnalysisRunner deepRunner) {
+			DeepAnalysisService deepAnalyses, DeepAnalysisRunner deepRunner,
+			FilingDigestService filings, DeepScorecardService scorecard) {
+		this.filings = filings;
+		this.scorecard = scorecard;
 		this.jobs = jobs;
 		this.news = news;
 		this.social = social;
@@ -254,12 +263,13 @@ public class ResearchAgentService {
 				- WEB: Hacker News discussion and Wikipedia attention
 				- EARNINGS: next earnings date and recent EPS-surprise history
 				- FINANCIALS: full fundamental analysis — quarterly income statements, revenue/margin trends, earnings surprises, analyst consensus, valuation vs peers
+				- FILINGS: what the company itself said in its newest earnings release / 10-Q / 10-K — guidance raised or lowered, tone, going-concern and new-risk language (SEC EDGAR, verified against the filing text)
 				- TECHNICAL: the chart study — trend vs the 20/50/200-day averages, momentum, volume, candlestick patterns, support/resistance, strength vs the market
 				- DEEP: Agent 11's most recent deep-analysis verdict (worth buying / wait / not worth buying, and for how long)
 
 				Propose an ordered research plan, 3-9 steps, each using exactly one data source.
 				Respond with ONLY a JSON array, no prose: \
-				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|TECHNICAL|DEEP","why":"one sentence"}]
+				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|FILINGS|TECHNICAL|DEEP","why":"one sentence"}]
 				""".formatted(ticker, ticker);
 		try {
 			List<Step> parsed = parseSteps(gateway.generate(prompt, ModelTier.BIG));
@@ -284,8 +294,9 @@ public class ResearchAgentService {
 		steps.add(new Step("s5", "Web attention", "WEB", "Hacker News + Wikipedia interest.", "PENDING"));
 		steps.add(new Step("s6", "Earnings picture", "EARNINGS", "Next date and recent EPS surprises.", "PENDING"));
 		steps.add(new Step("s7", "Fundamentals", "FINANCIALS", "Growth, margins, balance sheet, earnings track record, analysts, valuation.", "PENDING"));
-		steps.add(new Step("s8", "Chart study", "TECHNICAL", "Trend, candlesticks, volume, support/resistance, relative strength.", "PENDING"));
-		steps.add(new Step("s9", "Agent 11's deep analysis", "DEEP", "The deep analyst's latest verdict and reasoning.", "PENDING"));
+		steps.add(new Step("s8", "Filings & earnings reports", "FILINGS", "Guidance, tone and risk language straight from the company's SEC filings.", "PENDING"));
+		steps.add(new Step("s9", "Chart study", "TECHNICAL", "Trend, candlesticks, volume, support/resistance, relative strength.", "PENDING"));
+		steps.add(new Step("s10", "Agent 11's deep analysis", "DEEP", "The deep analyst's latest verdict, reasoning, thesis status and track record.", "PENDING"));
 		return steps;
 	}
 
@@ -308,7 +319,7 @@ public class ResearchAgentService {
 				If these findings suggest the remaining plan should change (add a step for a data source not \
 				yet used, remove one that's now clearly unnecessary, or reorder), respond with ONLY a JSON \
 				array of the revised remaining steps, same shape as before: \
-				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|TECHNICAL|DEEP","why":"..."}]
+				[{"label":"...","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|FILINGS|TECHNICAL|DEEP","why":"..."}]
 				If the plan is still fine as-is, respond with exactly: NO_CHANGE
 				""".formatted(ticker, remaining.get(justCompletedIndex).label(), finding,
 				upcoming.stream().map(Step::label).collect(Collectors.joining(", ")));
@@ -345,6 +356,7 @@ public class ResearchAgentService {
 				case "WEB" -> summarizeWeb(web.findByTickerAndPostedAtAfter(ticker, since));
 				case "EARNINGS" -> summarizeEarnings(ticker);
 				case "FINANCIALS" -> summarizeFinancials(ticker);
+				case "FILINGS" -> summarizeFilings(ticker);
 				case "TECHNICAL" -> summarizeChart(ticker);
 				case "DEEP" -> summarizeDeep(ticker);
 				default -> "Unrecognized data source \"" + dataSource + "\" — skipped.";
@@ -439,6 +451,30 @@ public class ResearchAgentService {
 		return f.get().render();
 	}
 
+	/**
+	 * Agent 14's read of the company's own filings — refreshed now (this is a slow, user-initiated job; the call is idempotent and
+	 * the model only runs for filings not yet digested), then read back from the stored digests. Every figure was verified against
+	 * the filing text before it was stored.
+	 */
+	private String summarizeFilings(String ticker) {
+		try {
+			filings.refresh(ticker);
+		}
+		catch (RuntimeException ex) {
+			log.debug("Agent 9: filings refresh for {} failed: {}", ticker, ex.getMessage());
+		}
+		Optional<FilingView> v = filings.view(ticker);
+		if (v.isEmpty()) {
+			return "No recent SEC filings on record for this symbol (ETF, foreign listing, or nothing filed in the window).";
+		}
+		FilingView f = v.get();
+		StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "Filings score %+.2f (-1..+1); newest is %d day(s) old%s.%n", f.score(), f.ageDays(),
+				f.guidance() == null || "NONE".equals(f.guidance()) ? "" : "; latest earnings release: guidance " + f.guidance()));
+		f.digests().stream().limit(3).forEach(d -> sb.append(String.format(Locale.ROOT, "- %s filed %s (tone %s%s): %s%n", d.form(), d.filedAt(),
+				d.tone(), d.guidanceDetail() == null || d.guidanceDetail().isBlank() ? "" : "; guidance: " + d.guidanceDetail(), d.summary())));
+		return sb.toString();
+	}
+
 	/** Agent 10's chart study, from stored candles. */
 	private String summarizeChart(String ticker) {
 		Optional<ChartStudy> s = charts.studyFor(ticker);
@@ -467,6 +503,13 @@ public class ResearchAgentService {
 				ageDays, d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()) ? ", now stale" : "",
 				d.getVerdict() == null ? "no verdict" : d.getVerdict().label(),
 				d.getHoldDays() == null ? "" : " — hold about " + d.getHoldDays() + " days", d.getConviction()));
+		if (d.isAtRisk()) sb.append("THESIS AT RISK: ").append(d.getThesisReason()).append(" A fresh analysis has been queued.\n");
+		if (d.getPriceAtAnalysis() != null) {
+			sb.append("Price when analysed: ").append(d.getPriceAtAnalysis());
+			if (d.getInvalidationPrice() != null) sb.append("; the verdict is proven wrong beyond ").append(d.getInvalidationPrice());
+			sb.append(".\n");
+		}
+		trackRecordLine(d).ifPresent(l -> sb.append(l).append('\n'));
 		if (d.getHeadline() != null) sb.append("Headline: ").append(d.getHeadline()).append('\n');
 		if (d.getThesis() != null) sb.append("Thesis: ").append(d.getThesis()).append('\n');
 		if (d.getBullCase() != null) sb.append("Bull case: ").append(d.getBullCase()).append('\n');
@@ -475,6 +518,19 @@ public class ResearchAgentService {
 		if (d.getInvalidation() != null && !d.getInvalidation().isBlank()) sb.append("What would change its mind: ").append(d.getInvalidation()).append('\n');
 		if (d.getGuardNotes() != null && !d.getGuardNotes().isBlank()) sb.append("Guardrail notes: ").append(d.getGuardNotes().replace('\n', ';')).append('\n');
 		return sb.toString();
+	}
+
+	/** How Agent 11's own calls of this kind have actually done — so the report can weigh the verdict by its record, not its tone. */
+	private Optional<String> trackRecordLine(DeepAnalysis d) {
+		try {
+			if (d.getVerdict() == null || d.getVerdict() == com.argus.deepanalysis.DeepVerdict.WAIT) return Optional.empty();
+			return scorecard.trackRecord(d.getVerdict()).map(t -> String.format(Locale.ROOT,
+					"Agent 11's track record for '%s' verdicts: %.0f%% right against the S&P 500 over %d matured calls (%d-day, average %+.1f%%).",
+					d.getVerdict().label().toLowerCase(), t.hitRate() * 100, t.n(), t.horizonDays(), t.meanExcessPct()));
+		}
+		catch (RuntimeException ex) {
+			return Optional.empty();
+		}
 	}
 
 	// ---- synthesis (the one paid call) ----

@@ -46,7 +46,8 @@ class DeepAnalystServiceTest {
 	private final DeepAnalysisRepository repo = mock(DeepAnalysisRepository.class);
 	private final NotificationService notifications = mock(NotificationService.class);
 	private final DeepAnalysisProperties props = new DeepAnalysisProperties(true, 3, Duration.ofDays(4), 40, Duration.ZERO, true, -8.0);
-	private final DeepAnalystService service = new DeepAnalystService(collector, gateway, repo, props, notifications, Lessons.none());
+	private final DeepScorecardService scorecard = mock(DeepScorecardService.class);
+	private final DeepAnalystService service = new DeepAnalystService(collector, gateway, repo, props, notifications, Lessons.none(), scorecard);
 	private final DeepAnalysis run = new DeepAnalysis("NVDA", "TEST");
 
 	// ---- fixtures ----
@@ -249,7 +250,7 @@ class DeepAnalystServiceTest {
 	@Test
 	void haikuIsNeverCalledWhenDisabled() {
 		DeepAnalystService noHaiku = new DeepAnalystService(collector, gateway, repo,
-				new DeepAnalysisProperties(true, 3, Duration.ofDays(4), 40, Duration.ZERO, false, -8.0), notifications, Lessons.none());
+				new DeepAnalysisProperties(true, 3, Duration.ofDays(4), 40, Duration.ZERO, false, -8.0), notifications, Lessons.none(), scorecard);
 		arrange(evidence(chart(0.6), fundamentals(true), false, 150.0, null));
 		when(gateway.generate(anyString(), eq(ModelTier.BIG))).thenAnswer(inv -> {
 			String p = inv.getArgument(0);
@@ -362,7 +363,7 @@ class DeepAnalystServiceTest {
 	void measuredLessonsAreShownToTheSkepticAndThePortfolioManagerAndEvaluatedForABuy() {
 		var seen = new java.util.concurrent.atomic.AtomicReference<java.util.Set<String>>();
 		DeepAnalystService learning = new DeepAnalystService(collector, gateway, repo, props, notifications,
-				lessonsWith(LessonEffect.none(), "LESSONS MEASURED FROM ARGUS'S OWN PAST PAPER TRADES: bullish semis calls lost 3%.", seen));
+				lessonsWith(LessonEffect.none(), "LESSONS MEASURED FROM ARGUS'S OWN PAST PAPER TRADES: bullish semis calls lost 3%.", seen), scorecard);
 		arrange(evidence(chart(0.6), fundamentals(true), false, 150.0, null));
 		script(specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), SKEPTIC);
 		when(gateway.escalate(anyString())).thenReturn(verdictJson("WORTH_BUYING", 30, 75));
@@ -386,7 +387,7 @@ class DeepAnalystServiceTest {
 		var fx = new LessonEffect(0, "buying semis into a selloff has lost money", null, 1.0,
 				List.of(new LessonEffect.Applied(1L, "BLOCK", "buying semis into a selloff has lost money", "12 bets", 0)));
 		DeepAnalystService blocked = new DeepAnalystService(collector, gateway, repo, props, notifications,
-				lessonsWith(fx, "", new java.util.concurrent.atomic.AtomicReference<>()));
+				lessonsWith(fx, "", new java.util.concurrent.atomic.AtomicReference<>()), scorecard);
 		arrange(evidence(chart(0.7), fundamentals(true), false, 150.0, null));
 		script(specialistJson("BULLISH", 0.9), specialistJson("BULLISH", 0.9), specialistJson("BULLISH", 0.9), specialistJson("BULLISH", 0.9), SKEPTIC);
 		when(gateway.escalate(anyString())).thenReturn(verdictJson("WORTH_BUYING", 30, 85));

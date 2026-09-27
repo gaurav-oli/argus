@@ -126,7 +126,7 @@ public class RecommendationController {
 			String horizon, String status, String badge, boolean blackSwanActive, Instant createdAt,
 			List<SignalView> signals, String action, String actionLabel, Integer convictionScore, Integer holdDays,
 			String horizonLabel, LocalDate reviewOn, String thesis, List<String> reasons, List<String> caveats,
-			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep) {
+			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep, String guidance, String valuation) {
 
 		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep) {
 			BigDecimal confidence = r.getConfidence();
@@ -144,8 +144,15 @@ public class RecommendationController {
 					action == null ? null : action.name(), action == null ? null : action.label(),
 					r.getConvictionScore(), r.getHoldDays(), r.getHorizonLabel(), reviewOn, r.getThesis(),
 					lines(r.getReasons()), lines(r.getCaveats()), r.getExitPlan(), sectorLabel(r.getSector()),
-					lines(r.getLessons()), chart, deep);
+					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="));
 		}
+	}
+
+	/** The value of a feature token the call was made under (e.g. {@code guidance=RAISED} → RAISED), or null. */
+	private static String token(Recommendation r, String prefix) {
+		if (r.getFeatures() == null) return null;
+		return com.argus.learning.FeatureTokens.fromJson(r.getFeatures()).stream().filter(t -> t.startsWith(prefix))
+				.map(t -> t.substring(prefix.length())).findFirst().orElse(null);
 	}
 
 	/** Agent 10's chart read on the card: bias, score, trend, and the evidence lines behind it. */
@@ -157,10 +164,12 @@ public class RecommendationController {
 	}
 
 	/** Agent 11's latest fresh verdict on the card. */
-	public record DeepSummary(String verdict, String verdictLabel, Integer holdDays, int conviction, String headline, long ageDays) {
+	public record DeepSummary(String verdict, String verdictLabel, Integer holdDays, int conviction, String headline, long ageDays,
+			boolean atRisk, String atRiskReason) {
 
 		static DeepSummary from(com.argus.deepanalysis.DeepView v) {
-			return new DeepSummary(v.verdict().name(), v.verdict().label(), v.holdDays(), v.conviction(), v.headline(), v.ageDays());
+			return new DeepSummary(v.verdict().name(), v.verdict().label(), v.holdDays(), v.conviction(), v.headline(), v.ageDays(), v.atRisk(),
+					v.atRiskReason());
 		}
 	}
 

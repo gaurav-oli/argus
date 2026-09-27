@@ -11,6 +11,8 @@ import com.argus.internet.WebMentionRepository;
 import com.argus.deepanalysis.DeepAnalysis;
 import com.argus.deepanalysis.DeepAnalysisRepository;
 import com.argus.deepanalysis.DeepVerdict;
+import com.argus.filings.FilingDigestService;
+import com.argus.filings.FilingView;
 import com.argus.fundamentals.Fundamentals;
 import com.argus.fundamentals.FundamentalsService;
 import com.argus.regime.MacroTheme;
@@ -90,6 +92,10 @@ public class AgentSignalGatherer {
 	/** Fundamentals (Agent 12) move slowly — a supporting signal, capped below News. */
 	private static final double FUNDAMENTAL_MAX_WEIGHT = 0.6;
 	private static final double FUNDAMENTAL_DEADZONE = 0.2;
+	/** Filings (Agent 14) are hard company evidence, but only fresh ones count. */
+	private static final double FILINGS_MAX_WEIGHT = 0.7;
+	private static final double FILINGS_DEADZONE = 0.25;
+	private static final long FILINGS_MAX_AGE_DAYS = 45;
 	private static final java.time.Duration FUNDAMENTALS_MAX_AGE = java.time.Duration.ofDays(14);
 	/** Agent 11's deep verdict is the slowest, most-considered signal and may carry the most weight — the
 	 * scoring policy still caps any single signal's contribution to conviction. */
@@ -103,6 +109,7 @@ public class AgentSignalGatherer {
 	private final AdaptiveTuningService tuning;
 	private final ChartStudyService chartStudies;
 	private final FundamentalsService fundamentals;
+	private final FilingDigestService filings;
 	private final DeepAnalysisRepository deepAnalyses;
 	private final SectorClassifier sectors;
 	private final MarketRegimeService regimes;
@@ -110,7 +117,7 @@ public class AgentSignalGatherer {
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
 			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod,
 			AdaptiveTuningService tuning, ChartStudyService chartStudies, FundamentalsService fundamentals,
-			DeepAnalysisRepository deepAnalyses, SectorClassifier sectors, MarketRegimeService regimes) {
+			DeepAnalysisRepository deepAnalyses, SectorClassifier sectors, MarketRegimeService regimes, FilingDigestService filings) {
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
@@ -119,6 +126,7 @@ public class AgentSignalGatherer {
 		this.tuning = tuning;
 		this.chartStudies = chartStudies;
 		this.fundamentals = fundamentals;
+		this.filings = filings;
 		this.deepAnalyses = deepAnalyses;
 		this.sectors = sectors;
 		this.regimes = regimes;
@@ -139,6 +147,7 @@ public class AgentSignalGatherer {
 		calendarSignal(ticker).ifPresent(signals::add);
 		chartStudies.studyFor(ticker).ifPresent(study -> technicalSignal(study).ifPresent(signals::add));
 		fundamentalSignal(ticker).ifPresent(signals::add);
+		filingSignal(ticker).map(this::applyReliability).ifPresent(signals::add);
 		// Phase B: scale each agent's weight by its learned reliability (identity when tuning is disabled).
 		return signals.stream().map(this::applyReliability).toList();
 	}
@@ -419,6 +428,50 @@ public class AgentSignalGatherer {
 				String.format("Fundamentals %s (score %+.2f): %s", f.get().bias().toLowerCase(), score, rationale), 90));
 	}
 
+	/** Agent 14 — the newest earnings release / 10-Q / 10-K read (guidance, tone, going-concern), from stored digests only. */
+	private Optional<AgentSignal> filingSignal(String ticker) {
+		Optional<FilingView> v;
+		try {
+			v = filings.view(ticker);
+		}
+		catch (RuntimeException ex) {
+			return Optional.empty();
+		}
+		if (v.isEmpty() || v.get().ageDays() > FILINGS_MAX_AGE_DAYS || Math.abs(v.get().score()) < FILINGS_DEADZONE) {
+			return Optional.empty();
+		}
+		double score = v.get().score();
+		SignalDirection dir = score > 0 ? SignalDirection.BULLISH : SignalDirection.BEARISH;
+		double weight = FILINGS_MAX_WEIGHT * Math.min(1.0, Math.abs(score) / 0.6);
+		String guide = v.get().guidance() == null || "NONE".equals(v.get().guidance()) ? "" : ", guidance " + v.get().guidance().toLowerCase();
+		return Optional.of(new AgentSignal("agent-14-filings", dir, weight,
+				String.format("Filings %s (score %+.2f%s, %d days ago): %s", score > 0 ? "positive" : "negative", score, guide, v.get().ageDays(),
+						v.get().headline() == null ? "" : v.get().headline()), 30));
+	}
+
+	/**
+	 * What the standing evidence says about valuation and guidance, for the policy's feature tokens and prose (the situation a
+	 * call is made in, so the Trade Learner can later mine outcomes by it). Never throws; both parts optional.
+	 */
+	public RecommendationPolicy.Standing standing(String ticker) {
+		String guidance = null, valuation = null;
+		try {
+			guidance = filings.view(ticker).filter(v -> v.ageDays() <= FILINGS_MAX_AGE_DAYS).map(FilingView::guidance)
+					.filter(g -> !"NONE".equals(g)).orElse(null);
+		}
+		catch (RuntimeException ex) {
+			// tokens are optional
+		}
+		try {
+			valuation = fundamentals.latestFresh(ticker, FUNDAMENTALS_MAX_AGE).map(Fundamentals::valuation)
+					.map(com.argus.fundamentals.Fundamentals.ValuationView::verdict).orElse(null);
+		}
+		catch (RuntimeException ex) {
+			// tokens are optional
+		}
+		return new RecommendationPolicy.Standing(guidance, valuation);
+	}
+
 	/**
 	 * Agent 11 — the deep analyst's stored verdict, if one finished recently enough. The analysis itself
 	 * takes minutes to hours (several LLM passes over a full evidence pack), so it runs in the background
@@ -432,6 +485,11 @@ public class AgentSignalGatherer {
 		}
 		DeepAnalysis d = latest.get();
 		if (d.getVerdict() == null || d.getVerdict() == DeepVerdict.WAIT || d.getConviction() == null) {
+			return Optional.empty();
+		}
+		if (d.isAtRisk()) {
+			// The thesis tracker saw the verdict broken (price through its invalidation level, or a contradicting filing):
+			// don't keep leaning on it while the re-analysis runs.
 			return Optional.empty();
 		}
 		boolean buy = d.getVerdict() == DeepVerdict.WORTH_BUYING;

@@ -4,6 +4,14 @@ import com.argus.calendar.CalendarEventRepository;
 import com.argus.cost.BudgetStatus;
 import com.argus.cost.CostGovernor;
 import com.argus.cost.CostRecorder;
+import com.argus.deepanalysis.DeepAnalysis;
+import com.argus.deepanalysis.DeepAnalysisRepository;
+import com.argus.deepanalysis.DeepScorecardService;
+import com.argus.filings.FilingDigestRepository;
+import com.argus.fundamentals.FundamentalsSnapshotRepository;
+import com.argus.learning.LearnedRule;
+import com.argus.learning.LearnedRuleRepository;
+import com.argus.learning.LearningReportRepository;
 import com.argus.intelligence.MacroKeywordRepository;
 import com.argus.intelligence.MacroRelevanceTagger;
 import com.argus.intelligence.NewsArticleRepository;
@@ -31,7 +39,8 @@ import org.springframework.util.StringUtils;
  * is bounded by Agent 1's sources), Agent 9 (on-demand research), and Agent 10 (Technical Analysis
  * + cause-of-move classification — one card covering two signal identities, {@code
  * agent-10-technical} and {@code agent-11-cause}, kept distinct for tuning purposes but not
- * fragmented into two UI cards).
+ * fragmented into two UI cards). The analysis agents follow: Agent 11 (Deep Analyst), Agent 12
+ * (Fundamentals), Agent 13 (Trade Learner) and Agent 14 (Filings Reader).
  */
 @Service
 public class AgentStatusService {
@@ -48,6 +57,12 @@ public class AgentStatusService {
 	private final MacroKeywordRepository macroKeywords;
 	private final ResearchJobRepository research;
 	private final PriceCandleRepository candles;
+	private final DeepAnalysisRepository deep;
+	private final DeepScorecardService scorecard;
+	private final FundamentalsSnapshotRepository fundamentalSnapshots;
+	private final LearnedRuleRepository learnedRules;
+	private final LearningReportRepository learningReports;
+	private final FilingDigestRepository filingDigests;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
@@ -55,7 +70,9 @@ public class AgentStatusService {
 			StrangerAlertRepository stranger, RecommendationRepository recommendations,
 			CalendarEventRepository calendar, SocialPostRepository social, SecFilingRepository sec,
 			WebMentionRepository web, CostGovernor costGovernor, MacroKeywordRepository macroKeywords,
-			ResearchJobRepository research, PriceCandleRepository candles,
+			ResearchJobRepository research, PriceCandleRepository candles, DeepAnalysisRepository deep,
+			DeepScorecardService scorecard, FundamentalsSnapshotRepository fundamentalSnapshots, LearnedRuleRepository learnedRules,
+			LearningReportRepository learningReports, FilingDigestRepository filingDigests,
 			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
@@ -70,6 +87,12 @@ public class AgentStatusService {
 		this.macroKeywords = macroKeywords;
 		this.research = research;
 		this.candles = candles;
+		this.deep = deep;
+		this.scorecard = scorecard;
+		this.fundamentalSnapshots = fundamentalSnapshots;
+		this.learnedRules = learnedRules;
+		this.learningReports = learningReports;
+		this.filingDigests = filingDigests;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -121,12 +144,55 @@ public class AgentStatusService {
 								+ "learns something new, then writes a long-term/short-term analysis.",
 						research.countByStatus(ResearchJob.Status.DONE), "reports completed",
 						null, "on demand", agent9Note()),
-				active("technical", "Agent 10", "Technical & Setup Analysis",
-						"Computes RSI/moving-average signals from daily price history, and — on a real "
-								+ "drawdown — classifies whether it looks company-specific or a temporary "
-								+ "macro/external shock worth treating as a dip-buying opportunity.",
-						candles.count(), "candles ingested", candles.latestIngestedAt(), "daily · after close",
-						finnhubEnabled ? null : "Needs a Finnhub key (unset — Agent 10 is inactive)"));
+				active("technical", "Agent 10", "Chart Reader",
+						"Reads the daily chart like a technician: trend against the 20/50/200-day averages, momentum "
+								+ "(RSI, MACD, Bollinger), volume accumulation, candlestick patterns in context, support and "
+								+ "resistance, and strength against the S&P 500 — plus a cause-of-move read on real drawdowns.",
+						candles.count(), "candles stored", candles.latestIngestedAt(), "daily · after close",
+						"Candles from Yahoo (keyless), Alpha Vantage fallback"),
+				active("deep", "Agent 11", "Deep Analyst",
+						"The slow thinker. For each stock it pulls every other agent's evidence, runs four specialists "
+								+ "(chart, fundamentals, catalysts, macro) and a skeptic on the local model, then the PM verdict "
+								+ "(Claude Haiku, local fallback): worth buying / wait / not worth buying, and for how long. "
+								+ "Verdicts are guard-capped, tracked against the S&P 500 and flagged when the thesis breaks.",
+						deep.countByStatus(DeepAnalysis.Status.DONE), "verdicts", deep.latestFinishedAt(),
+						"nightly 1am · on demand · thesis check hourly", agent11Note()),
+				active("fundamentals", "Agent 12", "Fundamentals",
+						"Real fundamental analysis from Finnhub: growth and margin trends, balance sheet, earnings "
+								+ "surprises, analyst consensus, valuation against peers (P/E, P/S, EV/EBITDA) and a reverse DCF "
+								+ "that asks what growth today's price assumes.",
+						fundamentalSnapshots.count(), "companies analysed", fundamentalSnapshots.latestFetchedAt(), "daily",
+						finnhubEnabled ? null : "Needs a Finnhub key (unset — Agent 12 is inactive)"),
+				active("learner", "Agent 13", "Trade Learner",
+						"Studies the paper trades that won and lost, finds the situations where Argus is reliably wrong "
+								+ "(or right), holds each candidate rule out on unseen trades, and feeds the survivors back to "
+								+ "the Recommender, the Investor and Agent 11.",
+						learnedRules.countByStatus(LearnedRule.Status.ACTIVE), "active rules",
+						learningReports.findFirstByOrderByCreatedAtDesc().map(r -> r.getCreatedAt()).orElse(null), "nightly 3:30am",
+						agent13Note()),
+				active("filings-reader", "Agent 14", "Filings Reader",
+						"Reads the company's own words from SEC EDGAR — earnings releases (8-K) and 10-Q/10-K MD&A — "
+								+ "for guidance, tone, going-concern and new-risk language. Every figure is verified against "
+								+ "the filing text before it is trusted.",
+						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 6h", null));
+	}
+
+	private String agent11Note() {
+		long running = deep.countByStatus(DeepAnalysis.Status.RUNNING);
+		long queued = deep.countByStatus(DeepAnalysis.Status.QUEUED);
+		String work = running + queued == 0 ? "Idle" : (running > 0 ? "Analysing now" : "Queued") + " (" + queued + " waiting)";
+		try {
+			var s = scorecard.summary();
+			return work + " · " + s.totalVerdicts() + " verdicts scored against the S&P 500";
+		}
+		catch (RuntimeException ex) {
+			return work;
+		}
+	}
+
+	private String agent13Note() {
+		long proposed = learnedRules.countByStatus(LearnedRule.Status.PROPOSED);
+		return proposed + " rule(s) awaiting hold-out validation";
 	}
 
 	private static AgentStatusView active(String id, String code, String name, String description,

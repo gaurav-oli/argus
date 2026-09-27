@@ -718,6 +718,10 @@ export interface RecommendationCard {
   chart: ChartSummary | null;
   /** What Agent 11 (the deep analyst) said, when it has a fresh verdict. */
   deep: DeepSummary | null;
+  /** The newest earnings release's guidance direction when the call was made (Agent 14): RAISED | MAINTAINED | LOWERED. */
+  guidance: string | null;
+  /** Reverse-DCF valuation read when the call was made (Agent 12): CHEAP | FAIR | RICH. */
+  valuation: string | null;
 }
 
 export interface ChartSummary {
@@ -736,6 +740,9 @@ export interface DeepSummary {
   conviction: number;
   headline: string | null;
   ageDays: number;
+  /** The thesis tracker saw new information that undermines this verdict; a re-analysis is queued. */
+  atRisk: boolean;
+  atRiskReason: string | null;
 }
 
 export type DeepVerdictName = "WORTH_BUYING" | "WAIT" | "NOT_WORTH_BUYING";
@@ -1647,6 +1654,54 @@ export interface DeepAnalysisView {
   expiresAt: string | null;
   stale: boolean;
   inProgress: DeepRunStatus | null;
+  /** Price whose breach proves the verdict wrong, and the price when it was made. */
+  invalidationPrice: number | null;
+  priceAtAnalysis: number | null;
+  thesisStatus: "INTACT" | "AT_RISK";
+  thesisReason: string | null;
+}
+
+export interface DeepHistoryItem {
+  id: number;
+  status: string;
+  verdict: DeepVerdictName | null;
+  conviction: number | null;
+  holdDays: number | null;
+  at: string;
+}
+
+/** One ticker's newest verdict, any run in progress, and its analysis history (GET /api/deep-analysis/{ticker}). */
+export interface DeepTickerView {
+  latest: DeepAnalysisView | null;
+  inProgress: DeepRunStatus | null;
+  history: DeepHistoryItem[];
+}
+
+export interface DeepScorecardCell {
+  verdict: DeepVerdictName;
+  label: string;
+  horizonDays: number;
+  n: number;
+  meanExcessPct: number;
+  hitRate: number | null;
+}
+
+export interface DeepScorecardRow {
+  ticker: string;
+  verdict: DeepVerdictName;
+  analyzedOn: string;
+  entryPrice: number | null;
+  sincePct: number | null;
+  sinceExcessPct: number | null;
+  matured: Record<string, number>;
+}
+
+/** Agent 11 measured against the S&P 500 (7/30/90 days) and since each call. */
+export interface DeepScorecard {
+  totalVerdicts: number;
+  minForTrackRecord: number;
+  cells: DeepScorecardCell[];
+  rows: DeepScorecardRow[];
 }
 
 export interface DeepQueue {
@@ -1659,6 +1714,40 @@ export const getDeepAnalyses = (): Promise<DeepAnalysisView[]> => apiGet<DeepAna
 export const getDeepQueue = (): Promise<DeepQueue> => apiGet<DeepQueue>("/api/deep-analysis/queue");
 export const runDeepAnalysis = (ticker: string): Promise<DeepRunStatus> =>
   apiPost<DeepRunStatus>(`/api/deep-analysis/${encodeURIComponent(ticker)}/run`);
+/** 404 (ApiError) when Agent 11 has never analysed the ticker. */
+export const getDeepAnalysisFor = (ticker: string): Promise<DeepTickerView> =>
+  apiGet<DeepTickerView>(`/api/deep-analysis/${encodeURIComponent(ticker)}`);
+export const getDeepScorecard = (): Promise<DeepScorecard> => apiGet<DeepScorecard>("/api/deep-analysis/scorecard");
+
+// ---- Agent 12: fundamentals · Agent 14: filings ----
+
+export interface FundamentalsRow {
+  ticker: string;
+  name: string | null;
+  industry: string | null;
+  score: number;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  valuationVerdict: "CHEAP" | "FAIR" | "RICH" | null;
+  impliedGrowthPct: number | null;
+  deliveredGrowthPct: number | null;
+  peerPePremiumPct: number | null;
+  notes: string[];
+}
+
+export const getFundamentals = (): Promise<FundamentalsRow[]> => apiGet<FundamentalsRow[]>("/api/fundamentals");
+
+export interface FilingRow {
+  ticker: string;
+  form: string;
+  kind: "EARNINGS_RELEASE" | "QUARTERLY_REPORT" | "ANNUAL_REPORT";
+  filedAt: string;
+  summary: string;
+  guidance: string | null;
+  tone: string | null;
+  score: number;
+}
+
+export const getFilings = (): Promise<FilingRow[]> => apiGet<FilingRow[]>("/api/filings");
 
 // ---- Agent 10: chart study ----
 

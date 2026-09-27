@@ -41,6 +41,8 @@ public class MarketRegimeService {
 	private final YahooChartClient yahoo;
 	private final ListingResolver listings;
 	private volatile Timed<MarketRegime> cached;
+	/** Latest 10-year Treasury yield in percent (^TNX), from the last successful refresh — the reverse DCF's risk-free rate. */
+	private volatile Double lastTenYearYield;
 	private final Map<String, Timed<Optional<StockMove>>> moves = new ConcurrentHashMap<>();
 
 	public MarketRegimeService(YahooChartClient yahoo, ListingResolver listings) {
@@ -77,6 +79,10 @@ public class MarketRegimeService {
 			yahoo.fetch(symbol, "1mo").ifPresent(s -> got.put(symbol, s));
 		}
 		MarketRegime regime = build(got);
+		YahooChartClient.Series tnx = got.get("^TNX");
+		if (tnx != null && tnx.livePrice() != null && tnx.livePrice().doubleValue() > 0) {
+			lastTenYearYield = tnx.livePrice().doubleValue();
+		}
 		cached = new Timed<>(regime, Instant.now());
 		log.info("Market regime: {} ({})", regime.label(), regime.summary());
 		return regime;
@@ -102,6 +108,14 @@ public class MarketRegimeService {
 				Optional.ofNullable(got.get("^VIX")).flatMap(YahooChartClient.Series::changePct1d).orElse(null),
 				Optional.ofNullable(got.get("^TNX")).flatMap(s -> s.changePct(5)).orElse(null),
 				Map.copyOf(sectors));
+	}
+
+	/** The 10-year Treasury yield in percent (e.g. 4.3), if the feed has delivered one. */
+	public Optional<Double> tenYearYieldPct() {
+		if (lastTenYearYield == null) {
+			current(); // warm the cache (and the yield) on first use
+		}
+		return Optional.ofNullable(lastTenYearYield);
 	}
 
 	/** A stock's 1-day / 5-day move, cached; empty if unpriced. */

@@ -500,4 +500,19 @@ class PaperInvestorServiceTest {
 		assertTrue(prompt.getValue().contains("ordinary market noise rather than inventing a cause"));
 		assertEquals("reflection", t.getReview());
 	}
+
+	@Test
+	void anAtRiskVerdictThatAgreesWithThePositionClosesItEvenWithoutAnOppositeCall() {
+		SimulatedTrade t = openTrade(SignalDirection.BULLISH, 50, 30, 30);
+		pause();
+		DeepAnalysis d = deepVerdict(DeepVerdict.WORTH_BUYING, 90);
+		d.flagAtRisk("A filing since the analysis reads negative.");
+		when(deepAnalyses.latestDone("AAPL")).thenReturn(Optional.of(d));
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(51)));
+
+		investor.closeDueTrades();
+
+		assertEquals(SimulatedTrade.Status.CLOSED, t.getStatus());
+		assertEquals("THESIS_FLIP", t.getExitReason());
+	}
 }

@@ -130,6 +130,15 @@ public class PaperInvestorService {
 	/** Agent 11 has, since this trade opened, reached a confident verdict that opposes the position. */
 	private boolean thesisFlipped(SimulatedTrade trade) {
 		try {
+			boolean bullish = trade.getDirection() == SignalDirection.BULLISH;
+			// A verdict that agrees with the position but that the thesis tracker has since flagged AT_RISK is a reason to get out too.
+			if (deepAnalyses.latestDone(trade.getTicker())
+					.filter(DeepAnalysis::isAtRisk)
+					.map(DeepAnalysis::getVerdict)
+					.map(v -> bullish ? v == DeepVerdict.WORTH_BUYING : v == DeepVerdict.NOT_WORTH_BUYING)
+					.orElse(false)) {
+				return true;
+			}
 			return deepAnalyses.latestDone(trade.getTicker())
 					.filter(d -> d.getFinishedAt() != null && d.getFinishedAt().isAfter(trade.getEntryAt()))
 					.filter(d -> d.getConviction() != null && d.getConviction() >= FLIP_MIN_CONVICTION)

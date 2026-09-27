@@ -57,9 +57,11 @@ class ResearchAgentServiceTest {
 	private final FundamentalsService fundamentals = mock(FundamentalsService.class);
 	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
 	private final DeepAnalysisRunner deepRunner = mock(DeepAnalysisRunner.class);
+	private final com.argus.filings.FilingDigestService filings = mock(com.argus.filings.FilingDigestService.class);
+	private final com.argus.deepanalysis.DeepScorecardService scorecard = mock(com.argus.deepanalysis.DeepScorecardService.class);
 
 	private final ResearchAgentService service = new ResearchAgentService(
-			jobs, news, social, sec, web, calendar, gateway, livePush, props, charts, fundamentals, deepAnalyses, deepRunner);
+			jobs, news, social, sec, web, calendar, gateway, livePush, props, charts, fundamentals, deepAnalyses, deepRunner, filings, scorecard);
 
 	{
 		// Default every raw-data source to empty unless a test overrides it — keeps each test focused
@@ -73,6 +75,8 @@ class ResearchAgentServiceTest {
 		when(charts.studyFor(anyString())).thenReturn(Optional.empty());
 		when(fundamentals.getOrRefresh(anyString(), any())).thenReturn(Optional.empty());
 		when(deepAnalyses.latestDone(anyString())).thenReturn(Optional.empty());
+		when(filings.view(anyString())).thenReturn(Optional.empty());
+		when(filings.refresh(anyString())).thenReturn(List.of());
 	}
 
 	// ---- ticker validation ----
@@ -317,7 +321,7 @@ class ResearchAgentServiceTest {
 		service.runPipeline(1L);
 
 		List<Step> finalPlan = ResearchAgentService.readPlan(job.getPlan());
-		assertEquals(9, finalPlan.size(), "the default (all 9 sources) plan is used when planning fails");
+		assertEquals(10, finalPlan.size(), "the default (all 10 sources) plan is used when planning fails");
 		assertEquals(ResearchJob.Status.DONE, job.getStatus(),
 				"a failed plan call must not fail the whole job — the default plan carries it through");
 	}
@@ -387,5 +391,57 @@ class ResearchAgentServiceTest {
 
 		assertEquals(ResearchJob.Status.DONE, job.getStatus());
 		assertTrue(job.getReport().contains("haiku unavailable"));
+	}
+
+	// ---- Agent 14 filings + Agent 11 thesis status / track record ----
+
+	@Test
+	void filingsReportsGuidanceToneAndTheDigestSummaries() {
+		when(filings.view("SPCX")).thenReturn(Optional.of(new com.argus.filings.FilingView("SPCX", 0.55, "RAISED", "CONFIDENT",
+				java.time.LocalDate.now().minusDays(4), "Raised guidance", 4, List.of(new com.argus.filings.FilingView.Item("8-K", "EARNINGS_RELEASE",
+						java.time.LocalDate.now().minusDays(4), "Revenue beat; full-year outlook raised.", "RAISED", "FY revenue $9-9.2B", "CONFIDENT", 0.55, 6, 0,
+						"0001")))));
+
+		ResearchJob job = runSingleStep("FILINGS");
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("guidance RAISED") && job.getFindings().contains("full-year outlook raised"), job.getFindings());
+		verify(filings).refresh("SPCX");
+	}
+
+	@Test
+	void filingsSaysSoWhenThereAreNoFilingsAndSurvivesARefreshFailure() {
+		org.mockito.Mockito.doThrow(new RuntimeException("edgar down")).when(filings).refresh(anyString());
+
+		ResearchJob job = runSingleStep("FILINGS");
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("No recent SEC filings"));
+	}
+
+	@Test
+	void deepShowsThesisAtRiskEntryPriceAndTheTrackRecord() {
+		DeepAnalysis d = deepDone(java.time.Duration.ofDays(3));
+		d.recordEntry(100.0, 90.0);
+		d.flagAtRisk("Price fell through the invalidation level.");
+		when(deepAnalyses.latestDone("SPCX")).thenReturn(Optional.of(d));
+		when(scorecard.trackRecord(DeepVerdict.WORTH_BUYING)).thenReturn(Optional.of(new com.argus.deepanalysis.TrackRecord(24, 0.58, 1.4, 30)));
+
+		ResearchJob job = runSingleStep("DEEP");
+
+		assertTrue(job.getFindings().contains("THESIS AT RISK: Price fell through the invalidation level."), job.getFindings());
+		assertTrue(job.getFindings().contains("Price when analysed: 100") && job.getFindings().contains("proven wrong beyond 90"), job.getFindings());
+		assertTrue(job.getFindings().contains("58% right against the S&P 500 over 24 matured calls"), job.getFindings());
+	}
+
+	@Test
+	void aBrokenScorecardNeverBreaksTheDeepStep() {
+		when(deepAnalyses.latestDone("SPCX")).thenReturn(Optional.of(deepDone(java.time.Duration.ofDays(3))));
+		when(scorecard.trackRecord(any())).thenThrow(new RuntimeException("candles unavailable"));
+
+		ResearchJob job = runSingleStep("DEEP");
+
+		assertEquals(ResearchJob.Status.DONE, job.getStatus());
+		assertTrue(job.getFindings().contains("Worth buying"));
 	}
 }

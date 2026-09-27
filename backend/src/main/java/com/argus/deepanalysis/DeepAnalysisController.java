@@ -20,11 +20,27 @@ public class DeepAnalysisController {
 	private final DeepAnalysisService service;
 	private final DeepAnalysisRunner runner;
 	private final DeepAnalysisRepository repository;
+	private final DeepScorecardService scorecard;
 
-	public DeepAnalysisController(DeepAnalysisService service, DeepAnalysisRunner runner, DeepAnalysisRepository repository) {
+	public DeepAnalysisController(DeepAnalysisService service, DeepAnalysisRunner runner, DeepAnalysisRepository repository,
+			DeepScorecardService scorecard) {
 		this.service = service;
 		this.runner = runner;
 		this.repository = repository;
+		this.scorecard = scorecard;
+	}
+
+	/** How Agent 11's past verdicts actually did against the S&P 500 (7/30/90 days) and since the call. */
+	@GetMapping("/scorecard")
+	public ScorecardView scorecard() {
+		DeepScorecard.Summary s = scorecard.summary();
+		List<CellView> cells = new java.util.ArrayList<>();
+		s.cells().forEach((verdict, byHorizon) -> byHorizon.forEach((h, c) -> cells.add(new CellView(verdict.name(), verdict.label(), h, c.n(),
+				Math.round(c.meanExcessPct() * 100) / 100.0, c.hitRate() == null ? null : Math.round(c.hitRate() * 1000) / 1000.0))));
+		List<RowView> rows = s.rows().stream().limit(60).map(r -> new RowView(r.ticker(), r.verdict().name(), r.analyzedOn().toString(), r.entryPrice(),
+				r.sincePct() == null ? null : Math.round(r.sincePct() * 100) / 100.0,
+				r.sinceExcessPct() == null ? null : Math.round(r.sinceExcessPct() * 100) / 100.0, r.matured())).toList();
+		return new ScorecardView(s.totalVerdicts(), DeepScorecardService.MIN_MATURED_FOR_TRACK_RECORD, cells, rows);
 	}
 
 	/** Every ticker's newest verdict (or in-progress run), strongest buys first. */
@@ -74,6 +90,16 @@ public class DeepAnalysisController {
 		return "WORTH_BUYING".equals(verdict) ? 0 : "WAIT".equals(verdict) ? 1 : 2;
 	}
 
+	public record CellView(String verdict, String label, int horizonDays, int n, double meanExcessPct, Double hitRate) {
+	}
+
+	public record RowView(String ticker, String verdict, String analyzedOn, Double entryPrice, Double sincePct, Double sinceExcessPct,
+			java.util.Map<Integer, Double> matured) {
+	}
+
+	public record ScorecardView(int totalVerdicts, int minForTrackRecord, List<CellView> cells, List<RowView> rows) {
+	}
+
 	public record RunStatus(Long id, String ticker, String status, String stage) {
 	}
 
@@ -91,7 +117,7 @@ public class DeepAnalysisController {
 			String thesis, String bullCase, String bearCase, List<String> risks, List<String> catalysts, String invalidation, String technicalSummary,
 			String fundamentalSummary, String catalystSummary, String macroSummary, String skepticView, List<String> guardNotes,
 			BigDecimal technicalScore, BigDecimal fundamentalScore, BigDecimal consensusScore, String model, Instant finishedAt, Instant expiresAt,
-			boolean stale, RunStatus inProgress) {
+			boolean stale, RunStatus inProgress, BigDecimal invalidationPrice, BigDecimal priceAtAnalysis, String thesisStatus, String thesisReason) {
 
 		static AnalysisView from(DeepAnalysis d, RunStatus inProgress) {
 			return new AnalysisView(d.getId(), d.getTicker(), d.getVerdict() == null ? null : d.getVerdict().name(),
@@ -99,7 +125,7 @@ public class DeepAnalysisController {
 					d.getBullCase(), d.getBearCase(), lines(d.getRisks()), lines(d.getCatalysts()), d.getInvalidation(), d.getTechnicalSummary(),
 					d.getFundamentalSummary(), d.getCatalystSummary(), d.getMacroSummary(), d.getSkepticView(), lines(d.getGuardNotes()),
 					d.getTechnicalScore(), d.getFundamentalScore(), d.getConsensusScore(), d.getModel(), d.getFinishedAt(), d.getExpiresAt(),
-					d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()), inProgress);
+					d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()), inProgress, d.getInvalidationPrice(), d.getPriceAtAnalysis(), d.getThesisStatus(), d.getThesisReason());
 		}
 
 		private static List<String> lines(String joined) {

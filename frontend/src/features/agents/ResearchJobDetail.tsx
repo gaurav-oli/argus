@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 
 import { getResearchJob, type ResearchJobView, type ResearchStep } from "@/lib/apiClient";
 import { subscribeToTopic } from "@/lib/wsClient";
+import { DeepAnalysisForTicker } from "@/features/intelligence/DeepAnalysisCard";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 2000;
@@ -127,6 +128,9 @@ export function ResearchJobDetail({
           </ReactMarkdown>
         </div>
       )}
+
+      {/* Agent 11's structured verdict for this ticker — the deep read next to the research, with its own run button. */}
+      <DeepAnalysisForTicker ticker={job.ticker} />
     </div>
   );
 }

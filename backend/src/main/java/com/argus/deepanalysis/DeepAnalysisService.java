@@ -22,7 +22,8 @@ public class DeepAnalysisService {
 				.filter(d -> d.getExpiresAt() != null && d.getExpiresAt().isAfter(Instant.now()) && d.getVerdict() != null
 						&& d.getConviction() != null)
 				.map(d -> new DeepView(d.getVerdict(), d.getHoldDays(), d.getConviction(), d.getHeadline(), d.getInvalidation(),
-						Duration.between(d.getFinishedAt(), Instant.now()).toDays()));
+						Duration.between(d.getFinishedAt(), Instant.now()).toDays(), d.isAtRisk(), d.getThesisReason(),
+						d.getInvalidationPrice() == null ? null : d.getInvalidationPrice().doubleValue()));
 	}
 
 	/** The newest finished analysis for {@code ticker} regardless of expiry (for showing history and for Agent 9). */

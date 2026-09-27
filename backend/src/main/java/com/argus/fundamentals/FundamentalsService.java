@@ -2,6 +2,9 @@ package com.argus.fundamentals;
 
 import com.argus.intelligence.KnownUniverse;
 import com.argus.marketdata.FinnhubRest;
+import com.argus.regime.MarketRegimeService;
+import com.argus.technical.ChartStudy;
+import com.argus.technical.ChartStudyService;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,15 +48,19 @@ public class FundamentalsService {
 	private final String apiKey;
 	private final FundamentalsSnapshotRepository snapshots;
 	private final KnownUniverse universe;
+	private final ChartStudyService charts;
+	private final MarketRegimeService regimes;
 	/** One refresh per ticker at a time: a refresh is ~10 Finnhub calls, so a concurrent duplicate is pure waste. */
 	private final java.util.concurrent.ConcurrentHashMap<String, Object> locks = new java.util.concurrent.ConcurrentHashMap<>();
 
 	public FundamentalsService(FinnhubRest finnhub, @Value("${argus.finnhub.api-key:}") String apiKey,
-			FundamentalsSnapshotRepository snapshots, KnownUniverse universe) {
+			FundamentalsSnapshotRepository snapshots, KnownUniverse universe, ChartStudyService charts, MarketRegimeService regimes) {
 		this.finnhub = finnhub;
 		this.apiKey = apiKey;
 		this.snapshots = snapshots;
 		this.universe = universe;
+		this.charts = charts;
+		this.regimes = regimes;
 	}
 
 	/** The stored snapshot regardless of age (empty if never fetched). */
@@ -109,30 +116,38 @@ public class FundamentalsService {
 			JsonNode financials = fetch("stock/financials-reported?symbol=" + ticker + "&freq=quarterly").orElse(null);
 			JsonNode earnings = fetch("stock/earnings?symbol=" + ticker).orElse(null);
 			JsonNode recs = fetch("stock/recommendation?symbol=" + ticker).orElse(null);
-			List<String> peers = new ArrayList<>();
-			List<Double> peerPes = new ArrayList<>();
-			peers(ticker, peers, peerPes);
-			f = FundamentalsAnalyzer.analyze(ticker, prof, metric, financials, earnings, recs, peers, peerPes);
+			List<FundamentalsAnalyzer.PeerMetric> peerMetrics = new ArrayList<>();
+			peers(ticker, peerMetrics);
+			// The reverse DCF needs today's price and the risk-free rate; either may be unknown (then no valuation view).
+			Double price = charts.studyFor(ticker).map(ChartStudy::lastClose).orElse(null);
+			Double riskFree = regimes.tenYearYieldPct().orElse(null);
+			f = FundamentalsAnalyzer.analyze(ticker, prof, metric, financials, earnings, recs, peerMetrics, price, riskFree);
 		}
 		store(f);
 		return Optional.of(f);
 	}
 
-	private void peers(String ticker, List<String> peers, List<Double> peerPes) {
+	private void peers(String ticker, List<FundamentalsAnalyzer.PeerMetric> out) {
 		try {
 			Optional<String> body = finnhub.get(BASE + "stock/peers?symbol=" + ticker + "&token=" + apiKey);
 			if (body.isEmpty()) return;
 			for (JsonNode p : JSON.readTree(body.get())) {
 				String sym = p.asString("");
-				if (sym.isBlank() || sym.equalsIgnoreCase(ticker) || peers.size() >= MAX_PEERS) continue;
-				peers.add(sym);
-				fetch("stock/metric?symbol=" + sym + "&metric=all").map(b -> b.path("metric").path("peTTM"))
-						.filter(JsonNode::isNumber).ifPresent(pe -> peerPes.add(pe.asDouble()));
+				if (sym.isBlank() || sym.equalsIgnoreCase(ticker) || out.size() >= MAX_PEERS) continue;
+				fetch("stock/metric?symbol=" + sym + "&metric=all")
+						.ifPresent(b -> out.add(new FundamentalsAnalyzer.PeerMetric(sym, b.path("metric"))));
 			}
 		}
 		catch (RuntimeException ex) {
 			log.debug("Peer lookup for {} failed: {}", ticker, ex.getMessage());
 		}
+	}
+
+	/** Every stored snapshot (companies and ETFs), for the Intelligence page's fundamentals view. */
+	public List<Fundamentals> all() {
+		List<Fundamentals> out = new ArrayList<>();
+		snapshots.findAll().forEach(s -> read(s).ifPresent(out::add));
+		return out;
 	}
 
 	private Optional<JsonNode> fetch(String path) {

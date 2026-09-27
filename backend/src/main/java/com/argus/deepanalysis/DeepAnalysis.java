@@ -100,6 +100,24 @@ public class DeepAnalysis {
 	@Column(name = "expires_at")
 	private Instant expiresAt;
 
+	/** The price whose breach would prove the verdict wrong (below the price for a buy), validated against the chart. */
+	@Column(name = "invalidation_price")
+	private BigDecimal invalidationPrice;
+
+	/** The price when the analysis ran — the scorecard's entry point. */
+	@Column(name = "price_at_analysis")
+	private BigDecimal priceAtAnalysis;
+
+	/** INTACT, or AT_RISK once the thesis tracker sees new information that undermines the verdict. */
+	@Column(name = "thesis_status", nullable = false)
+	private String thesisStatus = "INTACT";
+
+	@Column(name = "thesis_reason")
+	private String thesisReason;
+
+	@Column(name = "thesis_checked_at")
+	private Instant thesisCheckedAt;
+
 	protected DeepAnalysis() {
 		// JPA
 	}
@@ -165,6 +183,27 @@ public class DeepAnalysis {
 		this.expiresAt = this.finishedAt.plus(ttl);
 	}
 
+	/** Record the entry price and the level that would invalidate the verdict. */
+	public void recordEntry(Double priceAtAnalysis, Double invalidationPrice) {
+		this.priceAtAnalysis = priceAtAnalysis == null ? null : BigDecimal.valueOf(priceAtAnalysis).setScale(6, RoundingMode.HALF_UP);
+		this.invalidationPrice = invalidationPrice == null ? null : BigDecimal.valueOf(invalidationPrice).setScale(6, RoundingMode.HALF_UP);
+	}
+
+	/** The thesis tracker saw something that undermines this verdict. */
+	public void flagAtRisk(String reason) {
+		this.thesisStatus = "AT_RISK";
+		this.thesisReason = reason;
+		this.thesisCheckedAt = Instant.now();
+	}
+
+	public void markChecked() {
+		this.thesisCheckedAt = Instant.now();
+	}
+
+	public boolean isAtRisk() {
+		return "AT_RISK".equals(thesisStatus);
+	}
+
 	public void fail(String message) {
 		this.status = Status.FAILED;
 		this.stage = "Failed";
@@ -210,4 +249,9 @@ public class DeepAnalysis {
 	public Instant getStartedAt() { return startedAt; }
 	public Instant getFinishedAt() { return finishedAt; }
 	public Instant getExpiresAt() { return expiresAt; }
+	public BigDecimal getInvalidationPrice() { return invalidationPrice; }
+	public BigDecimal getPriceAtAnalysis() { return priceAtAnalysis; }
+	public String getThesisStatus() { return thesisStatus; }
+	public String getThesisReason() { return thesisReason; }
+	public Instant getThesisCheckedAt() { return thesisCheckedAt; }
 }

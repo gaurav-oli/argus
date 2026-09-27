@@ -54,8 +54,9 @@ class AgentSignalGathererTest {
 	private final DeepAnalysisRepository deepAnalyses = mock(DeepAnalysisRepository.class);
 	private final SectorClassifier sectors = mock(SectorClassifier.class);
 	private final MarketRegimeService regimes = mock(MarketRegimeService.class);
+	private final com.argus.filings.FilingDigestService filings = mock(com.argus.filings.FilingDigestService.class);
 	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod,
-			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes);
+			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes, filings);
 
 	{
 		// Tuning off by default in these tests → identity weight multipliers.
@@ -451,5 +452,67 @@ class AgentSignalGathererTest {
 
 		assertTrue(gatherer.gatherBase("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")));
 		assertTrue(gatherer.gather("AAPL").stream().anyMatch(x -> x.agent().equals("agent-11-deep")));
+	}
+
+	// ---- Agent 14: filings ----
+
+	private static com.argus.filings.FilingView filingView(double score, String guidance, long ageDays) {
+		return new com.argus.filings.FilingView("AAPL", score, guidance, "CONFIDENT", java.time.LocalDate.now().minusDays(ageDays), "Raised full-year guidance",
+				ageDays, List.of());
+	}
+
+	@Test
+	void aFreshPositiveFilingIsABullishSignalWithAQuarterlyHorizon() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(filings.view("AAPL")).thenReturn(Optional.of(filingView(0.6, "RAISED", 3)));
+
+		AgentSignal f = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-14-filings")).findFirst().orElseThrow();
+
+		assertEquals(SignalDirection.BULLISH, f.direction());
+		assertEquals(0.7, f.weight(), 1e-9);
+		assertEquals(30, f.horizonHintDays());
+		assertTrue(f.rationale().contains("guidance raised"), f.rationale());
+		assertEquals(com.argus.learning.SignalGroup.FILINGS, com.argus.learning.SignalGroup.of(f.agent()));
+	}
+
+	@Test
+	void aNegativeFilingIsBearishAndStaleOrWeakOnesEmitNothing() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(filings.view("AAPL")).thenReturn(Optional.of(filingView(-0.5, "LOWERED", 5)));
+		assertEquals(SignalDirection.BEARISH, gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-14-filings")).findFirst().orElseThrow().direction());
+
+		when(filings.view("AAPL")).thenReturn(Optional.of(filingView(0.6, "RAISED", 90)));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-14-filings")), "older than 45 days is stale");
+
+		when(filings.view("AAPL")).thenReturn(Optional.of(filingView(0.1, "MAINTAINED", 2)));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-14-filings")), "inside the deadzone");
+
+		when(filings.view("AAPL")).thenThrow(new RuntimeException("db down"));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-14-filings")), "a failing read must not break the gather");
+	}
+
+	@Test
+	void standingCarriesGuidanceAndValuationForTheLearnersFeatureTokens() {
+		when(filings.view("AAPL")).thenReturn(Optional.of(filingView(0.6, "RAISED", 3)));
+		Fundamentals f = fundamentalsOf(true, 0.5);
+		Fundamentals withVal = new Fundamentals(f.ticker(), f.applicable(), f.name(), f.industry(), f.marketCapMillions(), f.ratios(), f.quarters(), f.earnings(),
+				f.analysts(), f.peers(), f.score(), f.bias(), f.notes(), f.fetchedAt(),
+				new Fundamentals.ValuationView(9.0, 4.0, 9.0, 5.0, "RICH", 100.0, 5.0, "priced for growth"));
+		when(fundamentals.latestFresh(eq("AAPL"), any())).thenReturn(Optional.of(withVal));
+
+		var s = gatherer.standing("AAPL");
+
+		assertEquals("RAISED", s.guidance());
+		assertEquals("RICH", s.valuation());
+	}
+
+	@Test
+	void aDeepVerdictTheThesisTrackerFlaggedAtRiskIsNoLongerASignal() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		DeepAnalysis d = deep(DeepVerdict.WORTH_BUYING, 30, 80, java.time.Duration.ofDays(3));
+		d.flagAtRisk("Price fell through the invalidation level.");
+		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE)).thenReturn(Optional.of(d));
+
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")));
 	}
 }

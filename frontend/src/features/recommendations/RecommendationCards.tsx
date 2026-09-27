@@ -237,7 +237,7 @@ function ForecastCard({
         </div>
       )}
 
-      {(card.chart || card.deep) && (
+      {(card.chart || card.deep || card.guidance || card.valuation) && (
         <div className="flex flex-col gap-1.5 rounded-lg border border-border px-3 py-2 text-xs">
           {card.chart && (
             <p className="text-text-secondary">
@@ -257,6 +257,27 @@ function ForecastCard({
               </span>
               {card.deep.holdDays != null && card.deep.verdict === "WORTH_BUYING" && <> · hold ~{card.deep.holdDays} days</>} · conviction{" "}
               {card.deep.conviction}/100{card.deep.headline ? ` — ${card.deep.headline}` : ""}
+              {card.deep.atRisk && (
+                <span className="ml-1 rounded bg-losses/15 px-1.5 py-0.5 text-[10px] font-semibold text-losses" title={card.deep.atRiskReason ?? undefined}>
+                  ⚠ thesis at risk
+                </span>
+              )}
+            </p>
+          )}
+          {(card.guidance || card.valuation) && (
+            <p className="text-text-secondary">
+              <span className="font-medium text-text-primary">Company & valuation · Agents 12/14:</span>{" "}
+              {card.guidance && (
+                <span className={card.guidance === "RAISED" ? "text-gains" : card.guidance === "LOWERED" ? "text-losses" : ""}>
+                  earnings guidance {card.guidance.toLowerCase()}
+                </span>
+              )}
+              {card.guidance && card.valuation && " · "}
+              {card.valuation && (
+                <span className={card.valuation === "CHEAP" ? "text-gains" : card.valuation === "RICH" ? "text-losses" : ""}>
+                  price implies {card.valuation === "RICH" ? "more growth than delivered (rich)" : card.valuation === "CHEAP" ? "less growth than delivered (cheap)" : "about the growth delivered (fair)"}
+                </span>
+              )}
             </p>
           )}
         </div>

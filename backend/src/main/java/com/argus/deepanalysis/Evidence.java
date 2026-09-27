@@ -1,5 +1,6 @@
 package com.argus.deepanalysis;
 
+import com.argus.filings.FilingView;
 import com.argus.fundamentals.Fundamentals;
 import com.argus.learning.FeatureTokens;
 import com.argus.learning.SignalGroup;
@@ -22,7 +23,15 @@ import java.util.Locale;
  */
 public record Evidence(String ticker, Sector sector, boolean etf, Double lastPrice, ChartStudy chart, Fundamentals fundamentals,
 		List<AgentSignal> quickSignals, String newsBlock, String insiderBlock, String crowdBlock, String earningsBlock,
-		Integer earningsInTradingDays, String macroBlock, MarketRegime regime) {
+		Integer earningsInTradingDays, String macroBlock, MarketRegime regime, FilingView filings) {
+
+	/** Legacy arity (no filings read). */
+	public Evidence(String ticker, Sector sector, boolean etf, Double lastPrice, ChartStudy chart, Fundamentals fundamentals,
+			List<AgentSignal> quickSignals, String newsBlock, String insiderBlock, String crowdBlock, String earningsBlock,
+			Integer earningsInTradingDays, String macroBlock, MarketRegime regime) {
+		this(ticker, sector, etf, lastPrice, chart, fundamentals, quickSignals, newsBlock, insiderBlock, crowdBlock, earningsBlock,
+				earningsInTradingDays, macroBlock, regime, null);
+	}
 
 	/**
 	 * The situation this stock is in, as the same feature tokens the recommender and the Trade Learner use — evaluated
@@ -42,6 +51,8 @@ public record Evidence(String ticker, Sector sector, boolean etf, Double lastPri
 		}
 		FeatureTokens.addIfPresent(t, "price", FeatureTokens.priceBucket(lastPrice));
 		if (earningsInTradingDays != null && earningsInTradingDays <= 5) t.add("earnings=soon");
+		if (filings != null && filings.guidance() != null && !"NONE".equals(filings.guidance())) t.add("guidance=" + filings.guidance());
+		if (fundamentals != null && fundamentals.valuation() != null) t.add("val=" + fundamentals.valuation().verdict());
 		java.util.Map<SignalGroup, Double> weights = new java.util.EnumMap<>(SignalGroup.class);
 		for (AgentSignal s : quickSignals) {
 			if (s.direction() == com.argus.recommendation.SignalDirection.BULLISH) {
@@ -81,12 +92,28 @@ public record Evidence(String ticker, Sector sector, boolean etf, Double lastPri
 	}
 
 	public String fundamentalSection() {
-		return overview() + (fundamentals == null ? "Fundamentals: not available.\n" : fundamentals.render());
+		return overview() + (fundamentals == null ? "Fundamentals: not available.\n" : fundamentals.render()) + "\nCOMPANY FILINGS:\n" + filingsBlock();
+	}
+
+	/**
+	 * What the company itself said in its newest earnings release / 10-Q / 10-K (Agent 14: guidance, tone, going-concern and
+	 * risk language — every figure verified against the filing text before it got here).
+	 */
+	public String filingsBlock() {
+		if (filings == null || filings.digests().isEmpty()) {
+			return "No recent SEC filings have been read for this company (ETF, foreign listing, or none in the window).\n";
+		}
+		StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "Filings score %+.2f (-1..+1), newest %d day(s) old%s.%n", filings.score(),
+				filings.ageDays(), filings.guidance() == null || "NONE".equals(filings.guidance()) ? "" : "; earnings guidance " + filings.guidance()));
+		filings.digests().stream().limit(3).forEach(d -> sb.append(String.format(Locale.ROOT, "- %s filed %s (tone %s, %s): %s%n", d.form(),
+				d.filedAt(), d.tone(), d.guidance() == null ? "no guidance" : "guidance " + d.guidance(), d.summary())));
+		return sb.toString();
 	}
 
 	public String catalystSection() {
 		return overview() + "RECENT NEWS (company-specific, most relevant first):\n" + newsBlock + "\nINSIDER ACTIVITY:\n" + insiderBlock
-				+ "\nCROWD / WEB ATTENTION:\n" + crowdBlock + "\nEARNINGS:\n" + earningsBlock;
+				+ "\nCROWD / WEB ATTENTION:\n" + crowdBlock + "\nEARNINGS:\n" + earningsBlock
+				+ "\nCOMPANY FILINGS:\n" + filingsBlock();
 	}
 
 	public String macroSection() {
@@ -98,6 +125,7 @@ public record Evidence(String ticker, Sector sector, boolean etf, Double lastPri
 		return "=== OVERVIEW ===\n" + overview() + "\n=== WHAT THE FAST AGENTS CONCLUDED ===\n" + quickAgents()
 				+ "\n=== CHART (Agent 10) ===\n" + (chart == null ? "No chart study available.\n" : chart.render())
 				+ "\n=== FUNDAMENTALS (Agent 12) ===\n" + (fundamentals == null ? "Not available.\n" : fundamentals.render())
+ + "\n=== FILINGS (Agent 14) ===\n" + filingsBlock()
 				+ "\n=== NEWS ===\n" + newsBlock + "\n=== INSIDERS ===\n" + insiderBlock + "\n=== CROWD / WEB ===\n" + crowdBlock
 				+ "\n=== EARNINGS ===\n" + earningsBlock + "\n=== MACRO & SECTOR ===\n" + macroBlock;
 	}

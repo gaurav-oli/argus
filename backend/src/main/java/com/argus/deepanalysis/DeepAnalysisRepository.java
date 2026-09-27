@@ -31,5 +31,8 @@ public interface DeepAnalysisRepository extends JpaRepository<DeepAnalysis, Long
 	@Query("select max(d.finishedAt) from DeepAnalysis d where d.ticker = :ticker and d.status = 'DONE'")
 	Instant lastFinished(@Param("ticker") String ticker);
 
+	@Query("select max(d.finishedAt) from DeepAnalysis d where d.status = 'DONE'")
+	Instant latestFinishedAt();
+
 	long countByStatus(DeepAnalysis.Status status);
 }

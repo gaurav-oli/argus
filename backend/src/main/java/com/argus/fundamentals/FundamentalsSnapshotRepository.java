@@ -9,6 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface FundamentalsSnapshotRepository extends JpaRepository<FundamentalsSnapshot, String> {
 
+	@Query("select max(s.fetchedAt) from FundamentalsSnapshot s")
+	Instant latestFetchedAt();
+
 	/**
 	 * Insert-or-update in one statement. A plain {@code save} of an assigned-id entity does a select-then-insert
 	 * that two concurrent refreshes of the same ticker (the boot fill and Agent 11's evidence step) can both

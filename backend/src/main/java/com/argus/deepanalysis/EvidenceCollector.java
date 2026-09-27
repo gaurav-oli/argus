@@ -2,6 +2,8 @@ package com.argus.deepanalysis;
 
 import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
+import com.argus.filings.FilingDigestService;
+import com.argus.filings.FilingView;
 import com.argus.fundamentals.Fundamentals;
 import com.argus.fundamentals.FundamentalsService;
 import com.argus.intelligence.MacroRelevanceTagger;
@@ -57,6 +59,7 @@ public class EvidenceCollector {
 	private final AgentSignalGatherer gatherer;
 	private final ChartStudyService charts;
 	private final FundamentalsService fundamentals;
+	private final FilingDigestService filings;
 	private final NewsArticleRepository news;
 	private final SecFilingRepository sec;
 	private final SocialPostRepository social;
@@ -69,7 +72,8 @@ public class EvidenceCollector {
 	public EvidenceCollector(AgentSignalGatherer gatherer, ChartStudyService charts, FundamentalsService fundamentals,
 			NewsArticleRepository news, SecFilingRepository sec, SocialPostRepository social, WebMentionRepository web,
 			EarningsQuietPeriodService earnings, MarketRegimeService regimes, SectorClassifier sectors,
-			LivePortfolioService prices) {
+			LivePortfolioService prices, FilingDigestService filings) {
+		this.filings = filings;
 		this.gatherer = gatherer;
 		this.charts = charts;
 		this.fundamentals = fundamentals;
@@ -93,9 +97,12 @@ public class EvidenceCollector {
 		QuietPeriodStatus quiet = earnings.statusFor(ticker);
 		Integer earningsDays = quiet.status() == QuietPeriodStatus.Status.CLEAR ? null : quiet.tradingDaysUntil();
 		MarketRegime regime = regimes.current();
+		// Digest any filing not yet read (idempotent; the model only runs for new ones), then read the stored view.
+		safe(() -> Optional.of(filings.refresh(ticker)), "filings");
+		FilingView filingView = safe(() -> filings.view(ticker), "filings view").orElse(null);
 		return new Evidence(ticker, sector, etf, price, chart.orElse(null), fund.orElse(null), gatherer.gatherBase(ticker),
 				newsBlock(ticker), insiderBlock(ticker), crowdBlock(ticker), earningsBlock(quiet), earningsDays,
-				macroBlock(sector, regime), regime);
+				macroBlock(sector, regime), regime, filingView);
 	}
 
 	// ---- blocks ----

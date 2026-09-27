@@ -34,14 +34,19 @@ final class DeepPrompts {
 		return specialist("fundamental analyst", ticker, """
 				Assess business quality and value: is revenue growth real and accelerating or fading, are margins expanding, is the balance
 				sheet sound, does the company reliably beat earnings estimates, what do analysts think and is that improving, and is the
-				valuation (P/E, vs peers, vs growth) already pricing in the good news? A great company at a bad price is not a buy.""", evidence);
+				valuation (P/E, vs peers, vs growth) already pricing in the good news? A great company at a bad price is not a buy. Use the
+				COMPANY FILINGS section — what management itself said about guidance, tone and risks — and the reverse-DCF line (the growth
+				the current price implies versus what the company has delivered): a stock priced for growth it has never delivered is rich
+				however good the business is.""", evidence);
 	}
 
 	static String catalyst(String ticker, String evidence) {
 		return specialist("news and catalyst analyst", ticker, """
 				Separate signal from noise in the recent news, insider activity, crowd chatter and earnings timing. Which developments are durable
 				changes to the business and which are one-off headlines? Does the news actually explain the recent price action? Treat routine
-				insider sales as weak evidence and open-market insider buys as meaningful. Flag any imminent earnings release as event risk.""", evidence);
+				insider sales as weak evidence and open-market insider buys as meaningful. Flag any imminent earnings release as event risk. The COMPANY FILINGS
+				section is what the company itself just said (guidance raised or lowered, going-concern or new-risk language): weigh it above
+				commentary about the company.""", evidence);
 	}
 
 	static String macro(String ticker, String evidence) {
@@ -116,8 +121,10 @@ final class DeepPrompts {
 				{"verdict":"WORTH_BUYING|WAIT|NOT_WORTH_BUYING","holdDays":30,"conviction":0,"headline":"one line a busy investor can act on",
 				"thesis":"one paragraph explaining the verdict","bullCase":"the best case for owning it","bearCase":"the best case against",
 				"risks":["specific risk","..."],"catalysts":["specific upcoming catalyst","..."],
-				"invalidation":"the concrete evidence or price level that would change your mind"}
-				Use null for holdDays unless the verdict is WORTH_BUYING.
+				"invalidation":"the concrete evidence or price level that would change your mind","invalidationPrice":0.0}
+				Use null for holdDays unless the verdict is WORTH_BUYING. "invalidationPrice" is the single price whose breach would prove
+				you wrong (below today's price for WORTH_BUYING, above it for NOT_WORTH_BUYING; null for WAIT) — use a support/resistance
+				level from the evidence, not a guess.
 				""".formatted(ticker, overview, quickAgents, analystDigest, skepticDigest, lessonsBlock(lessons));
 	}
 }

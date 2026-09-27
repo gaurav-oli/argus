@@ -56,15 +56,17 @@ public class DeepAnalystService {
 	private final DeepAnalysisProperties props;
 	private final NotificationService notifications;
 	private final Lessons lessons;
+	private final DeepScorecardService scorecard;
 
 	public DeepAnalystService(EvidenceCollector collector, ModelGateway gateway, DeepAnalysisRepository repository,
-			DeepAnalysisProperties props, NotificationService notifications, Lessons lessons) {
+			DeepAnalysisProperties props, NotificationService notifications, Lessons lessons, DeepScorecardService scorecard) {
 		this.collector = collector;
 		this.gateway = gateway;
 		this.repository = repository;
 		this.props = props;
 		this.notifications = notifications;
 		this.lessons = lessons;
+		this.scorecard = scorecard;
 	}
 
 	/** One specialist's parsed report; {@code produced} is false when the analyst was skipped or failed. */
@@ -169,7 +171,7 @@ public class DeepAnalystService {
 			DeepVerdictGuard.Result guarded = DeepVerdictGuard.apply(new DeepVerdictGuard.Draft(proposed, proposedHold, proposedConviction),
 					new DeepVerdictGuard.Input(specialists, skepticSeverity, ev.fundamentals() != null && ev.fundamentals().applicable(),
 							ev.fundamentals() == null ? null : ev.fundamentals().score(), ev.etf(), ev.lastPrice(), ev.earningsInTradingDays(),
-							ev.chart() != null, lessonFx));
+							ev.chart() != null, lessonFx, safeTrackRecord(proposed)));
 
 			DeepVerdict previous = repository.findFirstByTickerAndStatusOrderByFinishedAtDesc(ticker, DeepAnalysis.Status.DONE)
 					.map(DeepAnalysis::getVerdict).orElse(null);
@@ -177,10 +179,17 @@ public class DeepAnalystService {
 					: ev.fundamentals().score(), guarded.consensus());
 			run.recordSpecialists(technical.display(), fundamental.display(), catalyst.display(), macro.display(), skepticText);
 			run.recordStages(stagesJson(timings, started), "local specialists · verdict via " + (props.useHaikuForVerdict() ? "Claude Haiku (budget-governed)" : "local model"));
+			InvalidationLevel.Resolved level = InvalidationLevel.resolve(guarded.verdict(),
+					draftNode.path("invalidationPrice").isNumber() ? draftNode.path("invalidationPrice").asDouble() : null, ev.lastPrice(),
+					ev.chart() == null ? null : ev.chart().support(), ev.chart() == null ? null : ev.chart().resistance(),
+					ev.chart() == null ? null : ev.chart().atrPct());
+			run.recordEntry(ev.lastPrice(), level.price());
 			run.complete(guarded.verdict(), guarded.holdDays(), guarded.conviction(), clip(draftNode.path("headline").asString("")),
 					clip(draftNode.path("thesis").asString("")), clip(draftNode.path("bullCase").asString("")), clip(draftNode.path("bearCase").asString("")),
 					lines(draftNode.path("risks")), lines(draftNode.path("catalysts")), clip(draftNode.path("invalidation").asString("")),
-					String.join("\n", guarded.notes()), props.signalTtl());
+					String.join("\n", guarded.notes()) + (level.price() != null && !level.modelLevelUsed()
+							? (guarded.notes().isEmpty() ? "" : "\n") + "The model's invalidation level was missing or unusable; used the chart-based level "
+							+ level.price() + " instead." : ""), props.signalTtl());
 			repository.save(run);
 			log.info("Agent 11: {} → {} (conviction {}, hold {}) in {}s", ticker, guarded.verdict(), guarded.conviction(), guarded.holdDays(),
 					Duration.between(started, Instant.now()).toSeconds());
@@ -195,6 +204,18 @@ public class DeepAnalystService {
 			catch (RuntimeException saveEx) {
 				log.warn("Agent 11: could not persist failure for {}: {}", run.getTicker(), saveEx.getMessage());
 			}
+		}
+	}
+
+	/** The scorecard is best-effort feedback: a failure here must never fail an analysis. */
+	private TrackRecord safeTrackRecord(DeepVerdict verdict) {
+		if (verdict == DeepVerdict.WAIT) return null;
+		try {
+			return scorecard.trackRecord(verdict).orElse(null);
+		}
+		catch (RuntimeException ex) {
+			log.debug("Agent 11: track record unavailable: {}", ex.getMessage());
+			return null;
 		}
 	}
 

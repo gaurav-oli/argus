@@ -3,6 +3,8 @@ package com.argus.fundamentals;
 import com.argus.fundamentals.Fundamentals.AnalystConsensus;
 import com.argus.fundamentals.Fundamentals.EarningsSurprise;
 import com.argus.fundamentals.Fundamentals.PeerComparison;
+import com.argus.fundamentals.Fundamentals.PeerRow;
+import com.argus.fundamentals.Fundamentals.ValuationView;
 import com.argus.fundamentals.Fundamentals.Quarter;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,16 +37,39 @@ public final class FundamentalsAnalyzer {
 	private FundamentalsAnalyzer() {
 	}
 
+	/** One peer's {@code /stock/metric} payload (the {@code metric} object), for the comps table. */
+	public record PeerMetric(String symbol, JsonNode metric) {
+	}
+
+	/**
+	 * Legacy entry point: peer names plus their trailing P/Es only (no comps table, no reverse DCF — the price is unknown).
+	 * Kept so older callers and tests keep their behaviour.
+	 */
+	public static Fundamentals analyze(String ticker, JsonNode profile, JsonNode metric, JsonNode financials,
+			JsonNode earnings, JsonNode recommendations, List<String> peers, List<Double> peerPes) {
+		List<PeerMetric> synthetic = new ArrayList<>();
+		if (peerPes != null) {
+			tools.jackson.databind.json.JsonMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+			for (int i = 0; i < peerPes.size(); i++) {
+				String sym = peers != null && i < peers.size() ? peers.get(i) : "PEER" + (i + 1);
+				synthetic.add(new PeerMetric(sym, mapper.createObjectNode().put("peTTM", peerPes.get(i))));
+			}
+		}
+		return analyze(ticker, profile, metric, financials, earnings, recommendations, synthetic, null, null);
+	}
+
 	/**
 	 * @param profile         {@code /stock/profile2} body (empty object for ETFs/unknown symbols)
 	 * @param metric          the {@code metric} object of {@code /stock/metric?metric=all}
 	 * @param financials      {@code /stock/financials-reported?freq=quarterly} body
 	 * @param earnings        {@code /stock/earnings} body (array)
 	 * @param recommendations {@code /stock/recommendation} body (array, newest first)
-	 * @param peerPes         trailing P/E of the peer companies that reported one
+	 * @param peerMetrics     each peer's ratio payload, for the comps table
+	 * @param price           current share price, for the reverse DCF (null → no valuation view)
+	 * @param riskFreePct     10-year yield in percent for the reverse DCF's discount rate (null → default)
 	 */
 	public static Fundamentals analyze(String ticker, JsonNode profile, JsonNode metric, JsonNode financials,
-			JsonNode earnings, JsonNode recommendations, List<String> peers, List<Double> peerPes) {
+			JsonNode earnings, JsonNode recommendations, List<PeerMetric> peerMetrics, Double price, Double riskFreePct) {
 		String name = text(profile, "name");
 		Double marketCap = num(profile, "marketCapitalization");
 		if (name == null && marketCap == null && (metric == null || metric.isMissingNode() || metric.isNull()
@@ -58,7 +83,8 @@ public final class FundamentalsAnalyzer {
 		for (String key : List.of("peTTM", "forwardPE", "psTTM", "pbQuarterly", "evEbitdaTTM", "grossMarginTTM",
 				"operatingMarginTTM", "netProfitMarginTTM", "roeTTM", "totalDebt/totalEquityQuarterly",
 				"currentRatioQuarterly", "revenueGrowthTTMYoy", "revenueGrowthQuarterlyYoy", "epsGrowthTTMYoy",
-				"epsGrowthQuarterlyYoy", "beta", "52WeekHigh", "52WeekLow")) {
+				"epsGrowthQuarterlyYoy", "beta", "52WeekHigh", "52WeekLow", "epsTTM", "epsInclExtraItemsTTM", "epsGrowth5Y",
+				"revenueGrowth5Y")) {
 			Double v = num(metric, key);
 			if (v != null) {
 				ratios.put(key, v);
@@ -159,19 +185,43 @@ public final class FundamentalsAnalyzer {
 			}
 		}
 
-		// ---- valuation vs peers ----
+		// ---- valuation: comps vs peers, then a reverse DCF ----
 		Double pe = ratios.get("peTTM");
-		PeerComparison peerCmp = null;
-		List<Double> pes = peerPes == null ? List.of() : peerPes.stream().filter(p -> p != null && p > 0).sorted().toList();
-		if (pe != null && pe > 0 && pes.size() >= 2) {
-			double median = pes.size() % 2 == 1 ? pes.get(pes.size() / 2) : (pes.get(pes.size() / 2 - 1) + pes.get(pes.size() / 2)) / 2;
-			double premium = (pe / median - 1) * 100;
-			peerCmp = new PeerComparison(peers == null ? List.of() : peers, median, pe, premium);
-			notes.add(String.format(Locale.ROOT, "Valuation: P/E %.1f vs peer median %.1f (%s by %.0f%%)%s.", pe, median,
-					premium >= 0 ? "premium" : "discount", Math.abs(premium), forwardPeNote(ratios)));
-			score += premium > 50 ? -0.10 : premium < -20 ? 0.05 : 0;
+		List<PeerRow> rows = new ArrayList<>();
+		for (PeerMetric pm : peerMetrics == null ? List.<PeerMetric>of() : peerMetrics) {
+			rows.add(new PeerRow(pm.symbol(), pos(num(pm.metric(), "peTTM")), pos(num(pm.metric(), "psTTM")), pos(num(pm.metric(), "evEbitdaTTM")),
+					num(pm.metric(), "revenueGrowthTTMYoy"), num(pm.metric(), "netProfitMarginTTM")));
 		}
-		else if (pe != null) {
+		List<Double> pes = rows.stream().map(PeerRow::pe).filter(java.util.Objects::nonNull).sorted().toList();
+		List<String> peers = rows.stream().map(PeerRow::symbol).toList();
+		PeerComparison peerCmp = null;
+		if (!rows.isEmpty()) {
+			Double medPe = pes.size() >= 2 ? median(pes) : null;
+			Double medPs = medianOf(rows, PeerRow::ps);
+			Double medEv = medianOf(rows, PeerRow::evEbitda);
+			Double psSelf = pos(ratios.get("psTTM")), evSelf = pos(ratios.get("evEbitdaTTM"));
+			Double pePrem = pe != null && pe > 0 && medPe != null ? (pe / medPe - 1) * 100 : null;
+			Double psPrem = psSelf != null && medPs != null ? (psSelf / medPs - 1) * 100 : null;
+			Double evPrem = evSelf != null && medEv != null ? (evSelf / medEv - 1) * 100 : null;
+			peerCmp = new PeerComparison(peers, medPe, pe, pePrem, List.copyOf(rows), medPs, psPrem, medEv, evPrem);
+			if (pePrem != null) {
+				notes.add(String.format(Locale.ROOT, "Valuation vs peers: P/E %.1f vs peer median %.1f (%s by %.0f%%)%s.", pe, medPe,
+						pePrem >= 0 ? "premium" : "discount", Math.abs(pePrem), forwardPeNote(ratios)));
+				score += pePrem > 50 ? -0.10 : pePrem < -20 ? 0.05 : 0;
+			}
+			if (psPrem != null || evPrem != null) {
+				notes.add(String.format(Locale.ROOT, "Comps: %s%s across %d peers.",
+						psPrem == null ? "" : String.format(Locale.ROOT, "P/S %.1f vs %.1f (%+.0f%%)", psSelf, medPs, psPrem),
+						evPrem == null ? "" : (psPrem == null ? "" : "; ") + String.format(Locale.ROOT, "EV/EBITDA %.1f vs %.1f (%+.0f%%)", evSelf, medEv, evPrem),
+						rows.size()));
+				Double medGrowth = medianOf(rows, PeerRow::revenueGrowth);
+				if (psPrem != null && psPrem > 100 && revYoy != null && medGrowth != null && revYoy <= medGrowth) {
+					score -= 0.05;
+					notes.add("The sales multiple carries a big premium without faster revenue growth than peers to justify it.");
+				}
+			}
+		}
+		if (pe != null && peerCmp == null) {
 			notes.add(String.format(Locale.ROOT, "Valuation: trailing P/E %.1f%s (no usable peer comparison).", pe, forwardPeNote(ratios)));
 		}
 		if (pe != null && pe > 60 && (revYoy == null || revYoy < 25)) {
@@ -181,11 +231,21 @@ public final class FundamentalsAnalyzer {
 		if (pe != null && pe < 0) {
 			notes.add("Trailing P/E is negative (losses), so earnings-based valuation does not apply.");
 		}
+		ValuationView valuation = null;
+		Double eps = ratios.get("epsTTM") != null ? ratios.get("epsTTM") : ratios.get("epsInclExtraItemsTTM");
+		Double delivered = deliveredGrowth(ratios);
+		Optional<ValuationView> rev = ValuationAnalyzer.analyze(price, eps, ratios.get("beta"), riskFreePct, delivered);
+		if (rev.isPresent()) {
+			valuation = rev.get();
+			notes.add("Reverse DCF: " + valuation.summary());
+			score += "RICH".equals(valuation.verdict()) ? (valuation.gapPts() != null && valuation.gapPts() >= 20 ? -0.12 : -0.08)
+					: "CHEAP".equals(valuation.verdict()) ? 0.08 : 0;
+		}
 
 		score = Math.max(-1.0, Math.min(1.0, score));
 		String bias = score >= 0.2 ? "BULLISH" : score <= -0.2 ? "BEARISH" : "NEUTRAL";
 		return new Fundamentals(ticker, true, name, text(profile, "finnhubIndustry"), marketCap, Map.copyOf(ratios),
-				List.copyOf(quarters), List.copyOf(surprises), analysts, peerCmp, score, bias, List.copyOf(notes), Instant.now());
+				List.copyOf(quarters), List.copyOf(surprises), analysts, peerCmp, score, bias, List.copyOf(notes), Instant.now(), valuation);
 	}
 
 	// ---- statements ----
@@ -260,6 +320,30 @@ public final class FundamentalsAnalyzer {
 	}
 
 	// ---- small helpers ----
+
+	/** Growth the company has actually delivered (percent/yr): mean of the 5-year and latest-year EPS growth, each capped to a sane band. */
+	private static Double deliveredGrowth(Map<String, Double> ratios) {
+		List<Double> g = new ArrayList<>();
+		for (String k : List.of("epsGrowth5Y", "epsGrowthTTMYoy")) {
+			Double v = ratios.get(k);
+			if (v != null) g.add(Math.max(-20.0, Math.min(60.0, v)));
+		}
+		return g.isEmpty() ? null : g.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+	}
+
+	private static Double pos(Double v) {
+		return v != null && v > 0 ? v : null;
+	}
+
+	private static Double median(List<Double> sorted) {
+		int n = sorted.size();
+		return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+	}
+
+	private static Double medianOf(List<PeerRow> rows, java.util.function.Function<PeerRow, Double> f) {
+		List<Double> v = rows.stream().map(f).filter(java.util.Objects::nonNull).sorted().toList();
+		return v.size() >= 2 ? median(v) : null;
+	}
 
 	private static String forwardPeNote(Map<String, Double> ratios) {
 		Double f = ratios.get("forwardPE");

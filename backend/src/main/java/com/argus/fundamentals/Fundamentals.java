@@ -19,7 +19,15 @@ import java.util.Map;
  */
 public record Fundamentals(String ticker, boolean applicable, String name, String industry, Double marketCapMillions,
 		Map<String, Double> ratios, List<Quarter> quarters, List<EarningsSurprise> earnings, AnalystConsensus analysts,
-		PeerComparison peers, double score, String bias, List<String> notes, Instant fetchedAt) {
+		PeerComparison peers, double score, String bias, List<String> notes, Instant fetchedAt, ValuationView valuation) {
+
+	/** Legacy arity (no valuation view) — kept so existing call sites and stored snapshots stay valid. */
+	public Fundamentals(String ticker, boolean applicable, String name, String industry, Double marketCapMillions,
+			Map<String, Double> ratios, List<Quarter> quarters, List<EarningsSurprise> earnings, AnalystConsensus analysts,
+			PeerComparison peers, double score, String bias, List<String> notes, Instant fetchedAt) {
+		this(ticker, applicable, name, industry, marketCapMillions, ratios, quarters, earnings, analysts, peers, score, bias, notes,
+				fetchedAt, null);
+	}
 
 	/** One reported quarter's income statement (values in the reporting currency's units, as filed). */
 	public record Quarter(LocalDate endDate, Double revenue, Double grossProfit, Double operatingIncome, Double netIncome) {
@@ -33,8 +41,33 @@ public record Fundamentals(String ticker, boolean applicable, String name, Strin
 			Double bullishShare, Double previousBullishShare) {
 	}
 
-	/** @param premiumPct this company's P/E vs. the peer median, in percent (positive = trades at a premium) */
-	public record PeerComparison(List<String> peers, Double medianPe, Double pe, Double premiumPct) {
+	/**
+	 * @param premiumPct this company's P/E vs. the peer median, in percent (positive = trades at a premium)
+	 * @param rows       each peer's multiples and growth, so the comparison can be shown and audited
+	 */
+	public record PeerComparison(List<String> peers, Double medianPe, Double pe, Double premiumPct, List<PeerRow> rows,
+			Double medianPs, Double psPremiumPct, Double medianEvEbitda, Double evEbitdaPremiumPct) {
+
+		/** Legacy arity — P/E only. */
+		public PeerComparison(List<String> peers, Double medianPe, Double pe, Double premiumPct) {
+			this(peers, medianPe, pe, premiumPct, List.of(), null, null, null, null);
+		}
+	}
+
+	/** One peer company's headline multiples (any may be null when the source had none). */
+	public record PeerRow(String symbol, Double pe, Double ps, Double evEbitda, Double revenueGrowth, Double netMargin) {
+	}
+
+	/**
+	 * The reverse-DCF read ({@link ValuationAnalyzer}).
+	 *
+	 * @param impliedGrowthPct   annual earnings growth the current price assumes (fading over 10 years)
+	 * @param deliveredGrowthPct growth the company has actually delivered, null if unknown
+	 * @param gapPts             implied minus delivered, in percentage points
+	 * @param verdict            RICH / FAIR / CHEAP
+	 */
+	public record ValuationView(double impliedGrowthPct, Double deliveredGrowthPct, double discountRatePct, Double gapPts, String verdict,
+			double price, double epsTtm, String summary) {
 	}
 
 	public static Fundamentals notApplicable(String ticker, String reason) {

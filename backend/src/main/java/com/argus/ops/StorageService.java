@@ -48,6 +48,17 @@ public class StorageService {
 					new TableSpec("paper_trades", "Paper trade outcomes", "Closed win/loss — feeds tuning"),
 					new TableSpec("agent_reliability", "Agent reliability", "Learned per-agent weight multipliers"),
 					new TableSpec("probability_calibration", "Probability calibration", "Learned probability curve"))),
+			new GroupSpec("chart", "Agent 10 · Chart Reader", "Daily price history it reads", List.of(
+					new TableSpec("price_candles", "Price candles", "Daily OHLCV per ticker"))),
+			new GroupSpec("deep", "Agent 11 · Deep Analyst", "Every deep verdict with its evidence and reasoning", List.of(
+					new TableSpec("deep_analysis", "Deep analyses", "Verdicts, specialist reads, guard notes, thesis status"))),
+			new GroupSpec("fundamentals", "Agent 12 · Fundamentals", "Company fundamentals snapshots", List.of(
+					new TableSpec("fundamentals_snapshot", "Fundamentals", "Ratios, statements, comps and reverse DCF"))),
+			new GroupSpec("learner", "Agent 13 · Trade Learner", "What Argus has learned from its own trades", List.of(
+					new TableSpec("learned_rule", "Learned rules", "Penalties, boosts and blocks with hold-out stats"),
+					new TableSpec("learning_report", "Learning reports", "Nightly win/loss study"))),
+			new GroupSpec("filings", "Agent 14 · Filings Reader", "Earnings releases and 10-Q/10-K it has read", List.of(
+					new TableSpec("filing_digest", "Filing digests", "Verified guidance, tone and risk language"))),
 			new GroupSpec("cost", "Agent 6 · Cost Governor", "Paid-API spend ledger", List.of(
 					new TableSpec("cost_events", "Cost events", "Each paid Haiku call's cost"))),
 			new GroupSpec("calendar", "Agent 7 · Economic Calendar", "Economic events it watches", List.of(

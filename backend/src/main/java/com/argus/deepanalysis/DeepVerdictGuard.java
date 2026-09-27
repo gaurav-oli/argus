@@ -21,6 +21,8 @@ import java.util.Locale;
  *   <li><b>Conviction is anchored to the data:</b> capped at 40 + 60 × min(1, |consensus| / 0.6), and lower still
  *       for ETFs, missing fundamentals or a missing chart.</li>
  *   <li><b>Holding period</b> is snapped to 7 / 30 / 90 days; a 90-day hold needs supportive fundamentals.</li>
+ *   <li><b>Its own track record.</b> Once enough of Agent 11's past verdicts of a kind have matured, a hit rate under 45% (or a
+ *       negative mean excess return) caps conviction at 55 — the analyst discounts itself when it has been wrong.</li>
  *   <li><b>Learned lessons</b> ({@link LessonEffect}, mined from Argus's own paper trades and validated on held-out data):
  *       a matching block rule downgrades a buy to WAIT, penalties and boosts move conviction, hold caps shorten the hold.</li>
  * </ul>
@@ -52,9 +54,18 @@ public final class DeepVerdictGuard {
 	public record Draft(DeepVerdict verdict, Integer holdDays, int conviction) {
 	}
 
-	/** @param lessons what Argus has learned from past trades in a situation like this one (null = none) */
+	/**
+	 * @param lessons     what Argus has learned from past trades in a situation like this one (null = none)
+	 * @param trackRecord how Agent 11's own past verdicts of this kind actually did (null = too few matured to judge)
+	 */
 	public record Input(List<Specialist> specialists, double skepticSeverity, boolean fundamentalsApplicable, Double fundamentalScore,
-			boolean isEtf, Double lastPrice, Integer earningsInTradingDays, boolean chartAvailable, LessonEffect lessons) {
+			boolean isEtf, Double lastPrice, Integer earningsInTradingDays, boolean chartAvailable, LessonEffect lessons, TrackRecord trackRecord) {
+
+		/** Legacy arity (no track record). */
+		public Input(List<Specialist> specialists, double skepticSeverity, boolean fundamentalsApplicable, Double fundamentalScore, boolean isEtf,
+				Double lastPrice, Integer earningsInTradingDays, boolean chartAvailable, LessonEffect lessons) {
+			this(specialists, skepticSeverity, fundamentalsApplicable, fundamentalScore, isEtf, lastPrice, earningsInTradingDays, chartAvailable, lessons, null);
+		}
 	}
 
 	public record Result(DeepVerdict verdict, Integer holdDays, int conviction, double consensus, List<String> notes) {
@@ -149,6 +160,13 @@ public final class DeepVerdictGuard {
 		else if (!in.isEtf && !in.fundamentalsApplicable && conviction > 65) {
 			conviction = 65;
 			notes.add("Conviction capped at 65: no fundamental data was available for this company.");
+		}
+		TrackRecord tr = in.trackRecord();
+		if (tr != null && verdict != DeepVerdict.WAIT && tr.n() >= DeepScorecardService.MIN_MATURED_FOR_TRACK_RECORD
+				&& (tr.hitRate() < 0.45 || tr.meanExcessPct() < -1.0) && conviction > 55) {
+			conviction = 55;
+			notes.add(String.format(Locale.ROOT, "Conviction capped at 55: Agent 11's own past %s verdicts beat/lagged the S&P as called only %.0f%% of the time over %d verdicts (%d-day, average %+.1f%%).",
+					verdict == DeepVerdict.WORTH_BUYING ? "'worth buying'" : "'not worth buying'", tr.hitRate() * 100, tr.n(), tr.horizonDays(), tr.meanExcessPct()));
 		}
 		if (!in.chartAvailable && conviction > 60) {
 			conviction = 60;

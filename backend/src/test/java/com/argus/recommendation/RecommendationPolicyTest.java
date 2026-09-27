@@ -434,4 +434,39 @@ class RecommendationPolicyTest {
 
 		assertTrue(v.score() < RecommendationPolicy.STRONG_SCORE, "two independent sources can never reach 'strong', boost or not");
 	}
+
+	// ---- thesis tracking, filings and valuation context ----
+
+	@Test
+	void anAtRiskDeepVerdictCostsConvictionAddsACaveatAndNoLongerSetsTheHold() {
+		var healthy = evalWith(policy, deep(DeepVerdict.WORTH_BUYING, 90), solidBuy());
+		var atRisk = evalWith(policy, new DeepView(DeepVerdict.WORTH_BUYING, 90, 75, "Deep headline", "it closes below 90", 1, true,
+				"Price fell through 90.", 90.0), solidBuy());
+
+		assertEquals(healthy.score() - 10, atRisk.score(), 1.0);
+		assertTrue(atRisk.caveats().stream().anyMatch(c -> c.contains("at risk") && c.contains("Price fell through 90.")), atRisk.caveats().toString());
+		assertEquals(7, atRisk.holdDays(), "a verdict under review must not stretch the hold to its 90 days");
+		assertEquals(90, healthy.holdDays());
+	}
+
+	@Test
+	void guidanceAndValuationBecomeFeatureTokensSoTheLearnerCanMineThem() {
+		List<AgentSignal> list = List.of(solidBuy());
+		var v = policy.evaluate(new RecommendationPolicy.Context("NVDA", engine.score(list), list, Sector.SEMICONDUCTORS, calm(), 150.0, 0.5, false,
+				null, null, new RecommendationPolicy.Standing("LOWERED", "RICH")));
+
+		assertTrue(v.features().contains("guidance=LOWERED"));
+		assertTrue(v.features().contains("val=RICH"));
+		assertTrue(evalWith(policy, null, solidBuy()).features().stream().noneMatch(t -> t.startsWith("guidance=") || t.startsWith("val=")));
+	}
+
+	@Test
+	void filingsEvidenceIsHardAndAddsItsOwnReCheckTrigger() {
+		var v = evalWith(policy, null, sig("agent-14-filings", SignalDirection.BULLISH, 0.7, 30), sig("agent-1-news", SignalDirection.BULLISH, 0.7, 10),
+				sig("agent-10-technical", SignalDirection.BULLISH, 0.6, 10));
+
+		assertTrue(v.action().actionable(), v.toString());
+		assertTrue(v.exitPlan().contains("earnings release or filing disappoints"), v.exitPlan());
+		assertTrue(v.features().contains("has=FILINGS"));
+	}
 }

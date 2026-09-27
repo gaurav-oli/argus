@@ -124,10 +124,11 @@ public class RecommendationTrigger implements Agent {
 		boolean earningsSoon = quiet.status() == QuietPeriodStatus.Status.NOTE;
 		ChartStudy chart = charts.studyFor(ticker).orElse(null);
 		DeepView deep = deepAnalyses.viewFor(ticker).orElse(null);
+		RecommendationPolicy.Standing standing = gatherer.standing(ticker);
 
 		Recommendation rec = recommendations.create(ticker, signals,
 				score -> policy.evaluate(new RecommendationPolicy.Context(ticker, score, signals, sector, regime,
-						lastPrice, move1d, earningsSoon, chart, deep)),
+						lastPrice, move1d, earningsSoon, chart, deep, standing)),
 				sector.name(), "6h review");
 		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());

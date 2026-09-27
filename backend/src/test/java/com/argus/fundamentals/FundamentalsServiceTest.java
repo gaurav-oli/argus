@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.argus.intelligence.KnownUniverse;
 import com.argus.marketdata.FinnhubRest;
+import com.argus.regime.MarketRegimeService;
+import com.argus.technical.ChartStudyService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -24,7 +26,9 @@ class FundamentalsServiceTest {
 	private final FinnhubRest finnhub = mock(FinnhubRest.class);
 	private final FundamentalsSnapshotRepository repo = mock(FundamentalsSnapshotRepository.class);
 	private final KnownUniverse universe = mock(KnownUniverse.class);
-	private final FundamentalsService service = new FundamentalsService(finnhub, "key", repo, universe);
+	private final ChartStudyService charts = mock(ChartStudyService.class);
+	private final MarketRegimeService regimes = mock(MarketRegimeService.class);
+	private final FundamentalsService service = new FundamentalsService(finnhub, "key", repo, universe, charts, regimes);
 
 	/** The stored row, rebuilt from what the service passed to the upsert. */
 	private FundamentalsSnapshot stored() {
@@ -92,7 +96,7 @@ class FundamentalsServiceTest {
 
 	@Test
 	void noApiKeyMeansNoCallsAtAll() {
-		FundamentalsService noKey = new FundamentalsService(finnhub, "", repo, universe);
+		FundamentalsService noKey = new FundamentalsService(finnhub, "", repo, universe, charts, regimes);
 
 		assertTrue(noKey.refresh("ACME").isEmpty());
 		verify(finnhub, never()).get(anyString());
@@ -141,5 +145,31 @@ class FundamentalsServiceTest {
 
 		assertTrue(second.isPresent());
 		verify(finnhub, never()).get(anyString());
+	}
+
+	@Test
+	void theReverseDcfUsesTheChartPriceAndTheLiveTenYearYield() {
+		stubFinnhub("{\"name\":\"Acme\",\"marketCapitalization\":1}",
+				"{\"metric\":{\"peTTM\":30.0,\"epsTTM\":5.0,\"beta\":1.1,\"epsGrowth5Y\":10,\"epsGrowthTTMYoy\":12}}");
+		com.argus.technical.ChartStudy chart = mock(com.argus.technical.ChartStudy.class);
+		when(chart.lastClose()).thenReturn(150.0);
+		when(charts.studyFor("ACME")).thenReturn(Optional.of(chart));
+		when(regimes.tenYearYieldPct()).thenReturn(Optional.of(5.1));
+
+		Fundamentals f = service.refresh("ACME").orElseThrow();
+
+		assertTrue(f.valuation() != null, "price + EPS available → a valuation view");
+		assertEquals(150.0, f.valuation().price(), 1e-9);
+		assertEquals(5.1 + 1.1 * 5.0, f.valuation().discountRatePct(), 0.1, "discount rate = live 10y yield + beta × ERP");
+	}
+
+	@Test
+	void everyPeersMetricsFeedTheCompsTable() {
+		stubFinnhub("{\"name\":\"Acme\",\"marketCapitalization\":1}", "{\"metric\":{\"peTTM\":20.0}}");
+
+		Fundamentals f = service.refresh("ACME").orElseThrow();
+
+		assertEquals(3, f.peers().rows().size());
+		assertEquals("P1", f.peers().rows().get(0).symbol());
 	}
 }

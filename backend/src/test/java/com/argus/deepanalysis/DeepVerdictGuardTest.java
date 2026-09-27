@@ -245,4 +245,37 @@ class DeepVerdictGuardTest {
 
 		assertEquals(DeepVerdict.WAIT, r.verdict());
 	}
+
+	// ---- Agent 11's own track record ----
+
+	private static Input withTrack(Input base, TrackRecord tr) {
+		return new Input(base.specialists(), base.skepticSeverity(), base.fundamentalsApplicable(), base.fundamentalScore(), base.isEtf(),
+				base.lastPrice(), base.earningsInTradingDays(), base.chartAvailable(), null, tr);
+	}
+
+	@Test
+	void aPoorTrackRecordCapsConvictionAt55() {
+		Result r = DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), withTrack(bullish(), new TrackRecord(30, 0.40, -2.0, 30)));
+
+		assertEquals(DeepVerdict.WORTH_BUYING, r.verdict());
+		assertTrue(r.conviction() <= 55, "conviction was " + r.conviction());
+		assertTrue(r.notes().stream().anyMatch(n -> n.contains("own past") && n.contains("40%")), r.notes().toString());
+	}
+
+	@Test
+	void aNegativeMeanExcessAloneAlsoCapsEvenWithADecentHitRate() {
+		Result r = DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), withTrack(bullish(), new TrackRecord(30, 0.60, -3.0, 30)));
+
+		assertTrue(r.conviction() <= 55);
+	}
+
+	@Test
+	void aGoodOrThinTrackRecordChangesNothing() {
+		int base = DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), bullish()).conviction();
+
+		assertEquals(base, DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), withTrack(bullish(), new TrackRecord(30, 0.62, 2.0, 30))).conviction());
+		assertEquals(base, DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), withTrack(bullish(), new TrackRecord(5, 0.10, -9.0, 30))).conviction(),
+				"five matured verdicts is noise, not a track record");
+		assertEquals(base, DeepVerdictGuard.apply(new Draft(DeepVerdict.WORTH_BUYING, 30, 85), withTrack(bullish(), null)).conviction());
+	}
 }

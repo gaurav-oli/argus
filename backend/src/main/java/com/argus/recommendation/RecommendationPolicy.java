@@ -83,7 +83,20 @@ public class RecommendationPolicy {
 	 * @param deep        Agent 11's latest fresh verdict, null if none
 	 */
 	public record Context(String ticker, ProbabilityScore score, List<AgentSignal> signals, Sector sector, MarketRegime regime,
-			Double lastPrice, Double stockMove1d, boolean earningsSoon, ChartStudy chart, DeepView deep) {
+			Double lastPrice, Double stockMove1d, boolean earningsSoon, ChartStudy chart, DeepView deep, Standing standing) {
+
+		/** Legacy arity (no filings/valuation standing). */
+		public Context(String ticker, ProbabilityScore score, List<AgentSignal> signals, Sector sector, MarketRegime regime, Double lastPrice,
+				Double stockMove1d, boolean earningsSoon, ChartStudy chart, DeepView deep) {
+			this(ticker, score, signals, sector, regime, lastPrice, stockMove1d, earningsSoon, chart, deep, null);
+		}
+	}
+
+	/**
+	 * Slow-moving context the learner should be able to condition on: the newest earnings release's guidance direction
+	 * (RAISED / MAINTAINED / LOWERED) and the reverse-DCF valuation verdict (CHEAP / FAIR / RICH). Either may be null.
+	 */
+	public record Standing(String guidance, String valuation) {
 	}
 
 	/**
@@ -163,13 +176,18 @@ public class RecommendationPolicy {
 		if (penny) {
 			raw -= 25;
 		}
+		if (ctx.deep() != null && ctx.deep().atRisk()) {
+			raw -= 10;
+			caveats.add("Agent 11's standing verdict is at risk (" + (ctx.deep().atRiskReason() == null ? "new information undermines it" : ctx.deep().atRiskReason())
+					+ ") and is being re-analysed.");
+		}
 		int baseScore = (int) Math.max(0, Math.min(100, Math.round(raw)));
 
 		// ---- hold period: the quick agents' estimate, replaced by Agent 11's when it agrees on a buy ----
 		int holdDays = holdDays(supports, ctx.earningsSoon());
 		DeepView deep = ctx.deep();
 		if (deep != null && deep.verdict() == DeepVerdict.WORTH_BUYING && dir == SignalDirection.BULLISH && deep.holdDays() != null
-				&& !ctx.earningsSoon()) {
+				&& !ctx.earningsSoon() && !deep.atRisk()) {
 			holdDays = snapHold(deep.holdDays());
 		}
 
@@ -198,7 +216,7 @@ public class RecommendationPolicy {
 		boolean singleStrongSource = independent.size() == 1 && strongestHard != null
 				&& strongestHard.weight() >= SINGLE_SOURCE_MIN_WEIGHT && hardOppose == 0;
 		if (hardSupport.isEmpty()) {
-			whyNot.add("no hard evidence (company news, insider activity, the chart, fundamentals or a deep analysis) — only "
+			whyNot.add("no hard evidence (company news, insider activity, the chart, fundamentals, filings or a deep analysis) — only "
 					+ (supportGroups.isEmpty() ? "no signals" : describe(supportGroups)));
 		}
 		else if (independent.size() < 2 && !singleStrongSource) {
@@ -285,6 +303,10 @@ public class RecommendationPolicy {
 			FeatureTokens.addIfPresent(t, "vol", FeatureTokens.volatilityBucket(ctx.chart().atrPct()));
 		}
 		t.add("deep=" + (deep == null ? "NONE" : deep.verdict().name()));
+		if (ctx.standing() != null) {
+			FeatureTokens.addIfPresent(t, "guidance", ctx.standing().guidance());
+			FeatureTokens.addIfPresent(t, "val", ctx.standing().valuation());
+		}
 		FeatureTokens.addIfPresent(t, "price", FeatureTokens.priceBucket(ctx.lastPrice()));
 		if (ctx.earningsSoon()) {
 			t.add("earnings=soon");
@@ -344,6 +366,9 @@ public class RecommendationPolicy {
 		}
 		if (hard.contains(SignalGroup.FUNDAMENTAL)) {
 			triggers.add("the fundamentals deteriorate");
+		}
+		if (hard.contains(SignalGroup.FILINGS)) {
+			triggers.add("the next earnings release or filing disappoints");
 		}
 		triggers.add("the market turns sharply against it");
 		return "Re-check after " + holdDays + " days, or sooner if " + String.join(", ", triggers) + ".";

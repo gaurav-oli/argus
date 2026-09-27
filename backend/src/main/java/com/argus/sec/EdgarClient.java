@@ -66,6 +66,36 @@ public class EdgarClient {
 		}
 	}
 
+	/** The 10-digit CIK for a ticker, or null when EDGAR does not know it (ETFs, foreign listings). */
+	public String cikOf(String ticker) {
+		try {
+			return cikFor(ticker);
+		}
+		catch (RuntimeException ex) {
+			log.debug("EDGAR CIK lookup failed for {}: {}", ticker, ex.getMessage());
+			return null;
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			return null;
+		}
+	}
+
+	/** A raw EDGAR document or JSON body; empty on any failure (never throws). Used by the filings reader. */
+	public java.util.Optional<String> fetchText(String url) {
+		try {
+			return java.util.Optional.of(get(url));
+		}
+		catch (RuntimeException ex) {
+			log.debug("EDGAR fetch failed for {}: {}", url, ex.getMessage());
+			return java.util.Optional.empty();
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			return java.util.Optional.empty();
+		}
+	}
+
 	private String cikFor(String ticker) throws InterruptedException {
 		if (cikByTicker.isEmpty()) {
 			loadTickerMap();
