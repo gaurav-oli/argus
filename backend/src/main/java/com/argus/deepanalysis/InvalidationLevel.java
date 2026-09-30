@@ -48,7 +48,14 @@ public final class InvalidationLevel {
 		return new Resolved(round(level), false);
 	}
 
+	/**
+	 * Rounds to cents for an ordinary stock, but a flat 2 decimals silently floors a sub-penny stock's level
+	 * to zero (IDEXQ at $0.0008 rounded to $0.00, which every price is "through", so the thesis tracker
+	 * flagged it AT_RISK every single hour). Scale the precision to the price instead: cents above $1,
+	 * ten-thousandths above a cent, millionths below that.
+	 */
 	private static double round(double v) {
-		return Math.round(v * 100.0) / 100.0;
+		double factor = v >= 1 ? 100.0 : v >= 0.01 ? 10_000.0 : 1_000_000.0;
+		return Math.round(v * factor) / factor;
 	}
 }

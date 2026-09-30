@@ -24,6 +24,12 @@ export function holdText(days: number | null): string | null {
   return `hold ~${days} days · ${term}`;
 }
 
+/** More decimals for a sub-$1 stock, so a real level doesn't display as a misleading $0.00. */
+function money(n: number): string {
+  const digits = n >= 1 ? 2 : n >= 0.01 ? 4 : 6;
+  return `$${n.toFixed(digits)}`;
+}
+
 export function ageText(iso: string | null): string {
   if (!iso) return "";
   const hours = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 3_600_000));
@@ -103,11 +109,11 @@ export function DeepAnalysisDetail({ a, onRerun }: { a: DeepAnalysisView; onReru
           {a.invalidationPrice != null && (
             <span className="text-text-secondary">
               {" "}
-              · price line: <Sensitive>${a.invalidationPrice.toFixed(2)}</Sensitive>
+              · price line: <Sensitive>{money(a.invalidationPrice)}</Sensitive>
               {a.priceAtAnalysis != null && (
                 <>
                   {" "}
-                  (price when analysed <Sensitive>${a.priceAtAnalysis.toFixed(2)}</Sensitive>)
+                  (price when analysed <Sensitive>{money(a.priceAtAnalysis)}</Sensitive>)
                 </>
               )}
             </span>

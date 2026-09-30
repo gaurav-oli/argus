@@ -41,6 +41,21 @@ public class SocialIngestionService {
 		}
 	}
 
+	/**
+	 * Strips characters Postgres's UTF8 text columns reject outright — NUL (U+0000) shows up in a small
+	 * fraction of StockTwits/Reddit bodies (truncated emoji, upstream encoding bugs) and fails the insert
+	 * with no partial save. Other C0 control characters are stripped too; ordinary whitespace is kept.
+	 */
+	private static String sanitize(String s) {
+		if (s == null) {
+			return null;
+		}
+		return s.codePoints()
+				.filter(c -> c == '\n' || c == '\r' || c == '\t' || c >= 0x20)
+				.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+				.toString();
+	}
+
 	void ingestOnce() {
 		List<String> heldTickers = universe.knownTickers().stream().distinct().toList();
 		if (heldTickers.isEmpty() || sources.isEmpty()) {
@@ -63,9 +78,16 @@ public class SocialIngestionService {
 					continue;
 				}
 				SentimentLabel label = SocialSentiment.resolve(p.sentimentHint(), p.body());
-				posts.save(new SocialPost(p.ticker(), p.source(), p.externalId(), p.author(), p.body(),
-						p.url(), label, SocialSentiment.score(label), p.postedAt()));
-				saved++;
+				try {
+					posts.save(new SocialPost(p.ticker(), p.source(), p.externalId(), sanitize(p.author()), sanitize(p.body()),
+							p.url(), label, SocialSentiment.score(label), p.postedAt()));
+					saved++;
+				}
+				catch (RuntimeException ex) {
+					// One malformed post (a stray NUL byte, an oversized body) must not cost the rest of the
+					// cycle — the class's whole promise is that a single failure stays single.
+					log.debug("Social ingestion: dropped one post from {} ({}): {}", p.source(), p.externalId(), ex.getMessage());
+				}
 			}
 		}
 		if (fetched > 0) {

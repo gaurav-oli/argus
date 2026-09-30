@@ -57,6 +57,16 @@ class InvalidationLevelTest {
 	}
 
 	@Test
+	void aSubPennyStockDoesNotRoundItsInvalidationLevelToZero() {
+		// IDEXQ-shaped bug: a flat 2-decimal round floored a $0.0008 stock's level to $0.00, which every
+		// live price is "through" — the thesis tracker then flagged it AT_RISK every single hour, forever.
+		Resolved r = InvalidationLevel.resolve(DeepVerdict.NOT_WORTH_BUYING, null, 0.0008, null, null, 5.0);
+
+		assertTrue(r.price() > 0, "must not floor to zero");
+		assertTrue(r.price() > 0.0008, "an avoid is invalidated by a rise, so the level sits above the price");
+	}
+
+	@Test
 	void waitHasNothingToInvalidateAndAMissingPriceCannotBeValidated() {
 		assertNull(InvalidationLevel.resolve(DeepVerdict.WAIT, 90.0, 100.0, null, null, 2.0).price());
 		assertNull(InvalidationLevel.resolve(DeepVerdict.WORTH_BUYING, 90.0, null, null, null, 2.0).price());
