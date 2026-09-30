@@ -7,11 +7,13 @@ import {
   getRecommendations,
   type GraduationSummary,
   type PersonaTake,
+  type PriceGuidance,
   type RecommendationCard as Card,
   type SignalView,
 } from "@/lib/apiClient";
 import { RecommendationChat } from "@/features/conversation/RecommendationChat";
 import { RecommendationDebate } from "@/features/conversation/RecommendationDebate";
+import { Sensitive } from "@/features/privacy/Sensitive";
 import { Carousel } from "@/components/ui/Carousel";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -206,6 +208,8 @@ function ForecastCard({
           {card.reviewOn && <span className="text-text-secondary">· re-check by {formatDay(card.reviewOn)}</span>}
         </div>
       )}
+
+      {card.priceGuidance && <PriceGuidanceStrip guidance={card.priceGuidance} />}
 
       {card.thesis && <p className="text-xs leading-relaxed text-text-primary">{card.thesis}</p>}
 
@@ -534,6 +538,53 @@ function SignalDots({ signals }: { signals: SignalView[] }) {
         const s = signals.find((x) => x.agent.startsWith(`${slot}-`));
         return <span key={slot} className={`h-2.5 w-2.5 rounded-full ${s ? dotColor(s.direction) : "bg-border"}`} />;
       })}
+    </div>
+  );
+}
+
+/** More decimals for a sub-$1 stock, so a real level doesn't display as a misleading $0.00. */
+function money(n: number): string {
+  const digits = n >= 1 ? 2 : n >= 0.01 ? 4 : 6;
+  return `$${n.toFixed(digits)}`;
+}
+
+/**
+ * What price to act at, for a human following this call: buy / sell / stop, each traced to the chart or a named
+ * house rule (never an LLM guess). A CORE_HOLD call has no fixed sell price — {@code sellNote} says why.
+ */
+function PriceGuidanceStrip({ guidance: g }: { guidance: PriceGuidance }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-accent/25 bg-accent/[0.04] px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span>
+          <span className="font-semibold text-text-primary">Buy</span>{" "}
+          <span className="tabular-nums text-gains">
+            <Sensitive>{money(g.buyPrice)}</Sensitive>
+          </span>
+        </span>
+        {g.sellPrice != null ? (
+          <span>
+            <span className="font-semibold text-text-primary">Sell</span>{" "}
+            <span className="tabular-nums text-losses">
+              <Sensitive>{money(g.sellPrice)}</Sensitive>
+            </span>
+          </span>
+        ) : (
+          <span className="font-semibold text-accent">Core holding — no fixed sell target</span>
+        )}
+        <span>
+          <span className="font-semibold text-text-primary">Stop</span>{" "}
+          <span className="tabular-nums text-warning">
+            <Sensitive>{money(g.stopPrice)}</Sensitive>
+          </span>
+        </span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-text-secondary">
+        {g.buyNote}
+        {g.sellPrice != null && <> · target: {g.sellNote}</>}
+        {g.sellPrice == null && <> {g.sellNote}</>}
+        {" "}· stop: {g.stopNote}
+      </p>
     </div>
   );
 }

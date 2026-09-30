@@ -34,17 +34,19 @@ public class RecommendationController {
 	private final RecommendationDebateService debates;
 	private final com.argus.technical.ChartStudyService charts;
 	private final com.argus.deepanalysis.DeepAnalysisService deepAnalyses;
+	private final com.argus.portfolio.LivePortfolioService prices;
 
 	public RecommendationController(RecommendationService recommendations,
 			TradeConfirmationService confirmation, GraduationService graduation,
 			RecommendationDebateService debates, com.argus.technical.ChartStudyService charts,
-			com.argus.deepanalysis.DeepAnalysisService deepAnalyses) {
+			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.portfolio.LivePortfolioService prices) {
 		this.recommendations = recommendations;
 		this.confirmation = confirmation;
 		this.graduation = graduation;
 		this.debates = debates;
 		this.charts = charts;
 		this.deepAnalyses = deepAnalyses;
+		this.prices = prices;
 	}
 
 	@GetMapping
@@ -62,9 +64,14 @@ public class RecommendationController {
 
 	/** The card plus what Agent 10 (the chart) and Agent 11 (the deep analysis) contributed to it. */
 	private RecommendationCard card(Recommendation r, GraduationState state, boolean blackSwan) {
-		return RecommendationCard.from(r, state, blackSwan,
-				charts.studyFor(r.getTicker()).map(ChartView::from).orElse(null),
-				deepAnalyses.viewFor(r.getTicker()).map(DeepSummary::from).orElse(null));
+		com.argus.technical.ChartStudy chart = charts.studyFor(r.getTicker()).orElse(null);
+		com.argus.deepanalysis.DeepView deep = deepAnalyses.viewFor(r.getTicker()).orElse(null);
+		String valuation = token(r, "val=");
+		Double lastPrice = prices.latestPrice(r.getTicker()).map(BigDecimal::doubleValue).orElse(null);
+		PriceGuidance.Guidance guidance = PriceGuidance.build(r.getAction(), r.getHoldDays() == null ? 0 : r.getHoldDays(),
+				lastPrice, chart, deep, valuation);
+		return RecommendationCard.from(r, state, blackSwan, chart == null ? null : ChartView.from(chart),
+				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance));
 	}
 
 	@GetMapping("/graduation")
@@ -126,9 +133,10 @@ public class RecommendationController {
 			String horizon, String status, String badge, boolean blackSwanActive, Instant createdAt,
 			List<SignalView> signals, String action, String actionLabel, Integer convictionScore, Integer holdDays,
 			String horizonLabel, LocalDate reviewOn, String thesis, List<String> reasons, List<String> caveats,
-			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep, String guidance, String valuation) {
+			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep, String guidance, String valuation,
+			GuidanceView priceGuidance) {
 
-		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep) {
+		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep, GuidanceView priceGuidance) {
 			BigDecimal confidence = r.getConfidence();
 			boolean capped = blackSwan && confidence.compareTo(BLACK_SWAN_CONFIDENCE_CAP) > 0;
 			if (capped) {
@@ -144,7 +152,7 @@ public class RecommendationController {
 					action == null ? null : action.name(), action == null ? null : action.label(),
 					r.getConvictionScore(), r.getHoldDays(), r.getHorizonLabel(), reviewOn, r.getThesis(),
 					lines(r.getReasons()), lines(r.getCaveats()), r.getExitPlan(), sectorLabel(r.getSector()),
-					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="));
+					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="), priceGuidance);
 		}
 	}
 
@@ -160,6 +168,20 @@ public class RecommendationController {
 
 		static ChartView from(com.argus.technical.ChartStudy s) {
 			return new ChartView(s.bias(), s.score(), s.trend().name(), s.notes().stream().limit(5).toList(), s.support(), s.resistance());
+		}
+	}
+
+	/**
+	 * What price to act at for a human following this call ({@link PriceGuidance}): buy/sell/stop levels and why,
+	 * or null (WATCH, or a stopped/finished call). A "core holding" call (style CORE_HOLD) has no {@code sellPrice}
+	 * — {@code sellNote} explains that it's held/accumulated as long as the thesis stands.
+	 */
+	public record GuidanceView(BigDecimal buyPrice, String buyNote, BigDecimal sellPrice, String sellNote,
+			BigDecimal stopPrice, String stopNote, String style) {
+
+		static GuidanceView from(PriceGuidance.Guidance g) {
+			return g == null ? null : new GuidanceView(g.buyPrice(), g.buyNote(), g.sellPrice(), g.sellNote(),
+					g.stopPrice(), g.stopNote(), g.style().name());
 		}
 	}
 

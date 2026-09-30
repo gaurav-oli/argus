@@ -722,6 +722,19 @@ export interface RecommendationCard {
   guidance: string | null;
   /** Reverse-DCF valuation read when the call was made (Agent 12): CHEAP | FAIR | RICH. */
   valuation: string | null;
+  /** What price to buy, sell and stop at — null for WATCH. A CORE_HOLD style has no sellPrice; see sellNote. */
+  priceGuidance: PriceGuidance | null;
+}
+
+export interface PriceGuidance {
+  buyPrice: number;
+  buyNote: string;
+  /** Null for a CORE_HOLD call — sellNote explains why there's no fixed target. */
+  sellPrice: number | null;
+  sellNote: string;
+  stopPrice: number;
+  stopNote: string;
+  style: "SWING" | "CORE_HOLD";
 }
 
 export interface ChartSummary {

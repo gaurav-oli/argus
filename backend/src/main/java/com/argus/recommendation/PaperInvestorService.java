@@ -87,22 +87,11 @@ public class PaperInvestorService {
 
 	// ---- entry-time intelligence: lessons, size, and a chart-based protective stop ----
 
-	private static final double MIN_STOP = 0.05;
-	private static final double MAX_STOP = 0.15;
-	private static final double DEFAULT_STOP = 0.10;
-	private static final double ATR_MULTIPLE = 2.5;
 	/** Deep verdict must be at least this convincing to flip an open position. */
 	private static final int FLIP_MIN_CONVICTION = 60;
 
-	/**
-	 * A protective stop from Agent 10's chart: {@value #ATR_MULTIPLE}× the average daily range (clamped to 5–15%),
-	 * tightened to just beyond the nearest support (for a long) or resistance (for a short) when that level is
-	 * closer but not closer than 3% — a level the chart says should hold, and whose break says the setup failed.
-	 * With no chart history, a flat 10%.
-	 */
+	/** Agent 10's chart-derived stop ({@link StopLoss}) — the actual stop on this simulated position. */
 	BigDecimal stopFor(SignalDirection direction, String ticker, BigDecimal entry) {
-		double e = entry.doubleValue();
-		double d = DEFAULT_STOP;
 		ChartStudy chart = null;
 		try {
 			chart = charts.studyFor(ticker).orElse(null);
@@ -110,21 +99,7 @@ public class PaperInvestorService {
 		catch (RuntimeException ex) {
 			log.debug("Investor: chart unavailable for {} stop: {}", ticker, ex.getMessage());
 		}
-		if (chart != null && chart.atrPct() != null) {
-			d = Math.max(MIN_STOP, Math.min(MAX_STOP, ATR_MULTIPLE * chart.atrPct() / 100.0));
-		}
-		double stop = direction == SignalDirection.BULLISH ? e * (1 - d) : e * (1 + d);
-		if (chart != null) {
-			if (direction == SignalDirection.BULLISH && chart.support() != null) {
-				double level = chart.support() * 0.99;
-				if (level < e * 0.97 && level > stop) stop = level;
-			}
-			else if (direction == SignalDirection.BEARISH && chart.resistance() != null) {
-				double level = chart.resistance() * 1.01;
-				if (level > e * 1.03 && level < stop) stop = level;
-			}
-		}
-		return BigDecimal.valueOf(stop).setScale(6, java.math.RoundingMode.HALF_UP);
+		return StopLoss.stopFor(direction, chart, entry.doubleValue());
 	}
 
 	/** Agent 11 has, since this trade opened, reached a confident verdict that opposes the position. */
