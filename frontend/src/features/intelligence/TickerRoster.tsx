@@ -7,7 +7,9 @@ import {
   type WatchItem,
 } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Sensitive } from "@/features/privacy/Sensitive";
+import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -137,16 +139,32 @@ export function TickerRow({
           <Sensitive>{row.ticker}</Sensitive>
         </span>
       </span>
-      <span className={`w-fit rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${ACTION_CLS[row.action] ?? ACTION_CLS.WATCH}`}>
-        {row.actionLabel}
-      </span>
-      <span className={`text-[12px] ${row.deepVerdict?.atRisk ? "text-warning" : row.deepVerdict ? "text-gains" : "text-text-tertiary"}`}>
-        {row.deepVerdict?.atRisk ? "⚠ at risk" : row.deepVerdict ? "worth buying" : "—"}
-      </span>
-      <span className={`text-[12px] ${row.chart ? biasColor[row.chart.bias] : "text-text-tertiary"}`}>
-        {row.chart ? `${biasArrow[row.chart.bias]} ${row.chart.bias.toLowerCase()}` : "—"}
-      </span>
-      <span className="text-[12px] text-text-tertiary">{row.valuation ?? "—"}</span>
+      <Tooltip content={ACTION_GLOSSARY[row.action] ?? ACTION_GLOSSARY.WATCH}>
+        <span className={`w-fit rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${ACTION_CLS[row.action] ?? ACTION_CLS.WATCH}`}>
+          {row.actionLabel}
+        </span>
+      </Tooltip>
+      <Tooltip content={row.deepVerdict?.atRisk ? DEEP_GLOSSARY.atRisk : row.deepVerdict ? DEEP_GLOSSARY.worthBuying : DEEP_GLOSSARY.none}>
+        <span className={`w-fit text-[12px] ${row.deepVerdict?.atRisk ? "text-warning" : row.deepVerdict ? "text-gains" : "text-text-tertiary"}`}>
+          {row.deepVerdict?.atRisk ? "⚠ at risk" : row.deepVerdict ? "worth buying" : "—"}
+        </span>
+      </Tooltip>
+      {row.chart ? (
+        <Tooltip content={CHART_GLOSSARY[row.chart.bias]}>
+          <span className={`w-fit text-[12px] ${biasColor[row.chart.bias]}`}>
+            {biasArrow[row.chart.bias]} {row.chart.bias.toLowerCase()}
+          </span>
+        </Tooltip>
+      ) : (
+        <span className="text-[12px] text-text-tertiary">—</span>
+      )}
+      {row.valuation ? (
+        <Tooltip content={VALUATION_GLOSSARY[row.valuation] ?? row.valuation}>
+          <span className="w-fit text-[12px] text-text-tertiary">{row.valuation}</span>
+        </Tooltip>
+      ) : (
+        <span className="text-[12px] text-text-tertiary">—</span>
+      )}
     </motion.button>
   );
 }

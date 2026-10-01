@@ -19,8 +19,10 @@ import { DeepAnalysisForTicker } from "./DeepAnalysisCard";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ACTION_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { useEffect, useState } from "react";
@@ -120,13 +122,15 @@ export function TickerDetail({
           <div className="flex items-center gap-4">
             <ConvictionRing value={roster.conviction} tone={roster.action.includes("AVOID") ? "losses" : "accent"} />
             <div>
-              <span
-                className={`rounded px-2.5 py-1 text-[12px] font-semibold ${
-                  roster.action.includes("STRONG") ? "bg-gains/20 text-gains" : roster.action === "WATCH" ? "bg-[var(--hover-wash)] text-text-secondary" : roster.action.includes("AVOID") ? "bg-losses/14 text-losses" : "bg-gains/14 text-gains"
-                }`}
-              >
-                {roster.actionLabel}
-              </span>
+              <Tooltip content={ACTION_GLOSSARY[roster.action] ?? ACTION_GLOSSARY.WATCH}>
+                <span
+                  className={`rounded px-2.5 py-1 text-[12px] font-semibold ${
+                    roster.action.includes("STRONG") ? "bg-gains/20 text-gains" : roster.action === "WATCH" ? "bg-[var(--hover-wash)] text-text-secondary" : roster.action.includes("AVOID") ? "bg-losses/14 text-losses" : "bg-gains/14 text-gains"
+                  }`}
+                >
+                  {roster.actionLabel}
+                </span>
+              </Tooltip>
               {roster.holdLabel && <p className="mt-1 text-[11px] text-text-secondary">Hold ~{roster.holdLabel}</p>}
             </div>
           </div>
@@ -158,7 +162,13 @@ export function TickerDetail({
           </div>
           <div>
             <p className="text-[9.5px] uppercase tracking-wide text-text-tertiary">Valuation · 12</p>
-            <p className="font-display text-base font-semibold text-text-primary">{roster.valuation ?? "—"}</p>
+            {roster.valuation ? (
+              <Tooltip content={VALUATION_GLOSSARY[roster.valuation] ?? roster.valuation} side="bottom">
+                <p className="w-fit font-display text-base font-semibold text-text-primary">{roster.valuation}</p>
+              </Tooltip>
+            ) : (
+              <p className="font-display text-base font-semibold text-text-primary">—</p>
+            )}
           </div>
         </div>
       )}
