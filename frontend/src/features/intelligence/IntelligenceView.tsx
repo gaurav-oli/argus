@@ -4,43 +4,51 @@ import {
   getInsiderActivity,
   getNewsFeed,
   getSocialSentiment,
-  getSourceCredibility,
-  getStrangerAlerts,
   getWebBuzz,
   type InsiderActivity,
   type NewsItem,
-  type SentimentLabel,
-  type SourceCredibilityItem,
-  type StrangerAlertItem,
   type TickerBuzz,
   type TickerSentiment,
 } from "@/lib/apiClient";
-import { RecommendationCards } from "@/features/recommendations/RecommendationCards";
+import { AgentLabs } from "@/features/intelligence/AgentLabs";
 import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
-import { ChartStudyPanel } from "@/features/intelligence/ChartStudyPanel";
-import { DeepAnalysisPanel } from "@/features/intelligence/DeepAnalysisPanel";
-import { FilingsPanel, FundamentalsPanel } from "@/features/intelligence/CompanyReadsPanel";
-import { StrategyLibraryPanel } from "@/features/intelligence/StrategyLibraryPanel";
-import { LearningPanel } from "@/features/intelligence/LearningPanel";
-import { Watchlist } from "@/features/intelligence/Watchlist";
+import { CommandPalette, type PaletteItem } from "@/features/intelligence/CommandPalette";
+import { TickerDetail } from "@/features/intelligence/TickerDetail";
+import { TickerRow, useTickerRoster } from "@/features/intelligence/TickerRoster";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
-import { Sensitive } from "@/features/privacy/Sensitive";
+import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { riskColorClass } from "@/lib/scoreBands";
+import { SlidingTabs } from "@/components/ui/SlidingTabs";
+import { Sensitive } from "@/features/privacy/Sensitive";
+import { TiltCard } from "@/components/ui/TiltCard";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
+const VIEWS = [
+  { value: "today", label: "Today" },
+  { value: "tickers", label: "Tickers" },
+  { value: "labs", label: "Agent Labs" },
+];
+
 /**
- * Intelligence view (Epic 4 — Agent 1). Surfaces the news feed with sentiment/relevance (Stories
- * 4.1/4.2), the Source Credibility Engine (Story 4.3), and active Stranger Danger alerts (Story 4.4)
- * from the session-gated /api/intelligence endpoints. Read-only; data is produced by the backend
- * agents (or the dev seeder when there's no live Finnhub key).
+ * Intelligence — rebuilt as a 3-tier command center instead of a flat stack of 15 equal-weight panels
+ * (Agents 1-4, 10-15 each used to iterate the whole universe on its own section; a stock's story was
+ * scattered across six of them). Now: Today surfaces only what's actionable, Tickers is one dense
+ * searchable roster, Agent Labs holds the cross-ticker/reference views, and opening a ticker assembles
+ * every agent's read of it on one screen. Session data (news/social/insider/buzz) is still fetched once
+ * here and handed down, so Ticker Detail doesn't refetch the whole feed per ticker.
  */
 export function IntelligenceView() {
+  const [view, setView] = useState("today");
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const reduce = useReducedMotion();
+
+  const { rows, loading, allTickers } = useTickerRoster();
+  const logos = useCompanyLogos(allTickers);
+
   const [news, setNews] = useState<NewsItem[] | null>(null);
-  const [sources, setSources] = useState<SourceCredibilityItem[] | null>(null);
-  const [strangers, setStrangers] = useState<StrangerAlertItem[] | null>(null);
   const [social, setSocial] = useState<TickerSentiment[] | null>(null);
   const [insider, setInsider] = useState<InsiderActivity[] | null>(null);
   const [buzz, setBuzz] = useState<TickerBuzz[] | null>(null);
@@ -52,8 +60,6 @@ export function IntelligenceView() {
         .then((v) => active && set(v))
         .catch(() => active && set([] as unknown as T));
     load(getNewsFeed, setNews);
-    load(getSourceCredibility, setSources);
-    load(getStrangerAlerts, setStrangers);
     load(getSocialSentiment, setSocial);
     load(getInsiderActivity, setInsider);
     load(getWebBuzz, setBuzz);
@@ -62,468 +68,188 @@ export function IntelligenceView() {
     };
   }, []);
 
-  // One shared batch fetch (not one per section) for every ticker shown anywhere on this page.
-  const allTickers = useMemo(
-    () => [
-      ...(strangers ?? []).map((a) => a.ticker),
-      ...(social ?? []).map((t) => t.ticker),
-      ...(insider ?? []).map((x) => x.ticker),
-      ...(buzz ?? []).map((t) => t.ticker),
-      ...(news ?? []).flatMap((n) => n.tickers),
-    ],
-    [strangers, social, insider, buzz, news],
-  );
-  const logos = useCompanyLogos(allTickers);
+  const actionable = useMemo(() => (rows ?? []).filter((r) => r.action !== "WATCH").slice(0, 4), [rows]);
+  const condensed = useMemo(() => (rows ?? []).slice(0, 6), [rows]);
+
+  const paletteItems = useMemo<PaletteItem[]>(() => {
+    const tickerItems: PaletteItem[] = (rows ?? []).map((r) => ({
+      id: `t-${r.ticker}`,
+      icon: "→",
+      label: `${r.ticker}`,
+      hint: r.actionLabel,
+      onSelect: () => setSelectedTicker(r.ticker),
+    }));
+    const labItems: PaletteItem[] = [
+      { id: "lab", icon: "◆", label: "Agent Labs — every agent's cross-ticker view", onSelect: () => setView("labs") },
+      { id: "all", icon: "▤", label: "All tickers", onSelect: () => setView("tickers") },
+    ];
+    return [...tickerItems, ...labItems];
+  }, [rows]);
+
+  const selectedRoster = rows?.find((r) => r.ticker === selectedTicker);
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Agents 1–4 · 10–13"
+        eyebrow="Agents 1–15"
         title="Intelligence"
-        subtitle="Recommendations, deep analysis, chart studies and what Argus has learned — plus news, social chatter, insider filings, web buzz, source trust, and pump-and-dump watch."
+        subtitle="What's actionable right now, every ticker Argus follows, and how each agent arrived there."
+        action={<CommandPalette items={paletteItems} />}
       />
 
-      <div className="flex flex-col gap-6">
-      <BreakingAlerts />
-      <RecommendationCards />
-      <DeepAnalysisPanel />
-      <ChartStudyPanel />
-      <FundamentalsPanel />
-      <FilingsPanel />
-      <StrategyLibraryPanel />
-      <LearningPanel />
-      <Watchlist />
-      {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} logos={logos} />}
-      <SocialSection items={social} logos={logos} />
-      <InsiderSection items={insider} logos={logos} />
-      <WebBuzzSection items={buzz} logos={logos} />
-      <NewsSection items={news} logos={logos} />
-      <SourceSection items={sources} />
-      </div>
-    </div>
-  );
-}
-
-function SocialSection({ items, logos }: { items: TickerSentiment[] | null; logos: Record<string, string> }) {
-  if (items === null) {
-    return (
-      <Card title="Social sentiment · Agent 2">
-        <Skeleton className="h-24 w-full" />
-      </Card>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <Card title="Social sentiment · Agent 2">
-        <p className="text-sm text-text-secondary">
-          No social posts yet — Agent 2 tracks StockTwits chatter on your holdings (gathers every ~10 min).
-        </p>
-      </Card>
-    );
-  }
-  const moodColor = (m: string) =>
-    m === "Bullish" ? "var(--color-gains)" : m === "Bearish" ? "var(--color-losses)" : "var(--color-text-secondary)";
-  return (
-    <Card title="Social sentiment · Agent 2" count={items.length}>
-      <ul className="flex flex-col gap-3">
-        {items.map((t) => {
-          const scored = t.bullish + t.bearish;
-          const bullPct = scored === 0 ? 50 : Math.round((t.bullish / scored) * 100);
-          return (
-            <li key={t.ticker} className="flex items-center gap-3">
-              <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={20} />
-              <Sensitive className="w-14 shrink-0 font-mono text-sm font-semibold">
-                <span className="w-14 shrink-0 font-mono text-sm font-semibold text-text-primary">{t.ticker}</span>
-              </Sensitive>
-              <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-[var(--hairline)]">
-                <div className="h-full bg-gains" style={{ width: `${bullPct}%` }} />
-                <div className="h-full bg-losses" style={{ width: `${100 - bullPct}%` }} />
-              </div>
-              <span className="w-28 shrink-0 text-right font-mono text-[11px] text-text-secondary">
-                {t.bullish}▲ {t.bearish}▼ · {t.total}
-              </span>
-              <span className="w-16 shrink-0 text-right text-xs font-semibold" style={{ color: moodColor(t.mood) }}>
-                {t.mood}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
-
-function InsiderSection({ items, logos }: { items: InsiderActivity[] | null; logos: Record<string, string> }) {
-  if (items === null) {
-    return (
-      <Card title="Insider activity · Agent 4">
-        <Skeleton className="h-20 w-full" />
-      </Card>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <Card title="Insider activity · Agent 4">
-        <p className="text-sm text-text-secondary">
-          No recent insider filings — Agent 4 watches SEC EDGAR Form 4s on your holdings (refreshes every ~6h).
-        </p>
-      </Card>
-    );
-  }
-  const tone = (t: string) =>
-    t === "BUY" ? "var(--color-gains)" : t === "SELL" ? "var(--color-losses)" : "var(--color-text-secondary)";
-  const fmtShares = (n: number | null) => (n == null ? "" : `${Math.round(n).toLocaleString()} sh`);
-  return (
-    <Card title="Insider activity · Agent 4" count={items.length}>
-      <ul className="flex flex-col divide-y divide-border/50">
-        {items.slice(0, 12).map((x, i) => (
-          <li key={i} className="flex items-center gap-3 py-2 text-sm">
-            <CompanyIcon ticker={x.ticker} logoUrl={logos[x.ticker]} title={x.ticker} size={18} />
-            <Sensitive className="w-12 shrink-0 font-mono font-semibold">
-              <span className="w-12 shrink-0 font-mono font-semibold text-text-primary">{x.ticker}</span>
-            </Sensitive>
-            <span
-              className="w-14 shrink-0 text-xs font-semibold uppercase"
-              style={{ color: tone(x.transactionType) }}
-            >
-              {x.transactionType}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-text-secondary">
-              <span className="text-text-primary">{x.insiderName ?? "—"}</span>
-              {x.insiderTitle && <span className="ml-1.5 text-xs">· {x.insiderTitle}</span>}
-            </span>
-            <span className="shrink-0 font-mono text-[11px] text-text-secondary">{fmtShares(x.shares)}</span>
-            <span className="w-20 shrink-0 text-right font-mono text-[11px] text-text-secondary">{x.filedAt}</span>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function WebBuzzSection({ items, logos }: { items: TickerBuzz[] | null; logos: Record<string, string> }) {
-  if (items === null) {
-    return (
-      <Card title="Web buzz · Agent 3">
-        <Skeleton className="h-20 w-full" />
-      </Card>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <Card title="Web buzz · Agent 3">
-        <p className="text-sm text-text-secondary">
-          No web activity yet — Agent 3 tracks Hacker News discussion + Wikipedia attention on your holdings (every ~6h).
-        </p>
-      </Card>
-    );
-  }
-  const moodColor = (m: string) =>
-    m === "Bullish"
-      ? "var(--color-gains)"
-      : m === "Bearish"
-        ? "var(--color-losses)"
-        : m === "Trending"
-          ? "var(--color-accent)"
-          : "var(--color-text-secondary)";
-  return (
-    <Card title="Web buzz · Agent 3" count={items.length}>
-      <ul className="flex flex-col divide-y divide-border/50">
-        {items.slice(0, 10).map((t) => (
-          <li key={t.ticker} className="flex items-center gap-3 py-2 text-sm">
-            <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
-            <Sensitive className="w-14 shrink-0 font-mono font-semibold">
-              <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
-            </Sensitive>
-            <span className="min-w-0 flex-1 text-text-secondary">
-              {t.hnStories > 0 ? (
-                <>
-                  <span className="text-text-primary">{t.hnStories}</span> HN
-                  {(t.hnBullish > 0 || t.hnBearish > 0) && (
-                    <span className="ml-1 text-xs">
-                      ({t.hnBullish}↑/{t.hnBearish}↓)
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="text-xs">no HN chatter</span>
-              )}
-              {t.wikiViewsRecent > 0 && (
-                <span className="ml-2 text-xs">
-                  · {t.wikiViewsRecent.toLocaleString()} wiki views
-                  {t.attentionRatio >= 1.3 && <span className="ml-1 text-accent">↑ {t.attentionRatio}×</span>}
-                </span>
-              )}
-            </span>
-            <span
-              className="w-16 shrink-0 text-right text-xs font-semibold"
-              style={{ color: moodColor(t.mood) }}
-            >
-              {t.mood}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function Card({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
-  return (
-    <section className="glass relative overflow-hidden rounded-2xl p-6">
-      <h2 className="mb-4 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-        {title}
-        {count != null && (
-          <span className="rounded-full bg-border/60 px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">
-            {count}
-          </span>
-        )}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-/** A ticker (or "Broader market") with its articles and net mood, for the grouped News view. */
-interface NewsGroup {
-  ticker: string;
-  items: NewsItem[];
-  bullish: number;
-  bearish: number;
-}
-
-const UNTAGGED = "Broader market";
-const MAX_PER_GROUP = 4;
-
-/** Group articles under each ticker (an article appears under each of its tickers); untagged last. */
-function groupByTicker(items: NewsItem[]): NewsGroup[] {
-  const map = new Map<string, NewsGroup>();
-  for (const n of items) {
-    const keys = n.tickers.length > 0 ? n.tickers : [UNTAGGED];
-    for (const t of keys) {
-      const g = map.get(t) ?? { ticker: t, items: [], bullish: 0, bearish: 0 };
-      g.items.push(n);
-      if (n.sentimentLabel === "BULLISH") g.bullish += 1;
-      else if (n.sentimentLabel === "BEARISH") g.bearish += 1;
-      map.set(t, g);
-    }
-  }
-  return [...map.values()].sort((a, b) => {
-    // Tagged tickers before the untagged bucket, then by article volume.
-    if (a.ticker === UNTAGGED) return 1;
-    if (b.ticker === UNTAGGED) return -1;
-    return b.items.length - a.items.length;
-  });
-}
-
-function mood(g: NewsGroup): { symbol: string; label: string; color: string } {
-  if (g.bullish > g.bearish) return { symbol: "▲", label: "bullish", color: "var(--color-gains)" };
-  if (g.bearish > g.bullish) return { symbol: "▼", label: "bearish", color: "var(--color-losses)" };
-  return { symbol: "–", label: "neutral", color: "var(--color-text-secondary)" };
-}
-
-function NewsSection({ items, logos }: { items: NewsItem[] | null; logos: Record<string, string> }) {
-  if (items === null) {
-    return (
-      <Card title="News & Signals">
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      </Card>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <Card title="News & Signals">
-        <Empty>No articles ingested yet. Agent 1 populates this on its next cycle.</Empty>
-      </Card>
-    );
-  }
-
-  const groups = groupByTicker(items);
-  const movers = groups.filter((g) => g.ticker !== UNTAGGED && g.bullish !== g.bearish).length;
-
-  return (
-    <Card title="News & Signals" count={items.length}>
-      <p className="mb-4 flex items-center gap-1.5 text-sm font-medium text-text-primary">
-        <span aria-hidden>⚡</span>
-        {movers > 0 ? (
-          <>
-            <span className="tabular-nums">{movers}</span> holding{movers === 1 ? "" : "s"} moving on news
-          </>
+      <AnimatePresence mode="wait">
+        {selectedTicker ? (
+          <motion.div key="detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <TickerDetail
+              ticker={selectedTicker}
+              roster={selectedRoster}
+              news={news ?? []}
+              social={social ?? []}
+              insider={insider ?? []}
+              buzz={buzz ?? []}
+              onClose={() => setSelectedTicker(null)}
+            />
+          </motion.div>
         ) : (
-          "Nothing materially moving on news right now"
-        )}
-      </p>
-      <div className="flex flex-col gap-4">
-        {groups.map((g) => (
-          <NewsGroupRow key={g.ticker} group={g} logoUrl={logos[g.ticker]} />
-        ))}
-      </div>
-    </Card>
-  );
-}
+          <motion.div key="shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <SlidingTabs id="intel-view" tabs={VIEWS} value={view} onChange={setView} className="mb-6" />
 
-function NewsGroupRow({ group, logoUrl }: { group: NewsGroup; logoUrl: string | undefined }) {
-  const m = mood(group);
-  const shown = group.items.slice(0, MAX_PER_GROUP);
-  const extra = group.items.length - shown.length;
-  const isTicker = group.ticker !== UNTAGGED;
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-1.5">
-        <div className="flex items-center gap-2">
-          {isTicker && <CompanyIcon ticker={group.ticker} logoUrl={logoUrl} title={group.ticker} size={18} />}
-          <span
-            className={
-              isTicker
-                ? "font-mono text-sm font-semibold text-text-primary"
-                : "text-sm font-semibold text-text-secondary"
-            }
-          >
-            {group.ticker}
-          </span>
-          <span className="text-xs font-medium" style={{ color: m.color }}>
-            {m.symbol} {m.label}
-          </span>
-        </div>
-        <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">
-          {group.items.length} item{group.items.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      <ul className="mt-1.5 flex flex-col gap-1.5">
-        {shown.map((n) => (
-          <li key={`${group.ticker}-${n.id}`} className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm text-text-primary">{n.headline}</p>
-              <p className="text-[11px] text-text-secondary">
-                {n.source} · {timeAgo(n.publishedAt)}
-              </p>
-            </div>
-            <SentimentBadge label={n.sentimentLabel} score={n.sentimentScore} />
-          </li>
-        ))}
-      </ul>
-      {extra > 0 && (
-        <p className="mt-1 text-[11px] text-text-secondary/80">
-          +{extra} more {group.ticker === UNTAGGED ? "" : `on ${group.ticker}`}
-        </p>
-      )}
+            <AnimatePresence mode="wait">
+              {view === "today" && (
+                <motion.div
+                  key="today"
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22 }}
+                  className="flex flex-col gap-8"
+                >
+                  <BreakingAlerts />
+
+                  <section>
+                    <div className="mb-4 flex items-baseline justify-between">
+                      <h2 className="font-display text-base font-bold text-text-primary">Needs your attention</h2>
+                      <span className="text-[11px] text-text-tertiary">{actionable.length} actionable call{actionable.length === 1 ? "" : "s"}</span>
+                    </div>
+                    {loading ? (
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <Skeleton className="h-28 w-full" />
+                        <Skeleton className="h-28 w-full" />
+                        <Skeleton className="h-28 w-full" />
+                        <Skeleton className="h-28 w-full" />
+                      </div>
+                    ) : actionable.length === 0 ? (
+                      <p className="text-sm text-text-secondary">Nothing actionable right now — Argus is watching, not calling anything.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        {actionable.map((r, i) => (
+                          <motion.div
+                            key={r.ticker}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.06, type: "spring", stiffness: 260, damping: 24 }}
+                          >
+                            <TiltCard onClick={() => setSelectedTicker(r.ticker)} className="cursor-pointer rounded-xl border border-border bg-surface p-4">
+                              <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                  <CompanyIcon ticker={r.ticker} logoUrl={logos[r.ticker]} title={r.ticker} size={20} />
+                                  <span className="text-[13px] font-semibold text-text-primary">
+                                    <Sensitive>{r.ticker}</Sensitive>
+                                  </span>
+                                </span>
+                                {r.conviction != null && <ConvictionRing value={r.conviction} size={40} tone={r.action.includes("AVOID") ? "losses" : "accent"} />}
+                              </div>
+                              <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
+                                {r.actionLabel}
+                                {r.holdLabel && ` · hold ~${r.holdLabel}`}
+                                {r.deepVerdict?.atRisk && <span className="ml-1 font-semibold text-warning">⚠ at risk</span>}
+                              </p>
+                            </TiltCard>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section>
+                    <div className="mb-3 flex items-baseline justify-between">
+                      <h2 className="font-display text-base font-bold text-text-primary">Your tickers</h2>
+                      <button type="button" onClick={() => setView("tickers")} className="text-xs font-medium text-accent">
+                        View all {rows?.length ?? ""} →
+                      </button>
+                    </div>
+                    <div className="rounded-xl border border-border bg-surface px-4">
+                      {loading ? (
+                        <Skeleton className="h-40 w-full" />
+                      ) : condensed.length === 0 ? (
+                        <p className="py-4 text-sm text-text-secondary">No tickers scored yet.</p>
+                      ) : (
+                        condensed.map((r, i) => <TickerRow key={r.ticker} row={r} logoUrl={logos[r.ticker]} index={i} onOpen={setSelectedTicker} dense />)
+                      )}
+                    </div>
+                  </section>
+
+                  <section>
+                    <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+                      How Argus is thinking — reference, not today&apos;s action
+                    </h2>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <button type="button" onClick={() => setView("labs")} className="rounded-lg border border-border p-3 text-left transition-colors hover:border-accent/40">
+                        <p className="text-xs font-semibold text-text-primary">Strategy library · 15</p>
+                        <p className="mt-1 text-[11px] text-text-secondary">Published strategies, tested here</p>
+                      </button>
+                      <button type="button" onClick={() => setView("labs")} className="rounded-lg border border-border p-3 text-left transition-colors hover:border-accent/40">
+                        <p className="text-xs font-semibold text-text-primary">Trade Learner · 13</p>
+                        <p className="mt-1 text-[11px] text-text-secondary">Rules learned from past trades</p>
+                      </button>
+                      <button type="button" onClick={() => setView("labs")} className="rounded-lg border border-border p-3 text-left transition-colors hover:border-accent/40">
+                        <p className="text-xs font-semibold text-text-primary">Trust &amp; Sources</p>
+                        <p className="mt-1 text-[11px] text-text-secondary">Source credibility, Stranger Danger</p>
+                      </button>
+                      <button type="button" onClick={() => setView("labs")} className="rounded-lg border border-border p-3 text-left transition-colors hover:border-accent/40">
+                        <p className="text-xs font-semibold text-text-primary">Chart &amp; Fundamentals</p>
+                        <p className="mt-1 text-[11px] text-text-secondary">Agents 10, 12, 14 — whole universe</p>
+                      </button>
+                    </div>
+                  </section>
+                </motion.div>
+              )}
+
+              {view === "tickers" && (
+                <motion.div
+                  key="tickers"
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22 }}
+                >
+                  <div className="rounded-xl border border-border bg-surface px-4">
+                    {loading ? (
+                      <Skeleton className="h-96 w-full" />
+                    ) : rows && rows.length > 0 ? (
+                      rows.map((r, i) => <TickerRow key={r.ticker} row={r} logoUrl={logos[r.ticker]} index={i} onOpen={setSelectedTicker} />)
+                    ) : (
+                      <p className="py-6 text-sm text-text-secondary">No tickers scored yet.</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {view === "labs" && (
+                <motion.div
+                  key="labs"
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22 }}
+                >
+                  <AgentLabs />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
-}
-
-function SourceSection({ items }: { items: SourceCredibilityItem[] | null }) {
-  if (items === null) {
-    return (
-      <Card title="Source Credibility">
-        <Skeleton className="h-4 w-full" />
-      </Card>
-    );
-  }
-  return (
-    <Card title="Source Credibility" count={items.length}>
-      {items.length === 0 ? (
-        <Empty>No sources scored yet.</Empty>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {items.map((s) => (
-            <li key={s.source} className="flex items-center gap-3">
-              <span className="w-40 truncate text-sm text-text-primary">{s.source}</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border/60">
-                <div
-                  className={`h-full rounded-full ${tier(s.tier).bar}`}
-                  style={{ width: `${s.score}%` }}
-                />
-              </div>
-              <span className="w-8 text-right text-xs tabular-nums text-text-secondary">{s.score}</span>
-              <span className={`w-20 text-right text-[11px] font-medium ${tier(s.tier).text}`}>
-                {s.blocked ? "BLOCKED" : s.tier}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-function StrangerSection({ alerts, logos }: { alerts: StrangerAlertItem[]; logos: Record<string, string> }) {
-  return (
-    <Card title="Stranger Danger — pump & dump watch" count={alerts.length}>
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {alerts.map((a) => (
-          <li key={a.ticker} className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <CompanyIcon ticker={a.ticker} logoUrl={logos[a.ticker]} title={a.ticker} size={18} />
-                <span className="text-sm font-semibold text-text-primary">{a.ticker}</span>
-              </div>
-              <span className={`text-sm font-bold tabular-nums ${riskColor(a.riskScore)}`}>
-                {a.riskScore}
-                <span className="ml-0.5 text-[11px] font-normal text-text-secondary">/100 risk</span>
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {a.coverageCount} articles · needs {a.requiredConsensus}/7 agents to recommend
-            </p>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function SentimentBadge({ label, score }: { label: SentimentLabel | null; score: number | null }) {
-  if (!label) {
-    return <span className="shrink-0 text-[11px] text-text-secondary">unscored</span>;
-  }
-  const styles: Record<SentimentLabel, string> = {
-    BULLISH: "bg-gains/15 text-gains",
-    BEARISH: "bg-losses/15 text-losses",
-    NEUTRAL: "bg-border/60 text-text-secondary",
-  };
-  return (
-    <span
-      className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums ${styles[label]}`}
-    >
-      {label.toLowerCase()}
-      {score != null && <span className="ml-1 opacity-80">{score > 0 ? "+" : ""}{score.toFixed(2)}</span>}
-    </span>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-text-secondary">{children}</p>;
-}
-
-function tier(t: string): { text: string; bar: string } {
-  switch (t) {
-    case "PLATINUM":
-    case "GOLD":
-      return { text: "text-gains", bar: "bg-gains" };
-    case "SILVER":
-    case "BRONZE":
-      return { text: "text-text-secondary", bar: "bg-text-secondary" };
-    case "FLAGGED":
-      return { text: "text-warning", bar: "bg-warning" };
-    default:
-      return { text: "text-losses", bar: "bg-losses" };
-  }
-}
-
-function riskColor(score: number): string {
-  return riskColorClass(score);
-}
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.round(hrs / 24)}d ago`;
 }

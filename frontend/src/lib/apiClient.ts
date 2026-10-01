@@ -1749,6 +1749,79 @@ export interface FundamentalsRow {
 
 export const getFundamentals = (): Promise<FundamentalsRow[]> => apiGet<FundamentalsRow[]>("/api/fundamentals");
 
+export interface FundamentalsQuarter {
+  endDate: string;
+  revenue: number | null;
+  grossProfit: number | null;
+  operatingIncome: number | null;
+  netIncome: number | null;
+}
+export interface EarningsSurprise {
+  period: string;
+  actual: number | null;
+  estimate: number | null;
+  surprisePct: number | null;
+}
+export interface AnalystConsensus {
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+  bullishShare: number | null;
+  previousBullishShare: number | null;
+}
+export interface PeerRow {
+  symbol: string;
+  pe: number | null;
+  ps: number | null;
+  evEbitda: number | null;
+  revenueGrowth: number | null;
+  netMargin: number | null;
+}
+export interface PeerComparison {
+  peers: string[];
+  medianPe: number | null;
+  pe: number | null;
+  premiumPct: number | null;
+  rows: PeerRow[];
+  medianPs: number | null;
+  psPremiumPct: number | null;
+  medianEvEbitda: number | null;
+  evEbitdaPremiumPct: number | null;
+}
+export interface ValuationView {
+  impliedGrowthPct: number;
+  deliveredGrowthPct: number | null;
+  discountRatePct: number;
+  gapPts: number | null;
+  verdict: "CHEAP" | "FAIR" | "RICH";
+  price: number;
+  epsTtm: number;
+  summary: string;
+}
+/** Full per-ticker fundamentals (Agent 12) — the detail a ticker's Fundamentals tab shows. */
+export interface FundamentalsDetail {
+  ticker: string;
+  applicable: boolean;
+  name: string | null;
+  industry: string | null;
+  marketCapMillions: number | null;
+  ratios: Record<string, number>;
+  quarters: FundamentalsQuarter[];
+  earnings: EarningsSurprise[];
+  analysts: AnalystConsensus | null;
+  peers: PeerComparison | null;
+  score: number;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  notes: string[];
+  fetchedAt: string;
+  valuation: ValuationView | null;
+}
+export const getFundamentalsFor = (ticker: string): Promise<FundamentalsDetail> =>
+  apiGet<FundamentalsDetail>(`/api/fundamentals/${encodeURIComponent(ticker)}`);
+
 export interface FilingRow {
   ticker: string;
   form: string;
@@ -1761,6 +1834,33 @@ export interface FilingRow {
 }
 
 export const getFilings = (): Promise<FilingRow[]> => apiGet<FilingRow[]>("/api/filings");
+
+export interface FilingDigestItem {
+  form: string;
+  kind: "EARNINGS_RELEASE" | "QUARTERLY_REPORT" | "ANNUAL_REPORT";
+  filedAt: string;
+  summary: string;
+  guidance: string | null;
+  guidanceDetail: string | null;
+  tone: string | null;
+  score: number;
+  verifiedFacts: number;
+  droppedFacts: number;
+  accession: string;
+}
+/** Full per-ticker filings read (Agent 14) — the detail a ticker's Fundamentals/Filings tab shows. */
+export interface FilingsDetail {
+  ticker: string;
+  score: number;
+  guidance: string | null;
+  tone: string | null;
+  latestEarningsDate: string | null;
+  headline: string | null;
+  ageDays: number;
+  digests: FilingDigestItem[];
+}
+export const getFilingsFor = (ticker: string): Promise<FilingsDetail> =>
+  apiGet<FilingsDetail>(`/api/filings/${encodeURIComponent(ticker)}`);
 
 // ---- Agent 15: academic strategies ----
 
