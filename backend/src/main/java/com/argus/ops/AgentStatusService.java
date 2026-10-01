@@ -19,6 +19,9 @@ import com.argus.intelligence.SourceCredibilityRepository;
 import com.argus.intelligence.StrangerAlertRepository;
 import com.argus.internet.WebMentionRepository;
 import com.argus.recommendation.RecommendationRepository;
+import com.argus.strategy.AcademicStrategy;
+import com.argus.strategy.AcademicStrategyRepository;
+import com.argus.strategy.StrategyUniverseRepository;
 import com.argus.research.ResearchJob;
 import com.argus.research.ResearchJobRepository;
 import com.argus.sec.SecFilingRepository;
@@ -40,7 +43,7 @@ import org.springframework.util.StringUtils;
  * + cause-of-move classification — one card covering two signal identities, {@code
  * agent-10-technical} and {@code agent-11-cause}, kept distinct for tuning purposes but not
  * fragmented into two UI cards). The analysis agents follow: Agent 11 (Deep Analyst), Agent 12
- * (Fundamentals), Agent 13 (Trade Learner) and Agent 14 (Filings Reader).
+ * (Fundamentals), Agent 13 (Trade Learner), Agent 14 (Filings Reader) and Agent 15 (Academic Strategies).
  */
 @Service
 public class AgentStatusService {
@@ -63,6 +66,8 @@ public class AgentStatusService {
 	private final LearnedRuleRepository learnedRules;
 	private final LearningReportRepository learningReports;
 	private final FilingDigestRepository filingDigests;
+	private final AcademicStrategyRepository academicStrategies;
+	private final StrategyUniverseRepository rankingUniverse;
 	private final boolean finnhubEnabled;
 	private final boolean redditEnabled;
 
@@ -73,6 +78,7 @@ public class AgentStatusService {
 			ResearchJobRepository research, PriceCandleRepository candles, DeepAnalysisRepository deep,
 			DeepScorecardService scorecard, FundamentalsSnapshotRepository fundamentalSnapshots, LearnedRuleRepository learnedRules,
 			LearningReportRepository learningReports, FilingDigestRepository filingDigests,
+			AcademicStrategyRepository academicStrategies, StrategyUniverseRepository rankingUniverse,
 			@Value("${argus.finnhub.api-key:}") String finnhubKey,
 			@Value("${argus.reddit.client-id:}") String redditClientId) {
 		this.news = news;
@@ -93,6 +99,8 @@ public class AgentStatusService {
 		this.learnedRules = learnedRules;
 		this.learningReports = learningReports;
 		this.filingDigests = filingDigests;
+		this.academicStrategies = academicStrategies;
+		this.rankingUniverse = rankingUniverse;
 		this.finnhubEnabled = StringUtils.hasText(finnhubKey);
 		this.redditEnabled = StringUtils.hasText(redditClientId);
 	}
@@ -174,7 +182,27 @@ public class AgentStatusService {
 						"Reads the company's own words from SEC EDGAR — earnings releases (8-K) and 10-Q/10-K MD&A — "
 								+ "for guidance, tone, going-concern and new-risk language. Every figure is verified against "
 								+ "the filing text before it is trusted.",
-						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 6h", null));
+						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 6h", null),
+				active("strategies", "Agent 15", "Academic Strategies",
+						"Holds the published return-predictor literature as a library — each strategy's exact rule, its "
+								+ "original paper and the authors' own replication grade — computes the ones Argus has data "
+								+ "for across a 500-name ranking universe, and only lets a strategy influence a call once it "
+								+ "has survived a chronological hold-out backtest on Argus's own history.",
+						academicStrategies.countByStatus(AcademicStrategy.Status.ACTIVE.name()), "validated strategies",
+						academicStrategies.lastImportedAt(), "scored daily · re-validated weekly", agent15Note()));
+	}
+
+	/** Most of the library is not usable here, and saying so is the point — the alternative is false confidence. */
+	private String agent15Note() {
+		long total = academicStrategies.count();
+		if (total == 0) {
+			return "Library not imported yet";
+		}
+		long computable = academicStrategies.findByComputableTrue().size();
+		long active = academicStrategies.countByStatus(AcademicStrategy.Status.ACTIVE.name());
+		long placebos = academicStrategies.countByKind(AcademicStrategy.Kind.PLACEBO.name());
+		return total + " published signals (" + placebos + " known placebos) · " + computable + " computable here · "
+				+ active + " passed hold-out validation · ranking " + rankingUniverse.countByActiveTrue() + " names";
 	}
 
 	private String agent11Note() {

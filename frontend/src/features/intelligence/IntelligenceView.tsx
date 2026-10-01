@@ -20,6 +20,7 @@ import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { ChartStudyPanel } from "@/features/intelligence/ChartStudyPanel";
 import { DeepAnalysisPanel } from "@/features/intelligence/DeepAnalysisPanel";
 import { FilingsPanel, FundamentalsPanel } from "@/features/intelligence/CompanyReadsPanel";
+import { StrategyLibraryPanel } from "@/features/intelligence/StrategyLibraryPanel";
 import { LearningPanel } from "@/features/intelligence/LearningPanel";
 import { Watchlist } from "@/features/intelligence/Watchlist";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -89,6 +90,7 @@ export function IntelligenceView() {
       <ChartStudyPanel />
       <FundamentalsPanel />
       <FilingsPanel />
+      <StrategyLibraryPanel />
       <LearningPanel />
       <Watchlist />
       {strangers && strangers.length > 0 && <StrangerSection alerts={strangers} logos={logos} />}

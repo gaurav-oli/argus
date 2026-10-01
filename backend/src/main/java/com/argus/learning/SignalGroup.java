@@ -14,6 +14,7 @@ public enum SignalGroup {
 	TECHNICAL("the chart (candlesticks, trend, volume)", true),
 	FUNDAMENTAL("company fundamentals", true),
 	FILINGS("filings and earnings reports", true),
+	ACADEMIC("validated academic strategies", true),
 	DEEP("Agent 11's deep analysis", true),
 	MACRO("the macro backdrop", false),
 	CALENDAR("earnings timing", false);
@@ -45,6 +46,7 @@ public enum SignalGroup {
 		if (agent.startsWith("agent-11-")) return DEEP;
 		if (agent.startsWith("agent-12-")) return FUNDAMENTAL;
 		if (agent.startsWith("agent-14-")) return FILINGS;
+		if (agent.startsWith("agent-15-")) return ACADEMIC;
 		return NEWS;
 	}
 }

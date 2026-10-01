@@ -12,6 +12,7 @@ import com.argus.deepanalysis.DeepAnalysis;
 import com.argus.deepanalysis.DeepAnalysisRepository;
 import com.argus.deepanalysis.DeepVerdict;
 import com.argus.filings.FilingDigestService;
+import com.argus.strategy.StrategyScoreService;
 import com.argus.filings.FilingView;
 import com.argus.fundamentals.Fundamentals;
 import com.argus.fundamentals.FundamentalsService;
@@ -92,6 +93,8 @@ public class AgentSignalGatherer {
 	/** Fundamentals (Agent 12) move slowly — a supporting signal, capped below News. */
 	private static final double FUNDAMENTAL_MAX_WEIGHT = 0.6;
 	private static final double FUNDAMENTAL_DEADZONE = 0.2;
+	/** Validated academic strategies (Agent 15): real quantitative evidence, deliberately capped below news. */
+	private static final double ACADEMIC_MAX_WEIGHT = 0.65;
 	/** Filings (Agent 14) are hard company evidence, but only fresh ones count. */
 	private static final double FILINGS_MAX_WEIGHT = 0.7;
 	private static final double FILINGS_DEADZONE = 0.25;
@@ -110,6 +113,7 @@ public class AgentSignalGatherer {
 	private final ChartStudyService chartStudies;
 	private final FundamentalsService fundamentals;
 	private final FilingDigestService filings;
+	private final StrategyScoreService strategies;
 	private final DeepAnalysisRepository deepAnalyses;
 	private final SectorClassifier sectors;
 	private final MarketRegimeService regimes;
@@ -117,7 +121,9 @@ public class AgentSignalGatherer {
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
 			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod,
 			AdaptiveTuningService tuning, ChartStudyService chartStudies, FundamentalsService fundamentals,
-			DeepAnalysisRepository deepAnalyses, SectorClassifier sectors, MarketRegimeService regimes, FilingDigestService filings) {
+			DeepAnalysisRepository deepAnalyses, SectorClassifier sectors, MarketRegimeService regimes, FilingDigestService filings,
+			StrategyScoreService strategies) {
+		this.strategies = strategies;
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
@@ -148,6 +154,7 @@ public class AgentSignalGatherer {
 		chartStudies.studyFor(ticker).ifPresent(study -> technicalSignal(study).ifPresent(signals::add));
 		fundamentalSignal(ticker).ifPresent(signals::add);
 		filingSignal(ticker).map(this::applyReliability).ifPresent(signals::add);
+		academicSignal(ticker).map(this::applyReliability).ifPresent(signals::add);
 		// Phase B: scale each agent's weight by its learned reliability (identity when tuning is disabled).
 		return signals.stream().map(this::applyReliability).toList();
 	}
@@ -426,6 +433,33 @@ public class AgentSignalGatherer {
 		String rationale = f.get().notes().stream().limit(3).reduce((x, y) -> x + " " + y).orElse("Fundamentals " + f.get().bias());
 		return Optional.of(new AgentSignal("agent-12-fundamental", dir, weight,
 				String.format("Fundamentals %s (score %+.2f): %s", f.get().bias().toLowerCase(), score, rationale), 90));
+	}
+
+	/**
+	 * Agent 15 — where this ticker sits in the cross-section on the published strategies that actually survived
+	 * validation on Argus's own data. Only ACTIVE strategies contribute (a paper's own t-stat earns nothing here),
+	 * and each is weighted by the out-of-sample edge Argus measured, so the signal is empty until something has
+	 * genuinely proven itself. Quantitative, deterministic evidence — a hard group, but capped below news.
+	 */
+	private Optional<AgentSignal> academicSignal(String ticker) {
+		Optional<StrategyScoreService.Aggregate> agg;
+		try {
+			agg = strategies.aggregateFor(ticker);
+		}
+		catch (RuntimeException ex) {
+			return Optional.empty();
+		}
+		if (agg.isEmpty() || !agg.get().actionable()) {
+			return Optional.empty();
+		}
+		double score = agg.get().score();
+		SignalDirection dir = score > 0 ? SignalDirection.BULLISH : SignalDirection.BEARISH;
+		double weight = ACADEMIC_MAX_WEIGHT * Math.min(1.0, Math.abs(score) / 0.5);
+		int n = agg.get().readings().size();
+		return Optional.of(new AgentSignal("agent-15-academic", dir, weight,
+				String.format("%d validated academic strateg%s %s (net %+.2f): %s", n, n == 1 ? "y" : "ies",
+						score > 0 ? "favour it" : "are against it", score, agg.get().rationale()),
+				strategies.typicalHorizonDays(agg.get().readings())));
 	}
 
 	/** Agent 14 — the newest earnings release / 10-Q / 10-K read (guidance, tone, going-concern), from stored digests only. */

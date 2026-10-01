@@ -55,8 +55,9 @@ class AgentSignalGathererTest {
 	private final SectorClassifier sectors = mock(SectorClassifier.class);
 	private final MarketRegimeService regimes = mock(MarketRegimeService.class);
 	private final com.argus.filings.FilingDigestService filings = mock(com.argus.filings.FilingDigestService.class);
+	private final com.argus.strategy.StrategyScoreService academicStrategies = mock(com.argus.strategy.StrategyScoreService.class);
 	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod,
-			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes, filings);
+			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes, filings, academicStrategies);
 
 	{
 		// Tuning off by default in these tests → identity weight multipliers.
@@ -514,5 +515,46 @@ class AgentSignalGathererTest {
 		when(deepAnalyses.findFirstByTickerAndStatusOrderByFinishedAtDesc("AAPL", DeepAnalysis.Status.DONE)).thenReturn(Optional.of(d));
 
 		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-11-deep")));
+	}
+
+	// ---- Agent 15: validated academic strategies ----
+
+	private static com.argus.strategy.StrategyScoreService.Reading reading(String acronym, double view) {
+		return new com.argus.strategy.StrategyScoreService.Reading(acronym, acronym, "Author (2000)", 0.9, 1.0, view, 2.5, 30,
+				java.time.LocalDate.now());
+	}
+
+	@Test
+	void aFavourableAggregateIsABullishSignalCappedBelowNews() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		var agg = new com.argus.strategy.StrategyScoreService.Aggregate(0.4, List.of(reading("Mom12m", 0.4)));
+		when(academicStrategies.aggregateFor("AAPL")).thenReturn(Optional.of(agg));
+		when(academicStrategies.typicalHorizonDays(agg.readings())).thenReturn(30);
+
+		AgentSignal s = gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-15-academic")).findFirst().orElseThrow();
+
+		assertEquals(SignalDirection.BULLISH, s.direction());
+		assertEquals(0.65 * (0.4 / 0.5), s.weight(), 1e-9);
+		assertEquals(30, s.horizonHintDays());
+		assertEquals(com.argus.learning.SignalGroup.ACADEMIC, com.argus.learning.SignalGroup.of(s.agent()));
+	}
+
+	@Test
+	void aNegativeAggregateIsBearishAndWeakOrAbsentReadingsEmitNothing() {
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+		when(academicStrategies.aggregateFor("AAPL"))
+				.thenReturn(Optional.of(new com.argus.strategy.StrategyScoreService.Aggregate(-0.3, List.of(reading("STreversal", -0.3)))));
+		assertEquals(SignalDirection.BEARISH,
+				gatherer.gather("AAPL").stream().filter(x -> x.agent().equals("agent-15-academic")).findFirst().orElseThrow().direction());
+
+		when(academicStrategies.aggregateFor("AAPL"))
+				.thenReturn(Optional.of(new com.argus.strategy.StrategyScoreService.Aggregate(0.05, List.of(reading("Mom6m", 0.05)))));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-15-academic")), "inside the deadzone");
+
+		when(academicStrategies.aggregateFor("AAPL")).thenReturn(Optional.empty());
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-15-academic")), "nothing validated yet");
+
+		when(academicStrategies.aggregateFor("AAPL")).thenThrow(new RuntimeException("db down"));
+		assertTrue(gatherer.gather("AAPL").stream().noneMatch(x -> x.agent().equals("agent-15-academic")), "a failing read must not break the gather");
 	}
 }

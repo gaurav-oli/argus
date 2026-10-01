@@ -59,6 +59,11 @@ public class StorageService {
 					new TableSpec("learning_report", "Learning reports", "Nightly win/loss study"))),
 			new GroupSpec("filings", "Agent 14 · Filings Reader", "Earnings releases and 10-Q/10-K it has read", List.of(
 					new TableSpec("filing_digest", "Filing digests", "Verified guidance, tone and risk language"))),
+			new GroupSpec("strategies", "Agent 15 · Academic Strategies", "The published strategy library and its validation", List.of(
+					new TableSpec("academic_strategy", "Strategy library", "Published predictors, their papers and our verdicts"),
+					new TableSpec("strategy_backtest", "Backtests", "Hold-out validation results per strategy and horizon"),
+					new TableSpec("strategy_score", "Current scores", "Where each followed ticker ranks in the cross-section"),
+					new TableSpec("strategy_universe", "Ranking universe", "The S&P 500 names strategies rank against"))),
 			new GroupSpec("cost", "Agent 6 · Cost Governor", "Paid-API spend ledger", List.of(
 					new TableSpec("cost_events", "Cost events", "Each paid Haiku call's cost"))),
 			new GroupSpec("calendar", "Agent 7 · Economic Calendar", "Economic events it watches", List.of(

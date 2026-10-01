@@ -1762,6 +1762,66 @@ export interface FilingRow {
 
 export const getFilings = (): Promise<FilingRow[]> => apiGet<FilingRow[]>("/api/filings");
 
+// ---- Agent 15: academic strategies ----
+
+/**
+ * One published strategy in the library. `publishedTStat` is what the paper reported — context only, never used
+ * to decide anything. `holdoutTStat` is what Argus measured on its own data, out of sample, and is what counts.
+ */
+export interface StrategyRow {
+  acronym: string;
+  name: string;
+  citation: string;
+  definition: string | null;
+  dataCategory: string | null;
+  economicCategory: string | null;
+  /** Chen & Zimmermann's own replication verdict: 1_clear | 2_likely | indirect | 4_not. */
+  replicationGrade: string | null;
+  publishedTStat: number | null;
+  sign: number | null;
+  status: "ACTIVE" | "CANDIDATE" | "REJECTED" | "UNIMPLEMENTED";
+  horizonDays: number | null;
+  measuredExcessPct: number | null;
+  tStat: number | null;
+  holdoutMeanExcess: number | null;
+  holdoutTStat: number | null;
+  observations: number | null;
+  verdict: "PASS" | "FAIL_INSAMPLE" | "FAIL_HOLDOUT" | "INSUFFICIENT_DATA" | null;
+  note: string | null;
+}
+
+export interface StrategyLibrary {
+  total: number;
+  predictors: number;
+  /** Published signals the researchers showed do NOT predict returns — the literature's own control group. */
+  placebos: number;
+  computable: number;
+  active: number;
+  rejected: number;
+  universeSize: number;
+  universeCovered: number;
+  strategies: StrategyRow[];
+}
+
+export interface StrategyReading {
+  acronym: string;
+  name: string;
+  citation: string;
+  percentile: number;
+  sign: number;
+  view: number;
+  direction: string;
+  measuredTStat: number;
+  horizonDays: number;
+  asOf: string;
+}
+
+export const getStrategyLibrary = (): Promise<StrategyLibrary> => apiGet<StrategyLibrary>("/api/strategies");
+export const getStrategyReadings = (ticker: string): Promise<StrategyReading[]> =>
+  apiGet<StrategyReading[]>(`/api/strategies/${encodeURIComponent(ticker)}`);
+export const revalidateStrategies = (): Promise<{ tests: number; passed: number; active: number }> =>
+  apiPost<{ tests: number; passed: number; active: number }>("/api/strategies/validate");
+
 // ---- Agent 10: chart study ----
 
 export interface ChartStudyRow {
