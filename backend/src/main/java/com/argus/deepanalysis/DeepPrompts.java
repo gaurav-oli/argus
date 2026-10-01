@@ -127,4 +127,49 @@ final class DeepPrompts {
 				level from the evidence, not a guess.
 				""".formatted(ticker, overview, quickAgents, analystDigest, skepticDigest, lessonsBlock(lessons));
 	}
+
+	/**
+	 * Rephrase an already-reached verdict for a beginner — never asked to reconsider or add anything, only to
+	 * explain in plain words. Same three-paragraph-plus-glossary shape {@code BreakingAlertCurationService} uses
+	 * for news, so the frontend's existing {@code SummaryBlock} renders it without a separate parser.
+	 */
+	static String plainExplanation(String ticker, String verdictLabel, Integer holdDays, String headline, String thesis,
+			String bullCase, String bearCase, String invalidation) {
+		return """
+				You are Argus, explaining one of your own completed stock analyses to a complete beginner investor —
+				someone who has never read a balance sheet. Do not reconsider the call or add new reasoning: only
+				translate what's below into plain, everyday language.
+
+				TICKER: %s
+				VERDICT: %s%s
+				HEADLINE: %s
+				THESIS (why): %s
+				BULL CASE (best case for owning it): %s
+				BEAR CASE (best case against): %s
+				WHAT WOULD CHANGE ITS MIND: %s
+
+				Explain it in plain, everyday language that a curious 15-year-old could follow. Keep sentences short
+				and simple, avoid jargon wherever you can.
+
+				Write your answer in TWO parts separated by a line containing only "KEY TERMS:".
+
+				Part 1 — THREE short paragraphs (3-4 sentences each), each on its own line with a blank line between
+				them:
+				1. WHAT ARGUS DECIDED — plainly restate the verdict and, for a buy, roughly how long to hold.
+				2. WHY — the thesis, bull case and bear case, boiled down to plain reasoning a beginner can follow.
+				3. WHAT TO WATCH — what would prove this wrong, in everyday terms.
+				If you must use a financial or technical word, explain it in plain words right there in parentheses.
+
+				Part 2 — after the "KEY TERMS:" line, list 2-5 financial or technical terms from the text above a
+				beginner might not know, ONE per line as "Term — a short, simple definition in everyday words." If
+				none, write "None".
+
+				No hype, no disclaimers, no markdown, no preamble. Start directly with the first paragraph.
+				""".formatted(ticker, verdictLabel, holdDays == null ? "" : " (hold about " + holdDays + " days)",
+						headline == null || headline.isBlank() ? "(none)" : headline,
+						thesis == null || thesis.isBlank() ? "(none)" : thesis,
+						bullCase == null || bullCase.isBlank() ? "(none)" : bullCase,
+						bearCase == null || bearCase.isBlank() ? "(none)" : bearCase,
+						invalidation == null || invalidation.isBlank() ? "(not specified)" : invalidation);
+	}
 }

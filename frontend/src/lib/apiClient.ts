@@ -1672,6 +1672,8 @@ export interface DeepAnalysisView {
   priceAtAnalysis: number | null;
   thesisStatus: "INTACT" | "AT_RISK";
   thesisReason: string | null;
+  /** A beginner-friendly rendering of the thesis/bull/bear case, generated the first time someone asks for it. */
+  plainExplanation: string | null;
 }
 
 export interface DeepHistoryItem {
@@ -1731,6 +1733,9 @@ export const runDeepAnalysis = (ticker: string): Promise<DeepRunStatus> =>
 export const getDeepAnalysisFor = (ticker: string): Promise<DeepTickerView> =>
   apiGet<DeepTickerView>(`/api/deep-analysis/${encodeURIComponent(ticker)}`);
 export const getDeepScorecard = (): Promise<DeepScorecard> => apiGet<DeepScorecard>("/api/deep-analysis/scorecard");
+/** "Explain like I'm new to investing" — generated on first call, cached on the analysis after. */
+export const explainDeepAnalysis = (ticker: string): Promise<{ text: string }> =>
+  apiPost<{ text: string }>(`/api/deep-analysis/${encodeURIComponent(ticker)}/explain`);
 
 /** One saved point in Agent 11's scorecard history — persisted daily so the track record survives a restart. */
 export interface DeepScorecardSnapshotView {

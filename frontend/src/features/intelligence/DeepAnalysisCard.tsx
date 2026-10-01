@@ -2,6 +2,7 @@
 
 import {
   ApiError,
+  explainDeepAnalysis,
   getDeepAnalysisFor,
   runDeepAnalysis,
   type DeepAnalysisView,
@@ -10,8 +11,10 @@ import {
 } from "@/lib/apiClient";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { DEEP_VERDICT_GLOSSARY } from "./statusGlossary";
+import { DeepAnalysisPipeline } from "./DeepAnalysisPipeline";
 import { useCallback, useEffect, useState } from "react";
 
 export const VERDICT_STYLE: Record<DeepVerdictName, { label: string; cls: string; icon: string }> = {
@@ -80,6 +83,53 @@ function List({ items }: { items: string[] }) {
   );
 }
 
+/**
+ * "Explain simply" — turns the thesis/bull case/bear case into the same plain-English-plus-glossary
+ * shape {@link SummaryBlock} already renders for curated news, generated on first click and cached on
+ * the analysis after (so `a.plainExplanation` is already there on a later page load — no re-click needed).
+ */
+function PlainExplanation({ a }: { a: DeepAnalysisView }) {
+  const [text, setText] = useState<string | null>(a.plainExplanation);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function explain() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await explainDeepAnalysis(a.ticker);
+      setText(res.text);
+    } catch {
+      setError("Couldn't explain this one right now — try again in a moment.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (text) {
+    return (
+      <div className="rounded-lg border border-accent/20 bg-accent/[0.04] p-3">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-accent">✨ In plain English</p>
+        <SummaryBlock text={text} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => void explain()}
+        disabled={loading}
+        className="rounded border border-accent/40 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+      >
+        {loading ? "Explaining…" : "✨ Explain simply"}
+      </button>
+      {error && <p className="mt-1 text-[11px] text-losses">{error}</p>}
+    </div>
+  );
+}
+
 /** Everything Agent 11 concluded and why — used on the Intelligence page and inside an on-demand research job. */
 export function DeepAnalysisDetail({ a, onRerun }: { a: DeepAnalysisView; onRerun?: () => void }) {
   return (
@@ -95,6 +145,7 @@ export function DeepAnalysisDetail({ a, onRerun }: { a: DeepAnalysisView; onReru
         {a.bullCase && <Block title="Best case for owning it">{a.bullCase}</Block>}
         {a.bearCase && <Block title="Best case against">{a.bearCase}</Block>}
       </div>
+      {(a.thesis || a.bullCase || a.bearCase) && <PlainExplanation key={a.id} a={a} />}
       <div className="grid gap-3 sm:grid-cols-2">
         {a.risks.length > 0 && (
           <Block title="Risks">
@@ -212,11 +263,7 @@ export function DeepAnalysisForTicker({ ticker }: { ticker: string }) {
         )}
       </div>
       {error && <p className="text-xs text-losses">{error}</p>}
-      {view?.inProgress && (
-        <p className="rounded-lg bg-accent/10 px-3 py-2 text-xs text-accent">
-          ⏳ {view.inProgress.status === "QUEUED" ? "Queued" : "Working"}: {view.inProgress.stage ?? "starting"} — a full analysis can take several minutes to hours.
-        </p>
-      )}
+      {view?.inProgress && <DeepAnalysisPipeline status={view.inProgress} />}
       {view === undefined ? (
         <Skeleton className="h-16 w-full" />
       ) : view?.latest ? (

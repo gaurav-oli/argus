@@ -21,13 +21,15 @@ public class DeepAnalysisController {
 	private final DeepAnalysisRunner runner;
 	private final DeepAnalysisRepository repository;
 	private final DeepScorecardService scorecard;
+	private final DeepPlainExplanationService plainExplanations;
 
 	public DeepAnalysisController(DeepAnalysisService service, DeepAnalysisRunner runner, DeepAnalysisRepository repository,
-			DeepScorecardService scorecard) {
+			DeepScorecardService scorecard, DeepPlainExplanationService plainExplanations) {
 		this.service = service;
 		this.runner = runner;
 		this.repository = repository;
 		this.scorecard = scorecard;
+		this.plainExplanations = plainExplanations;
 	}
 
 	/** How Agent 11's past verdicts actually did against the S&P 500 (7/30/90 days) and since the call. */
@@ -90,6 +92,19 @@ public class DeepAnalysisController {
 						h.getConviction(), h.getHoldDays(), h.getFinishedAt() == null ? h.getCreatedAt() : h.getFinishedAt())).toList());
 	}
 
+	/**
+	 * "Explain like I'm new to investing" — a beginner-friendly rendering of the latest verdict's thesis/bull/bear
+	 * case, cached once generated. 404 when the ticker has no finished analysis yet.
+	 */
+	@PostMapping("/{ticker}/explain")
+	public PlainExplanationView explain(@PathVariable String ticker) {
+		String t = ticker.trim().toUpperCase(Locale.ROOT);
+		DeepAnalysis latestDone = service.latestDone(t).orElseThrow(() -> new NotFoundException("Deep analysis", t));
+		String text = plainExplanations.explain(latestDone.getId())
+				.orElseThrow(() -> new NotFoundException("Deep analysis", t));
+		return new PlainExplanationView(text);
+	}
+
 	/** "Analyze now" — queues a run and returns immediately; poll {@code /queue} or this ticker for progress. */
 	@PostMapping("/{ticker}/run")
 	public RunStatus run(@PathVariable String ticker) {
@@ -130,6 +145,9 @@ public class DeepAnalysisController {
 	public record ScorecardSnapshotSummary(int cellsWritten, int historySize) {
 	}
 
+	public record PlainExplanationView(String text) {
+	}
+
 	public record RunStatus(Long id, String ticker, String status, String stage) {
 	}
 
@@ -147,7 +165,8 @@ public class DeepAnalysisController {
 			String thesis, String bullCase, String bearCase, List<String> risks, List<String> catalysts, String invalidation, String technicalSummary,
 			String fundamentalSummary, String catalystSummary, String macroSummary, String skepticView, List<String> guardNotes,
 			BigDecimal technicalScore, BigDecimal fundamentalScore, BigDecimal consensusScore, String model, Instant finishedAt, Instant expiresAt,
-			boolean stale, RunStatus inProgress, BigDecimal invalidationPrice, BigDecimal priceAtAnalysis, String thesisStatus, String thesisReason) {
+			boolean stale, RunStatus inProgress, BigDecimal invalidationPrice, BigDecimal priceAtAnalysis, String thesisStatus, String thesisReason,
+			String plainExplanation) {
 
 		static AnalysisView from(DeepAnalysis d, RunStatus inProgress) {
 			return new AnalysisView(d.getId(), d.getTicker(), d.getVerdict() == null ? null : d.getVerdict().name(),
@@ -155,7 +174,8 @@ public class DeepAnalysisController {
 					d.getBullCase(), d.getBearCase(), lines(d.getRisks()), lines(d.getCatalysts()), d.getInvalidation(), d.getTechnicalSummary(),
 					d.getFundamentalSummary(), d.getCatalystSummary(), d.getMacroSummary(), d.getSkepticView(), lines(d.getGuardNotes()),
 					d.getTechnicalScore(), d.getFundamentalScore(), d.getConsensusScore(), d.getModel(), d.getFinishedAt(), d.getExpiresAt(),
-					d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()), inProgress, d.getInvalidationPrice(), d.getPriceAtAnalysis(), d.getThesisStatus(), d.getThesisReason());
+					d.getExpiresAt() != null && d.getExpiresAt().isBefore(Instant.now()), inProgress, d.getInvalidationPrice(), d.getPriceAtAnalysis(),
+					d.getThesisStatus(), d.getThesisReason(), d.getPlainExplanation());
 		}
 
 		private static List<String> lines(String joined) {

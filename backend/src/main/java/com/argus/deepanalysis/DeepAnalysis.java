@@ -88,6 +88,13 @@ public class DeepAnalysis {
 	private String model;
 	private String error;
 
+	/** A beginner-friendly rendering of the thesis/bull/bear case, generated the first time someone asks for it. */
+	@Column(name = "plain_explanation")
+	private String plainExplanation;
+
+	@Column(name = "plain_explanation_at")
+	private Instant plainExplanationAt;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -254,4 +261,12 @@ public class DeepAnalysis {
 	public String getThesisStatus() { return thesisStatus; }
 	public String getThesisReason() { return thesisReason; }
 	public Instant getThesisCheckedAt() { return thesisCheckedAt; }
+	public String getPlainExplanation() { return plainExplanation; }
+	public Instant getPlainExplanationAt() { return plainExplanationAt; }
+
+	/** Cache a beginner-friendly explanation so re-opening this ticker never re-pays the model call. */
+	public void recordPlainExplanation(String text) {
+		this.plainExplanation = text;
+		this.plainExplanationAt = Instant.now();
+	}
 }
