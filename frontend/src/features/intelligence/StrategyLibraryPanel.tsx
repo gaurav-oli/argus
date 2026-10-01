@@ -2,6 +2,8 @@
 
 import { getStrategyLibrary, revalidateStrategies, type StrategyLibrary, type StrategyRow } from "@/lib/apiClient";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { STRATEGY_STATUS_GLOSSARY } from "./statusGlossary";
 import { useCallback, useEffect, useState } from "react";
 
 const STATUS_STYLE: Record<StrategyRow["status"], { label: string; cls: string }> = {
@@ -111,7 +113,9 @@ export function StrategyLibraryPanel() {
                       onClick={() => setOpen(isOpen ? null : s.acronym)}
                       className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left"
                     >
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+                      <Tooltip content={STRATEGY_STATUS_GLOSSARY[s.status]}>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+                      </Tooltip>
                       <span className="text-sm font-semibold text-text-primary">{s.name}</span>
                       <span className="text-[11px] text-text-secondary">{s.citation}</span>
                       {s.holdoutTStat != null && (

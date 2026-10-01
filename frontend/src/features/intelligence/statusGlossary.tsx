@@ -27,6 +27,24 @@ export const DEEP_GLOSSARY = {
   none: "Agent 11 hasn't produced a fresh verdict for this ticker, or it has expired.",
 };
 
+/** Agent 11's three possible verdicts, keyed exactly like DeepVerdictName/VERDICT_STYLE. */
+export const DEEP_VERDICT_GLOSSARY: Record<"WORTH_BUYING" | "WAIT" | "NOT_WORTH_BUYING", string> = {
+  WORTH_BUYING:
+    "Agent 11 read every other agent's evidence, ran four local specialists (chart, fundamentals, catalysts, macro) and a skeptic, then a portfolio-manager pass — and concluded the case to buy is real.",
+  WAIT: "Agent 11 found the evidence too thin or too mixed to call either way. This is the most common verdict — most stocks, most of the time, deserve a wait.",
+  NOT_WORTH_BUYING:
+    "Agent 11 ran the same multi-specialist process and concluded the case against owning it outweighs the case for it.",
+};
+
+/** A strategy's validation status in the Academic Strategies library (Agent 15), keyed like StrategyRow["status"]. */
+export const STRATEGY_STATUS_GLOSSARY: Record<"ACTIVE" | "CANDIDATE" | "REJECTED" | "UNIMPLEMENTED", string> = {
+  ACTIVE:
+    "This published strategy actually beat a chronological hold-out backtest on Argus's own data — it's the only kind allowed to influence a recommendation. A paper's own t-statistic is never enough on its own.",
+  CANDIDATE: "Argus can compute this strategy, but hasn't finished testing it against a held-back period of its own data yet. Not acted on until it is.",
+  REJECTED: "This strategy was tested on Argus's own data and failed — either no real edge in-sample, or it worked in-sample but not on the held-back period (the classic sign of a decayed or fabricated edge).",
+  UNIMPLEMENTED: "This published strategy needs data Argus doesn't have (e.g. point-in-time accounting, analyst, or options data) — it exists in the library for completeness but can't be computed here.",
+};
+
 export const CHART_GLOSSARY: Record<string, string> = {
   BULLISH: "Agent 10's chart score is positive: the technical picture (trend, momentum, volume, candlesticks, relative strength) leans bullish.",
   BEARISH: "Agent 10's chart score is negative: the technical picture leans bearish.",

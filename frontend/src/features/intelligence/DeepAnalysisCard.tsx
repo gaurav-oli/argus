@@ -10,6 +10,8 @@ import {
 } from "@/lib/apiClient";
 import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { DEEP_VERDICT_GLOSSARY } from "./statusGlossary";
 import { useCallback, useEffect, useState } from "react";
 
 export const VERDICT_STYLE: Record<DeepVerdictName, { label: string; cls: string; icon: string }> = {
@@ -41,17 +43,19 @@ export function DeepSummaryLine({ a }: { a: DeepAnalysisView }) {
   const v = a.verdict ? VERDICT_STYLE[a.verdict] : null;
   return (
     <>
-      {v && (
-        <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${v.cls}`}>
-          {v.icon} {v.label}
-        </span>
+      {v && a.verdict && (
+        <Tooltip content={DEEP_VERDICT_GLOSSARY[a.verdict]}>
+          <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${v.cls}`}>
+            {v.icon} {v.label}
+          </span>
+        </Tooltip>
       )}
       {a.verdict === "WORTH_BUYING" && a.holdDays != null && <span className="text-xs font-medium text-accent">⏱ {holdText(a.holdDays)}</span>}
       {a.conviction != null && <span className="text-xs tabular-nums text-text-secondary">conviction {a.conviction}/100</span>}
       {a.thesisStatus === "AT_RISK" && (
-        <span title={a.thesisReason ?? undefined} className="rounded bg-losses/15 px-1.5 py-0.5 text-[10px] font-semibold text-losses">
-          ⚠ thesis at risk
-        </span>
+        <Tooltip content={a.thesisReason ?? "Agent 11's standing verdict has been undermined since it was made and is being re-checked."}>
+          <span className="rounded bg-losses/15 px-1.5 py-0.5 text-[10px] font-semibold text-losses">⚠ thesis at risk</span>
+        </Tooltip>
       )}
     </>
   );
