@@ -4,10 +4,13 @@ import {
   getDeepAnalyses,
   getDeepQueue,
   getDeepScorecard,
+  getDeepScorecardHistory,
   runDeepAnalysis,
+  saveDeepScorecardSnapshot,
   type DeepAnalysisView,
   type DeepQueue,
   type DeepScorecard,
+  type DeepScorecardSnapshotView,
 } from "@/lib/apiClient";
 import { DeepAnalysisDetail, DeepSummaryLine, ageText } from "@/features/intelligence/DeepAnalysisCard";
 import { Sensitive } from "@/features/privacy/Sensitive";
@@ -146,11 +149,33 @@ function pct(n: number | null | undefined, digits = 1): string {
  */
 function Scorecard() {
   const [sc, setSc] = useState<DeepScorecard | null | undefined>(undefined);
+  const [history, setHistory] = useState<DeepScorecardSnapshotView[] | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const loadHistory = useCallback(() => {
+    getDeepScorecardHistory().then(setHistory).catch(() => setHistory([]));
+  }, []);
+
   useEffect(() => {
     getDeepScorecard().then(setSc).catch(() => setSc(null));
-  }, []);
+    loadHistory();
+  }, [loadHistory]);
+
+  async function snapshotNow() {
+    setSaving(true);
+    try {
+      await saveDeepScorecardSnapshot();
+      loadHistory();
+    } catch {
+      // best-effort — the daily scheduled snapshot will still pick it up overnight
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!sc || sc.totalVerdicts === 0) return null;
   const cell = (v: string, h: number) => sc.cells.find((c) => c.verdict === v && c.horizonDays === h);
+  const firstSnapshot = history?.[0]?.computedAt;
   return (
     <details className="rounded-lg border border-border px-3 py-2">
       <summary className="cursor-pointer text-[11px] font-medium text-text-secondary">
@@ -195,6 +220,28 @@ function Scorecard() {
       <p className="mt-1 text-[10px] text-text-secondary">
         Average return versus the S&amp;P 500 over the period. Needs {sc.minForTrackRecord} matured verdicts of a kind before a poor record starts capping conviction.
       </p>
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+        <p className="text-[10px] text-text-secondary">
+          {history === null ? (
+            "Loading saved history…"
+          ) : history.length === 0 ? (
+            "Not saved to history yet — this reading only lives in a 10-minute cache until the first snapshot runs."
+          ) : (
+            <>
+              Tracked daily since {new Date(firstSnapshot!).toLocaleDateString()} · {history.length} snapshot{history.length === 1 ? "" : "s"} saved — this
+              table survives a restart, not just a cache.
+            </>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => void snapshotNow()}
+          disabled={saving}
+          className="shrink-0 rounded border border-accent/40 px-2 py-0.5 text-[10px] font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save snapshot now"}
+        </button>
+      </div>
       <ul className="mt-2 flex flex-col gap-0.5">
         {sc.rows.slice(0, 12).map((r) => (
           <li key={`${r.ticker}-${r.analyzedOn}`} className="flex flex-wrap gap-x-3 text-[11px] text-text-secondary">

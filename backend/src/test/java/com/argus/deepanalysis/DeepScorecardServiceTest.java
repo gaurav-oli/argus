@@ -3,6 +3,9 @@ package com.argus.deepanalysis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.argus.technical.ChartStudyService;
@@ -15,13 +18,16 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class DeepScorecardServiceTest {
 
 	private final DeepAnalysisRepository repo = mock(DeepAnalysisRepository.class);
 	private final ChartStudyService charts = mock(ChartStudyService.class);
-	private final DeepScorecardService service = new DeepScorecardService(repo, charts);
+	private final DeepScorecardSnapshotRepository snapshots = mock(DeepScorecardSnapshotRepository.class);
+	private final DeepAnalysisProperties props = new DeepAnalysisProperties(true, 3, Duration.ofDays(4), 40, Duration.ofSeconds(15), true, -8.0);
+	private final DeepScorecardService service = new DeepScorecardService(repo, charts, snapshots, props);
 
 	private static final LocalDate START = LocalDate.now().minusDays(120);
 
@@ -105,5 +111,47 @@ class DeepScorecardServiceTest {
 
 		assertEquals(7, tr.horizonDays());
 		assertEquals(25, tr.n());
+	}
+
+
+	// ---- persisted snapshot history ----
+
+	@Test
+	void snapshotNowPersistsOneRowPerMaturedCellAndSkipsEmptyOnes() {
+		List<DeepAnalysis> done = new ArrayList<>();
+		for (int i = 0; i < 25; i++) done.add(analysis("AAA", DeepVerdict.WORTH_BUYING, 100));
+		when(repo.findByStatusIn(List.of(DeepAnalysis.Status.DONE))).thenReturn(done);
+		List<PriceCandle> aaaBars = candles(100, 0.5);
+		when(charts.history("AAA")).thenReturn(aaaBars);
+		List<PriceCandle> spyBars = candles(100, 0.0);
+		when(charts.history("SPY")).thenReturn(spyBars);
+
+		int written = service.snapshotNow();
+
+		// matured at 7 and 30 days (100 days old, 90-day horizon also matured) -> 3 cells for WORTH_BUYING,
+		// nothing for NOT_WORTH_BUYING or WAIT (no such verdicts exist) -> those cells are empty and skipped.
+		assertEquals(3, written);
+		ArgumentCaptor<DeepScorecardSnapshot> captor = ArgumentCaptor.forClass(DeepScorecardSnapshot.class);
+		verify(snapshots, times(3)).save(captor.capture());
+		assertTrue(captor.getAllValues().stream().allMatch(row -> row.getVerdict() == DeepVerdict.WORTH_BUYING));
+		assertTrue(captor.getAllValues().stream().allMatch(row -> row.getTotalVerdicts() == 25));
+		assertTrue(captor.getAllValues().stream().allMatch(row -> row.getObservations() > 0), "an empty cell must never be persisted");
+	}
+
+	@Test
+	void snapshotNowWritesNothingWhenThereIsNoMaturedEvidenceYet() {
+		when(repo.findByStatusIn(List.of(DeepAnalysis.Status.DONE))).thenReturn(List.of());
+
+		assertEquals(0, service.snapshotNow());
+		verify(snapshots, never()).save(org.mockito.Mockito.any());
+	}
+
+	@Test
+	void historyDelegatesToTheRepositoryOldestFirst() {
+		DeepScorecardSnapshot row = new DeepScorecardSnapshot(DeepVerdict.WORTH_BUYING, 30,
+				new DeepScorecard.Cell(25, 1.2, 0.8), 25);
+		when(snapshots.findAllByOrderByComputedAtAsc()).thenReturn(List.of(row));
+
+		assertEquals(List.of(row), service.history());
 	}
 }

@@ -1732,6 +1732,22 @@ export const getDeepAnalysisFor = (ticker: string): Promise<DeepTickerView> =>
   apiGet<DeepTickerView>(`/api/deep-analysis/${encodeURIComponent(ticker)}`);
 export const getDeepScorecard = (): Promise<DeepScorecard> => apiGet<DeepScorecard>("/api/deep-analysis/scorecard");
 
+/** One saved point in Agent 11's scorecard history — persisted daily so the track record survives a restart. */
+export interface DeepScorecardSnapshotView {
+  verdict: DeepVerdictName;
+  label: string;
+  horizonDays: number;
+  observations: number;
+  meanExcessPct: number;
+  hitRate: number | null;
+  totalVerdicts: number;
+  computedAt: string;
+}
+export const getDeepScorecardHistory = (): Promise<DeepScorecardSnapshotView[]> =>
+  apiGet<DeepScorecardSnapshotView[]>("/api/deep-analysis/scorecard/history");
+export const saveDeepScorecardSnapshot = (): Promise<{ cellsWritten: number; historySize: number }> =>
+  apiPost<{ cellsWritten: number; historySize: number }>("/api/deep-analysis/scorecard/snapshot");
+
 // ---- Agent 12: fundamentals · Agent 14: filings ----
 
 export interface FundamentalsRow {

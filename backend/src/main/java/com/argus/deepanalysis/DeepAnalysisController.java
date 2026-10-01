@@ -43,6 +43,22 @@ public class DeepAnalysisController {
 		return new ScorecardView(s.totalVerdicts(), DeepScorecardService.MIN_MATURED_FOR_TRACK_RECORD, cells, rows);
 	}
 
+	/**
+	 * The scorecard's saved history — one point per (verdict, horizon) per daily snapshot, oldest first — so how
+	 * Agent 11's own track record has moved over time can be read back, not just today's live reading.
+	 */
+	@GetMapping("/scorecard/history")
+	public List<ScorecardSnapshotView> scorecardHistory() {
+		return scorecard.history().stream().map(ScorecardSnapshotView::from).toList();
+	}
+
+	/** "Save a snapshot now" — persists today's reading immediately rather than waiting for the nightly job. */
+	@PostMapping("/scorecard/snapshot")
+	public ScorecardSnapshotSummary saveScorecardSnapshot() {
+		int written = scorecard.snapshotNow();
+		return new ScorecardSnapshotSummary(written, scorecard.history().size());
+	}
+
 	/** Every ticker's newest verdict (or in-progress run), strongest buys first. */
 	@GetMapping
 	public List<AnalysisView> list() {
@@ -98,6 +114,20 @@ public class DeepAnalysisController {
 	}
 
 	public record ScorecardView(int totalVerdicts, int minForTrackRecord, List<CellView> cells, List<RowView> rows) {
+	}
+
+	/** One saved history point for a (verdict, horizon) cell. */
+	public record ScorecardSnapshotView(String verdict, String label, int horizonDays, int observations, double meanExcessPct,
+			Double hitRate, int totalVerdicts, Instant computedAt) {
+
+		static ScorecardSnapshotView from(DeepScorecardSnapshot s) {
+			return new ScorecardSnapshotView(s.getVerdict().name(), s.getVerdict().label(), s.getHorizonDays(), s.getObservations(),
+					s.getMeanExcessPct().doubleValue(), s.getHitRate() == null ? null : s.getHitRate().doubleValue(), s.getTotalVerdicts(),
+					s.getComputedAt());
+		}
+	}
+
+	public record ScorecardSnapshotSummary(int cellsWritten, int historySize) {
 	}
 
 	public record RunStatus(Long id, String ticker, String status, String stage) {
