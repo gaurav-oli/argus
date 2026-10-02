@@ -1753,6 +1753,40 @@ export const getDeepScorecardHistory = (): Promise<DeepScorecardSnapshotView[]> 
 export const saveDeepScorecardSnapshot = (): Promise<{ cellsWritten: number; historySize: number }> =>
   apiPost<{ cellsWritten: number; historySize: number }>("/api/deep-analysis/scorecard/snapshot");
 
+/** "HAIKU" (the paid Claude Haiku escalation) or "LOCAL" (the free Gemma fallback) — whichever actually answered. */
+export type VerdictModel = "HAIKU" | "LOCAL";
+
+export interface DeepModelCell {
+  model: VerdictModel;
+  verdict: DeepVerdictName;
+  label: string;
+  horizonDays: number;
+  n: number;
+  meanExcessPct: number;
+  hitRate: number | null;
+}
+
+/** Is paying for Haiku's verdict call actually better than Gemma alone? The measured, not reasoned-about, answer. */
+export interface DeepModelComparison {
+  totalVerdicts: Partial<Record<VerdictModel, number>>;
+  cells: DeepModelCell[];
+}
+export const getDeepScorecardByModel = (): Promise<DeepModelComparison> =>
+  apiGet<DeepModelComparison>("/api/deep-analysis/scorecard/by-model");
+
+export interface DeepModelSnapshotView {
+  model: VerdictModel;
+  verdict: DeepVerdictName;
+  label: string;
+  horizonDays: number;
+  observations: number;
+  meanExcessPct: number;
+  hitRate: number | null;
+  computedAt: string;
+}
+export const getDeepScorecardByModelHistory = (): Promise<DeepModelSnapshotView[]> =>
+  apiGet<DeepModelSnapshotView[]>("/api/deep-analysis/scorecard/by-model/history");
+
 // ---- Agent 12: fundamentals · Agent 14: filings ----
 
 export interface FundamentalsRow {

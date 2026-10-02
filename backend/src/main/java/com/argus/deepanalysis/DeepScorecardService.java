@@ -37,16 +37,18 @@ public class DeepScorecardService {
 	private final DeepAnalysisRepository repository;
 	private final ChartStudyService charts;
 	private final DeepScorecardSnapshotRepository snapshots;
+	private final DeepVerdictModelSnapshotRepository modelSnapshots;
 	private final DeepAnalysisProperties props;
 	private volatile Instant computedAt = Instant.EPOCH;
 	private volatile DeepScorecard.Summary cached;
 	private final Map<String, Boolean> lock = new ConcurrentHashMap<>();
 
 	public DeepScorecardService(DeepAnalysisRepository repository, ChartStudyService charts,
-			DeepScorecardSnapshotRepository snapshots, DeepAnalysisProperties props) {
+			DeepScorecardSnapshotRepository snapshots, DeepVerdictModelSnapshotRepository modelSnapshots, DeepAnalysisProperties props) {
 		this.repository = repository;
 		this.charts = charts;
 		this.snapshots = snapshots;
+		this.modelSnapshots = modelSnapshots;
 		this.props = props;
 	}
 
@@ -76,7 +78,7 @@ public class DeepScorecardService {
 			if (d.getVerdict() == null || d.getFinishedAt() == null) continue;
 			List<DeepScorecard.Bar> stock = bars.computeIfAbsent(d.getTicker(), this::bars);
 			rows.add(DeepScorecard.evaluate(new DeepScorecard.Sample(d.getTicker(), d.getVerdict(), d.getFinishedAt().atZone(ZoneOffset.UTC).toLocalDate(),
-					d.getPriceAtAnalysis() == null ? null : d.getPriceAtAnalysis().doubleValue()), stock, spy));
+					d.getPriceAtAnalysis() == null ? null : d.getPriceAtAnalysis().doubleValue(), d.getVerdictModel()), stock, spy));
 		}
 		rows.sort((a, b) -> b.analyzedOn().compareTo(a.analyzedOn()));
 		return DeepScorecard.summarize(rows);
@@ -104,6 +106,43 @@ public class DeepScorecardService {
 			}
 		}
 		return Optional.empty();
+	}
+
+	/**
+	 * How Agent 11's verdicts have done, split by which model actually produced them — "HAIKU" (the paid Claude
+	 * Haiku escalation) vs "LOCAL" (the free Gemma fallback) — the measured answer to whether paying for Haiku's
+	 * verdict call is worth it. Analyses from before this was tracked contribute to neither bucket.
+	 */
+	public Map<String, DeepScorecard.Summary> byModel() {
+		return DeepScorecard.summarizeByModel(summary().rows());
+	}
+
+	/** The saved history of the Haiku-vs-local comparison, oldest first. */
+	public List<DeepVerdictModelSnapshot> modelHistory() {
+		return modelSnapshots.findAllByOrderByComputedAtAsc();
+	}
+
+	/**
+	 * Persist today's Haiku-vs-local comparison as one new row per (model, verdict, horizon) cell with matured
+	 * observations — same append-only shape as {@link #snapshotNow()}, segmented by model. A cell with zero
+	 * matured observations is skipped. Returns how many rows were written.
+	 */
+	public int snapshotModelComparisonNow() {
+		Map<String, DeepScorecard.Summary> byModel = byModel();
+		int written = 0;
+		for (Map.Entry<String, DeepScorecard.Summary> byModelEntry : byModel.entrySet()) {
+			for (Map.Entry<DeepVerdict, Map<Integer, DeepScorecard.Cell>> byVerdict : byModelEntry.getValue().cells().entrySet()) {
+				for (Map.Entry<Integer, DeepScorecard.Cell> byHorizon : byVerdict.getValue().entrySet()) {
+					if (byHorizon.getValue().n() == 0) continue;
+					modelSnapshots.save(new DeepVerdictModelSnapshot(byModelEntry.getKey(), byVerdict.getKey(), byHorizon.getKey(), byHorizon.getValue()));
+					written++;
+				}
+			}
+		}
+		if (written > 0) {
+			log.info("Agent 11: Haiku-vs-local snapshot saved — {} cell(s)", written);
+		}
+		return written;
 	}
 
 	/**
@@ -144,6 +183,12 @@ public class DeepScorecardService {
 		catch (RuntimeException ex) {
 			log.warn("Agent 11: scorecard snapshot failed: {}", ex.getMessage());
 		}
+		try {
+			snapshotModelComparisonNow();
+		}
+		catch (RuntimeException ex) {
+			log.warn("Agent 11: Haiku-vs-local snapshot failed: {}", ex.getMessage());
+		}
 	}
 
 	/** First-ever snapshot on a fresh deploy, so the history doesn't sit empty until the next 2am run. */
@@ -160,6 +205,14 @@ public class DeepScorecardService {
 			}
 			catch (RuntimeException ex) {
 				log.warn("Agent 11: first-boot scorecard snapshot failed: {}", ex.getMessage());
+			}
+			try {
+				if (modelSnapshots.count() == 0) {
+					snapshotModelComparisonNow();
+				}
+			}
+			catch (RuntimeException ex) {
+				log.warn("Agent 11: first-boot Haiku-vs-local snapshot failed: {}", ex.getMessage());
 			}
 		});
 	}

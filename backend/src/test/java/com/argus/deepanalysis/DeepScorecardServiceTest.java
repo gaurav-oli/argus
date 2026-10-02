@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -26,8 +27,9 @@ class DeepScorecardServiceTest {
 	private final DeepAnalysisRepository repo = mock(DeepAnalysisRepository.class);
 	private final ChartStudyService charts = mock(ChartStudyService.class);
 	private final DeepScorecardSnapshotRepository snapshots = mock(DeepScorecardSnapshotRepository.class);
+	private final DeepVerdictModelSnapshotRepository modelSnapshots = mock(DeepVerdictModelSnapshotRepository.class);
 	private final DeepAnalysisProperties props = new DeepAnalysisProperties(true, 3, Duration.ofDays(4), 40, Duration.ofSeconds(15), true, -8.0);
-	private final DeepScorecardService service = new DeepScorecardService(repo, charts, snapshots, props);
+	private final DeepScorecardService service = new DeepScorecardService(repo, charts, snapshots, modelSnapshots, props);
 
 	private static final LocalDate START = LocalDate.now().minusDays(120);
 
@@ -48,6 +50,12 @@ class DeepScorecardServiceTest {
 		DeepAnalysis d = new DeepAnalysis(ticker, "TEST");
 		d.complete(v, v == DeepVerdict.WORTH_BUYING ? 30 : null, 70, "h", "t", "b", "r", "", "", "i", "", Duration.ofDays(30));
 		ReflectionTestUtils.setField(d, "finishedAt", LocalDate.now().minusDays(daysAgo).atStartOfDay().toInstant(ZoneOffset.UTC));
+		return d;
+	}
+
+	private static DeepAnalysis analysisWithModel(String ticker, DeepVerdict v, int daysAgo, String model) {
+		DeepAnalysis d = analysis(ticker, v, daysAgo);
+		d.recordVerdictModel(model);
 		return d;
 	}
 
@@ -153,5 +161,70 @@ class DeepScorecardServiceTest {
 		when(snapshots.findAllByOrderByComputedAtAsc()).thenReturn(List.of(row));
 
 		assertEquals(List.of(row), service.history());
+	}
+
+	// ---- Haiku vs local model ----
+
+	@Test
+	void byModelSplitsTheTrackRecordByWhichModelAnsweredTheVerdict() {
+		List<DeepAnalysis> done = new ArrayList<>();
+		for (int i = 0; i < 10; i++) done.add(analysisWithModel("AAA", DeepVerdict.WORTH_BUYING, 100, "HAIKU"));
+		for (int i = 0; i < 5; i++) done.add(analysisWithModel("AAA", DeepVerdict.WORTH_BUYING, 100, "LOCAL"));
+		for (int i = 0; i < 3; i++) done.add(analysis("AAA", DeepVerdict.WORTH_BUYING, 100)); // pre-tracking: in neither bucket
+		when(repo.findByStatusIn(List.of(DeepAnalysis.Status.DONE))).thenReturn(done);
+		List<PriceCandle> aaaBars = candles(100, 0.5);
+		when(charts.history("AAA")).thenReturn(aaaBars);
+		List<PriceCandle> spyBars = candles(100, 0.0);
+		when(charts.history("SPY")).thenReturn(spyBars);
+
+		Map<String, DeepScorecard.Summary> byModel = service.byModel();
+
+		assertEquals(2, byModel.size());
+		assertEquals(10, byModel.get("HAIKU").totalVerdicts());
+		assertEquals(5, byModel.get("LOCAL").totalVerdicts());
+		assertEquals(18, service.summary().totalVerdicts(), "the overall scorecard still counts every analysis, tracked or not");
+	}
+
+	@Test
+	void snapshotModelComparisonPersistsOneRowPerModelAndMaturedCell() {
+		List<DeepAnalysis> done = new ArrayList<>();
+		for (int i = 0; i < 10; i++) done.add(analysisWithModel("AAA", DeepVerdict.WORTH_BUYING, 100, "HAIKU"));
+		for (int i = 0; i < 5; i++) done.add(analysisWithModel("AAA", DeepVerdict.WORTH_BUYING, 100, "LOCAL"));
+		when(repo.findByStatusIn(List.of(DeepAnalysis.Status.DONE))).thenReturn(done);
+		List<PriceCandle> aaaBars = candles(100, 0.5);
+		when(charts.history("AAA")).thenReturn(aaaBars);
+		List<PriceCandle> spyBars = candles(100, 0.0);
+		when(charts.history("SPY")).thenReturn(spyBars);
+
+		int written = service.snapshotModelComparisonNow();
+
+		// 100 days old -> 7, 30 and 90-day horizons all matured -> 3 cells per model -> 6 total.
+		assertEquals(6, written);
+		ArgumentCaptor<DeepVerdictModelSnapshot> captor = ArgumentCaptor.forClass(DeepVerdictModelSnapshot.class);
+		verify(modelSnapshots, times(6)).save(captor.capture());
+		assertTrue(captor.getAllValues().stream().filter(r -> r.getModel().equals("HAIKU")).allMatch(r -> r.getObservations() == 10));
+		assertTrue(captor.getAllValues().stream().filter(r -> r.getModel().equals("LOCAL")).allMatch(r -> r.getObservations() == 5));
+	}
+
+	@Test
+	void snapshotModelComparisonWritesNothingWhenNoAnalysisHasATrackedModelYet() {
+		List<DeepAnalysis> done = new ArrayList<>();
+		for (int i = 0; i < 25; i++) done.add(analysis("AAA", DeepVerdict.WORTH_BUYING, 100)); // all pre-tracking
+		when(repo.findByStatusIn(List.of(DeepAnalysis.Status.DONE))).thenReturn(done);
+		List<PriceCandle> aaaBars = candles(100, 0.5);
+		when(charts.history("AAA")).thenReturn(aaaBars);
+		List<PriceCandle> spyBars = candles(100, 0.0);
+		when(charts.history("SPY")).thenReturn(spyBars);
+
+		assertEquals(0, service.snapshotModelComparisonNow());
+		verify(modelSnapshots, never()).save(org.mockito.Mockito.any());
+	}
+
+	@Test
+	void modelHistoryDelegatesToTheRepositoryOldestFirst() {
+		DeepVerdictModelSnapshot row = new DeepVerdictModelSnapshot("HAIKU", DeepVerdict.WORTH_BUYING, 30, new DeepScorecard.Cell(10, 1.0, 0.7));
+		when(modelSnapshots.findAllByOrderByComputedAtAsc()).thenReturn(List.of(row));
+
+		assertEquals(List.of(row), service.modelHistory());
 	}
 }

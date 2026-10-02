@@ -3,9 +3,12 @@ package com.argus.deepanalysis;
 import com.argus.common.NotFoundException;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -59,6 +62,29 @@ public class DeepAnalysisController {
 	public ScorecardSnapshotSummary saveScorecardSnapshot() {
 		int written = scorecard.snapshotNow();
 		return new ScorecardSnapshotSummary(written, scorecard.history().size());
+	}
+
+	/**
+	 * How Agent 11's verdicts have done, split by which model actually reached them — "HAIKU" (the paid Claude
+	 * Haiku escalation) vs "LOCAL" (the free Gemma fallback) — the measured answer to whether paying for Haiku's
+	 * verdict call is worth it.
+	 */
+	@GetMapping("/scorecard/by-model")
+	public ModelComparisonView scorecardByModel() {
+		Map<String, Long> totals = new LinkedHashMap<>();
+		List<ModelCellView> cells = new ArrayList<>();
+		scorecard.byModel().forEach((model, s) -> {
+			totals.put(model, (long) s.totalVerdicts());
+			s.cells().forEach((verdict, byHorizon) -> byHorizon.forEach((h, c) -> cells.add(new ModelCellView(model, verdict.name(), verdict.label(), h,
+					c.n(), Math.round(c.meanExcessPct() * 100) / 100.0, c.hitRate() == null ? null : Math.round(c.hitRate() * 1000) / 1000.0))));
+		});
+		return new ModelComparisonView(totals, cells);
+	}
+
+	/** The saved history of the Haiku-vs-local comparison, oldest first. */
+	@GetMapping("/scorecard/by-model/history")
+	public List<ModelSnapshotView> scorecardByModelHistory() {
+		return scorecard.modelHistory().stream().map(ModelSnapshotView::from).toList();
 	}
 
 	/** Every ticker's newest verdict (or in-progress run), strongest buys first. */
@@ -143,6 +169,24 @@ public class DeepAnalysisController {
 	}
 
 	public record ScorecardSnapshotSummary(int cellsWritten, int historySize) {
+	}
+
+	/** One (model, verdict, horizon) cell in the Haiku-vs-local comparison. */
+	public record ModelCellView(String model, String verdict, String label, int horizonDays, int n, double meanExcessPct, Double hitRate) {
+	}
+
+	/** @param totalVerdicts how many finished analyses each model produced the verdict for (matured or not) */
+	public record ModelComparisonView(Map<String, Long> totalVerdicts, List<ModelCellView> cells) {
+	}
+
+	/** One saved history point for a (model, verdict, horizon) cell. */
+	public record ModelSnapshotView(String model, String verdict, String label, int horizonDays, int observations, double meanExcessPct,
+			Double hitRate, Instant computedAt) {
+
+		static ModelSnapshotView from(DeepVerdictModelSnapshot s) {
+			return new ModelSnapshotView(s.getModel(), s.getVerdict().name(), s.getVerdict().label(), s.getHorizonDays(), s.getObservations(),
+					s.getMeanExcessPct().doubleValue(), s.getHitRate() == null ? null : s.getHitRate().doubleValue(), s.getComputedAt());
+		}
 	}
 
 	public record PlainExplanationView(String text) {

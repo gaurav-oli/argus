@@ -127,6 +127,7 @@ class DeepAnalystServiceTest {
 		assertTrue(run.getEvidence().contains("NEWS-BLOCK") && run.getEvidence().contains("=== CHART"), "the exact evidence pack is stored for audit");
 		assertNotNull(run.getExpiresAt());
 		assertTrue(run.getStages().contains("timings"));
+		assertEquals("HAIKU", run.getVerdictModel(), "Haiku answered and its JSON parsed cleanly — it should get the credit");
 	}
 
 	@Test
@@ -245,6 +246,21 @@ class DeepAnalystServiceTest {
 
 		assertEquals(DeepAnalysis.Status.DONE, run.getStatus(), run.getError());
 		assertEquals(DeepVerdict.WORTH_BUYING, run.getVerdict());
+		assertEquals("LOCAL", run.getVerdictModel(), "Haiku failed, so the fallback that actually answered is what should be tracked");
+	}
+
+	@Test
+	void whenHaikusReplyIsNotValidJsonTheRepairRetryIsAttributedToTheLocalModel() {
+		arrange(evidence(chart(0.6), fundamentals(true), false, 150.0, null));
+		script(specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), specialistJson("BULLISH", 0.8), SKEPTIC);
+		when(gateway.escalate(anyString())).thenReturn("I think it's a buy, no JSON here");
+		when(gateway.generate(org.mockito.ArgumentMatchers.contains("not valid JSON"), eq(ModelTier.BIG)))
+				.thenReturn(verdictJson("WORTH_BUYING", 30, 70));
+
+		analyze();
+
+		assertEquals(DeepAnalysis.Status.DONE, run.getStatus(), run.getError());
+		assertEquals("LOCAL", run.getVerdictModel(), "the JSON-repair retry always runs locally, regardless of who answered first");
 	}
 
 	@Test
@@ -263,6 +279,7 @@ class DeepAnalystServiceTest {
 
 		verify(gateway, never()).escalate(anyString());
 		assertEquals(DeepAnalysis.Status.DONE, run.getStatus(), run.getError());
+		assertEquals("LOCAL", run.getVerdictModel());
 	}
 
 	@Test

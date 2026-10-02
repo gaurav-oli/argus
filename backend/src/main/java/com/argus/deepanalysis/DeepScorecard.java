@@ -23,8 +23,16 @@ public final class DeepScorecard {
 	private DeepScorecard() {
 	}
 
-	/** One analysis to evaluate. {@code entryPrice} may be null (the first close on/after the analysis date is used). */
-	public record Sample(String ticker, DeepVerdict verdict, LocalDate analyzedOn, Double entryPrice) {
+	/**
+	 * One analysis to evaluate. {@code entryPrice} may be null (the first close on/after the analysis date is
+	 * used). {@code verdictModel} is "HAIKU" or "LOCAL" — which model actually produced the verdict, so outcomes
+	 * can be compared between them — or null for an analysis from before this was tracked.
+	 */
+	public record Sample(String ticker, DeepVerdict verdict, LocalDate analyzedOn, Double entryPrice, String verdictModel) {
+
+		public Sample(String ticker, DeepVerdict verdict, LocalDate analyzedOn, Double entryPrice) {
+			this(ticker, verdict, analyzedOn, entryPrice, null);
+		}
 	}
 
 	public record Bar(LocalDate date, double close) {
@@ -34,9 +42,15 @@ public final class DeepScorecard {
 	 * @param sincePct       stock return since the analysis, to the latest bar
 	 * @param sinceExcessPct that minus the S&amp;P 500's over the same span
 	 * @param matured        excess return vs the S&amp;P at each horizon that has elapsed (horizon days → percent)
+	 * @param verdictModel   "HAIKU" or "LOCAL", or null if not tracked for this analysis — see {@link Sample}
 	 */
 	public record Row(String ticker, DeepVerdict verdict, LocalDate analyzedOn, Double entryPrice, Double sincePct, Double sinceSpyPct,
-			Double sinceExcessPct, Map<Integer, Double> matured) {
+			Double sinceExcessPct, Map<Integer, Double> matured, String verdictModel) {
+
+		public Row(String ticker, DeepVerdict verdict, LocalDate analyzedOn, Double entryPrice, Double sincePct, Double sinceSpyPct,
+				Double sinceExcessPct, Map<Integer, Double> matured) {
+			this(ticker, verdict, analyzedOn, entryPrice, sincePct, sinceSpyPct, sinceExcessPct, matured, null);
+		}
 	}
 
 	/** Aggregate of one verdict at one horizon: how many have matured, their mean excess, and the directional hit rate (null for WAIT). */
@@ -53,7 +67,7 @@ public final class DeepScorecard {
 		Double entry = s.entryPrice() != null ? s.entryPrice() : entryBar.map(Bar::close).orElse(null);
 		Map<Integer, Double> matured = new LinkedHashMap<>();
 		if (entry == null || entry <= 0 || spyEntry.isEmpty() || stock.isEmpty() || spy.isEmpty()) {
-			return new Row(s.ticker(), s.verdict(), s.analyzedOn(), entry, null, null, null, matured);
+			return new Row(s.ticker(), s.verdict(), s.analyzedOn(), entry, null, null, null, matured, s.verdictModel());
 		}
 		double spy0 = spyEntry.get().close();
 		Bar lastStock = stock.get(stock.size() - 1), lastSpy = spy.get(spy.size() - 1);
@@ -66,7 +80,26 @@ public final class DeepScorecard {
 				matured.put(h, pct(stockExit.get().close(), entry) - pct(spyExit.get().close(), spy0));
 			}
 		}
-		return new Row(s.ticker(), s.verdict(), s.analyzedOn(), entry, since, sinceSpy, since - sinceSpy, matured);
+		return new Row(s.ticker(), s.verdict(), s.analyzedOn(), entry, since, sinceSpy, since - sinceSpy, matured, s.verdictModel());
+	}
+
+	/**
+	 * The same rollup as {@link #summarize}, one {@link Summary} per {@code verdictModel} ("HAIKU" vs "LOCAL") —
+	 * the real, measured answer to "does paying for Haiku's verdict actually do better than Gemma alone?" Rows
+	 * from before this was tracked ({@code verdictModel == null}) are excluded, same as a horizon that hasn't
+	 * matured yet: an unknown data point is not a data point.
+	 */
+	public static Map<String, Summary> summarizeByModel(List<Row> rows) {
+		Map<String, List<Row>> byModel = new LinkedHashMap<>();
+		for (Row r : rows) {
+			if (r.verdictModel() == null) continue;
+			byModel.computeIfAbsent(r.verdictModel(), k -> new ArrayList<>()).add(r);
+		}
+		Map<String, Summary> out = new LinkedHashMap<>();
+		for (Map.Entry<String, List<Row>> e : byModel.entrySet()) {
+			out.put(e.getKey(), summarize(e.getValue()));
+		}
+		return out;
 	}
 
 	/** Roll rows up to verdict × horizon cells. */

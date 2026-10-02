@@ -4,13 +4,16 @@ import {
   getDeepAnalyses,
   getDeepQueue,
   getDeepScorecard,
+  getDeepScorecardByModel,
   getDeepScorecardHistory,
   runDeepAnalysis,
   saveDeepScorecardSnapshot,
   type DeepAnalysisView,
+  type DeepModelComparison,
   type DeepQueue,
   type DeepScorecard,
   type DeepScorecardSnapshotView,
+  type VerdictModel,
 } from "@/lib/apiClient";
 import { DeepAnalysisDetail, DeepSummaryLine, ageText } from "@/features/intelligence/DeepAnalysisCard";
 import { Sensitive } from "@/features/privacy/Sensitive";
@@ -220,6 +223,7 @@ function Scorecard() {
       <p className="mt-1 text-[10px] text-text-secondary">
         Average return versus the S&amp;P 500 over the period. Needs {sc.minForTrackRecord} matured verdicts of a kind before a poor record starts capping conviction.
       </p>
+      <HaikuVsLocal />
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
         <p className="text-[10px] text-text-secondary">
           {history === null ? (
@@ -255,5 +259,80 @@ function Scorecard() {
         ))}
       </ul>
     </details>
+  );
+}
+
+const MODEL_LABEL: Record<VerdictModel, string> = { HAIKU: "Claude Haiku", LOCAL: "Local model (Gemma)" };
+const VERDICT_LABEL: Record<string, string> = { WORTH_BUYING: "Buy", WAIT: "Wait", NOT_WORTH_BUYING: "Avoid" };
+
+/**
+ * Is paying for Haiku's verdict call actually better than Gemma alone? Same benchmark-relative measure as the
+ * table above, split by which model actually answered — the measured answer, not just the architectural
+ * reasoning for why Agent 11 escalates that one call. Nothing to show until at least one verdict of each kind
+ * has matured, which (being new) takes a little while to build up.
+ */
+function HaikuVsLocal() {
+  const [data, setData] = useState<DeepModelComparison | null | undefined>(undefined);
+
+  useEffect(() => {
+    getDeepScorecardByModel().then(setData).catch(() => setData(null));
+  }, []);
+
+  if (!data) return null;
+  const models = Object.keys(data.totalVerdicts) as VerdictModel[];
+  if (models.length === 0) return null;
+  const cell = (model: VerdictModel, v: string, h: number) => data.cells.find((c) => c.model === model && c.verdict === v && c.horizonDays === h);
+
+  return (
+    <div className="mt-3 border-t border-border/60 pt-2">
+      <p className="text-[11px] font-medium text-text-secondary">Haiku vs local model — is paying for the verdict call worth it?</p>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+        {models.map((m) => (
+          <div key={m} className="flex-1 overflow-x-auto">
+            <p className="mb-1 text-[10px] font-semibold text-text-primary">
+              {MODEL_LABEL[m] ?? m} <span className="font-normal text-text-secondary">({data.totalVerdicts[m]} verdict{data.totalVerdicts[m] === 1 ? "" : "s"})</span>
+            </p>
+            <table className="w-full text-left text-[11px]">
+              <thead>
+                <tr className="text-text-secondary">
+                  <th className="py-1 pr-2 font-medium">Verdict</th>
+                  {[7, 30, 90].map((h) => (
+                    <th key={h} className="py-1 pr-2 font-medium">
+                      {h}d
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(["WORTH_BUYING", "WAIT", "NOT_WORTH_BUYING"] as const).map((v) => (
+                  <tr key={v} className="border-t border-border/60">
+                    <td className="py-1 pr-2 text-text-primary">{VERDICT_LABEL[v]}</td>
+                    {[7, 30, 90].map((h) => {
+                      const c = cell(m, v, h);
+                      return (
+                        <td key={h} className="py-1 pr-2 tabular-nums text-text-secondary">
+                          {c ? (
+                            <>
+                              {pct(c.meanExcessPct)}
+                              {c.hitRate != null && <> · {Math.round(c.hitRate * 100)}%</>} <span className="text-[10px]">(n={c.n})</span>
+                            </>
+                          ) : (
+                            "–"
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-[10px] text-text-secondary">
+        Same measure as above, split by which model actually produced the verdict (a JSON-repair retry always counts as local, whoever answered
+        first). Analyses from before this was tracked count toward neither column.
+      </p>
+    </div>
   );
 }

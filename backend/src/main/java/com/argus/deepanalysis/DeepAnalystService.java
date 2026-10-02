@@ -152,9 +152,11 @@ public class DeepAnalystService {
 
 			pause();
 			stage(run, "Portfolio manager weighing the evidence");
-			JsonNode draftNode = verdictCall(DeepPrompts.verdict(ticker, ev.overview(), ev.quickAgents(), digest,
+			VerdictOutcome verdictOutcome = verdictCall(DeepPrompts.verdict(ticker, ev.overview(), ev.quickAgents(), digest,
 					"Severity " + String.format(Locale.ROOT, "%.2f", skepticSeverity) + ". " + skepticText, lessonText), timings)
 					.orElseThrow(() -> new IllegalStateException("The portfolio-manager step returned no usable verdict."));
+			JsonNode draftNode = verdictOutcome.json();
+			run.recordVerdictModel(verdictOutcome.model());
 			DeepVerdict proposed = parseVerdict(draftNode.path("verdict").asString(""));
 			if (proposed == null) {
 				throw new IllegalStateException("The portfolio-manager verdict was not one of WORTH_BUYING / WAIT / NOT_WORTH_BUYING.");
@@ -254,29 +256,43 @@ public class DeepAnalystService {
 		}
 	}
 
-	/** The verdict call: paid Haiku when allowed (budget-governed inside the gateway), falling back to the local model. */
-	private Optional<JsonNode> verdictCall(String prompt, List<String> timings) {
+	/** Which model actually produced the parsed verdict JSON — "HAIKU" or "LOCAL" — for tracking outcomes by model. */
+	private record VerdictOutcome(JsonNode json, String model) {
+	}
+
+	/**
+	 * The verdict call: paid Haiku when allowed (budget-governed inside the gateway), falling back to the local
+	 * model. The repair retry for unparseable JSON always goes to the local model regardless of who answered
+	 * first — so {@code model} reflects whichever call's output actually got used, not just which was attempted.
+	 */
+	private Optional<VerdictOutcome> verdictCall(String prompt, List<String> timings) {
 		long t0 = System.nanoTime();
 		try {
 			String raw;
+			String model;
 			if (props.useHaikuForVerdict()) {
 				try {
 					raw = gateway.escalate(prompt);
+					model = "HAIKU";
 				}
 				catch (RuntimeException ex) {
 					log.info("Agent 11: Haiku verdict unavailable ({}) — using the local model", ex.getMessage());
 					raw = gateway.generate(prompt, ModelTier.BIG);
+					model = "LOCAL";
 				}
 			}
 			else {
 				raw = gateway.generate(prompt, ModelTier.BIG);
+				model = "LOCAL";
 			}
 			Optional<JsonNode> parsed = LenientJsonParser.parseObject(raw, log);
 			if (parsed.isEmpty()) {
 				parsed = LenientJsonParser.parseObject(gateway.generate(prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON object.",
 						ModelTier.BIG), log);
+				model = "LOCAL";
 			}
-			return parsed;
+			String finalModel = model;
+			return parsed.map(json -> new VerdictOutcome(json, finalModel));
 		}
 		catch (RuntimeException ex) {
 			log.warn("Agent 11: verdict call failed: {}", ex.getMessage());

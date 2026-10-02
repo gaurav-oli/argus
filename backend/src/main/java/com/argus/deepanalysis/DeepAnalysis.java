@@ -95,6 +95,10 @@ public class DeepAnalysis {
 	@Column(name = "plain_explanation_at")
 	private Instant plainExplanationAt;
 
+	/** "HAIKU" or "LOCAL" — which model actually produced the verdict JSON, for tracking Haiku-vs-Gemma outcomes. */
+	@Column(name = "verdict_model")
+	private String verdictModel;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -263,10 +267,16 @@ public class DeepAnalysis {
 	public Instant getThesisCheckedAt() { return thesisCheckedAt; }
 	public String getPlainExplanation() { return plainExplanation; }
 	public Instant getPlainExplanationAt() { return plainExplanationAt; }
+	public String getVerdictModel() { return verdictModel; }
 
 	/** Cache a beginner-friendly explanation so re-opening this ticker never re-pays the model call. */
 	public void recordPlainExplanation(String text) {
 		this.plainExplanation = text;
 		this.plainExplanationAt = Instant.now();
+	}
+
+	/** Which model actually produced the verdict JSON — "HAIKU" or "LOCAL" — set once, before {@link #complete}. */
+	public void recordVerdictModel(String model) {
+		this.verdictModel = model;
 	}
 }

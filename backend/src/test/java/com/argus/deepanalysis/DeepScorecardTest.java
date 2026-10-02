@@ -95,7 +95,44 @@ class DeepScorecardTest {
 		assertTrue(s.cells().get(DeepVerdict.NOT_WORTH_BUYING).isEmpty());
 	}
 
+	// ---- Haiku vs local model ----
+
+	@Test
+	void verdictModelFlowsThroughFromSampleToRow() {
+		Row r = DeepScorecard.evaluate(new Sample("X", DeepVerdict.WORTH_BUYING, D0, 100.0, "HAIKU"), series(100, 1.0, 40), series(100, 0.1, 40));
+
+		assertEquals("HAIKU", r.verdictModel());
+	}
+
+	@Test
+	void aSampleWithNoVerdictModelRecordsNullNotAGuess() {
+		Row r = DeepScorecard.evaluate(new Sample("X", DeepVerdict.WORTH_BUYING, D0, 100.0), series(100, 1.0, 40), series(100, 0.1, 40));
+
+		assertNull(r.verdictModel(), "an analysis from before this was tracked must not be guessed into either bucket");
+	}
+
+	@Test
+	void summarizeByModelSplitsOutcomesAndExcludesUntrackedRows() {
+		List<Row> rows = new ArrayList<>();
+		rows.add(row(DeepVerdict.WORTH_BUYING, 5, "HAIKU"));
+		rows.add(row(DeepVerdict.WORTH_BUYING, -3, "HAIKU"));
+		rows.add(row(DeepVerdict.WORTH_BUYING, 2, "LOCAL"));
+		rows.add(row(DeepVerdict.WORTH_BUYING, 10, null)); // pre-tracking — must count toward neither model
+
+		java.util.Map<String, DeepScorecard.Summary> byModel = DeepScorecard.summarizeByModel(rows);
+
+		assertEquals(2, byModel.size());
+		assertEquals(2, byModel.get("HAIKU").totalVerdicts());
+		assertEquals(1.0, byModel.get("HAIKU").cells().get(DeepVerdict.WORTH_BUYING).get(30).meanExcessPct(), 1e-9);
+		assertEquals(1, byModel.get("LOCAL").totalVerdicts());
+		assertEquals(2.0, byModel.get("LOCAL").cells().get(DeepVerdict.WORTH_BUYING).get(30).meanExcessPct(), 1e-9);
+	}
+
 	private static Row row(DeepVerdict v, double excess30) {
 		return new Row("X", v, D0, 100.0, excess30, 0.0, excess30, java.util.Map.of(30, excess30));
+	}
+
+	private static Row row(DeepVerdict v, double excess30, String model) {
+		return new Row("X", v, D0, 100.0, excess30, 0.0, excess30, java.util.Map.of(30, excess30), model);
 	}
 }
