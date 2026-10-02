@@ -1044,6 +1044,9 @@ export interface GraduationSummary {
 
 export const getGraduation = (): Promise<GraduationSummary> =>
   apiGet<GraduationSummary>("/api/recommendations/graduation");
+/** Manual review (Story 6.6) — resume a FROZEN Agent 5 back to SHADOW. A no-op if not frozen. */
+export const resumeGraduation = (): Promise<GraduationSummary> =>
+  apiPost<GraduationSummary>("/api/recommendations/graduation/resume");
 
 // ---- Web Push (Epic 8, FR-17) ----
 

@@ -24,9 +24,11 @@ import com.argus.model.ModelGateway;
 import com.argus.portfolio.LivePortfolioService;
 import com.argus.technical.ChartStudy;
 import com.argus.technical.ChartStudyService;
+import com.argus.technical.PriceCandle;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -58,11 +60,17 @@ class PaperInvestorServiceTest {
 	// Default horizons (7/30/90); the close tests construct their own horizon-0 trades so they are
 	// immediately due. Benchmark is absent unless a test sets it.
 	private final PaperInvestorService investor = new PaperInvestorService(
-			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, lessons, charts, deepAnalyses, recommendationRepo);
+			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo);
 
 	private PaperInvestorService staggeredInvestor() {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "7,30,90", 0, sectors, 4, lessons, charts, deepAnalyses, recommendationRepo);
+				new BigDecimal("100"), "7,30,90", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo);
+	}
+
+	/** A correlation cap tight enough (1) that a single existing correlated same-direction name trips it. */
+	private PaperInvestorService investorWithCorrelationCap(int cap) {
+		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
+				new BigDecimal("100"), "", 0, sectors, 4, cap, lessons, charts, deepAnalyses, recommendationRepo);
 	}
 
 	private static Recommendation rec(String ticker, SignalDirection dir, long id) {
@@ -366,6 +374,103 @@ class PaperInvestorServiceTest {
 
 		assertTrue(investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).isEmpty());
 		verify(trades, never()).save(any());
+	}
+
+	// ---- correlated-cluster concentration guard: the cross-sector blind spot the sector cap misses ----
+
+	private static final LocalDate CORR_D0 = LocalDate.of(2026, 1, 1);
+	private static final double[] CORR_CHANGES =
+			{1, -0.5, 2, -1, 0.5, 1.5, -0.8, 2.2, -1.5, 0.9, 1.1, -0.6, 1.8, -1.2, 0.7, 1.3, -0.9, 2.0, -1.1, 0.6, 1.4};
+
+	private static List<PriceCandle> corrSeries(double start, double[] pctChanges) {
+		List<PriceCandle> out = new ArrayList<>();
+		double p = start;
+		LocalDate d = CORR_D0;
+		PriceCandle first = mock(PriceCandle.class);
+		when(first.getCandleDate()).thenReturn(d);
+		when(first.getClose()).thenReturn(BigDecimal.valueOf(p));
+		out.add(first);
+		for (double pct : pctChanges) {
+			d = d.plusDays(1);
+			p *= 1 + pct / 100.0;
+			PriceCandle c = mock(PriceCandle.class);
+			when(c.getCandleDate()).thenReturn(d);
+			when(c.getClose()).thenReturn(BigDecimal.valueOf(p));
+			out.add(c);
+		}
+		return out;
+	}
+
+	private static double[] mirror(double[] xs) {
+		double[] out = new double[xs.length];
+		for (int i = 0; i < xs.length; i++) out[i] = -xs[i];
+		return out;
+	}
+
+	@Test
+	void correlatedClusterFullBlocksANewCorrelatedBetWhenTheCapIsReached() {
+		SimulatedTrade openTsla = new SimulatedTrade(1L, "TSLA", SignalDirection.BULLISH, bd(100), bd(200), 30, null);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(openTsla));
+		List<PriceCandle> nvda = corrSeries(50, CORR_CHANGES);
+		List<PriceCandle> tsla = corrSeries(200, CORR_CHANGES); // identical % moves -> correlation 1.0
+		when(charts.history("NVDA")).thenReturn(nvda);
+		when(charts.history("TSLA")).thenReturn(tsla);
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("NVDA")).thenReturn(Optional.of(bd(50)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+
+		assertTrue(investorWithCorrelationCap(1).open(rec("NVDA", SignalDirection.BULLISH, 7L)).isEmpty());
+		verify(trades, never()).save(any());
+	}
+
+	@Test
+	void uncorrelatedNamesDoNotCountTowardTheCluster() {
+		SimulatedTrade openTsla = new SimulatedTrade(1L, "TSLA", SignalDirection.BULLISH, bd(100), bd(200), 30, null);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(openTsla));
+		List<PriceCandle> ko = corrSeries(70, CORR_CHANGES);
+		List<PriceCandle> tsla = corrSeries(200, mirror(CORR_CHANGES)); // mirror image -> correlation -1.0
+		when(charts.history("KO")).thenReturn(ko);
+		when(charts.history("TSLA")).thenReturn(tsla);
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("KO")).thenReturn(Optional.of(bd(70)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		assertFalse(investorWithCorrelationCap(1).open(rec("KO", SignalDirection.BULLISH, 7L)).isEmpty(),
+				"a negatively (or weakly) correlated name is a different bet, not a concentrated one — it must open");
+	}
+
+	@Test
+	void withoutEnoughSharedPriceHistoryTheCorrelationGateStaysSilent() {
+		SimulatedTrade openTsla = new SimulatedTrade(1L, "TSLA", SignalDirection.BULLISH, bd(100), bd(200), 30, null);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(openTsla));
+		List<PriceCandle> nvda = corrSeries(50, CORR_CHANGES).subList(0, 10); // too few shared days
+		List<PriceCandle> tsla = corrSeries(200, CORR_CHANGES);
+		when(charts.history("NVDA")).thenReturn(nvda);
+		when(charts.history("TSLA")).thenReturn(tsla);
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("NVDA")).thenReturn(Optional.of(bd(50)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		assertFalse(investorWithCorrelationCap(1).open(rec("NVDA", SignalDirection.BULLISH, 7L)).isEmpty(),
+				"not enough shared history to trust a correlation read — silence, not a block");
+	}
+
+	@Test
+	void aZeroCapDisablesTheCorrelationGateEntirely() {
+		SimulatedTrade openTsla = new SimulatedTrade(1L, "TSLA", SignalDirection.BULLISH, bd(100), bd(200), 30, null);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(openTsla));
+		List<PriceCandle> nvda = corrSeries(50, CORR_CHANGES);
+		List<PriceCandle> tsla = corrSeries(200, CORR_CHANGES);
+		when(charts.history("NVDA")).thenReturn(nvda);
+		when(charts.history("TSLA")).thenReturn(tsla);
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("NVDA")).thenReturn(Optional.of(bd(50)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+
+		assertFalse(investorWithCorrelationCap(0).open(rec("NVDA", SignalDirection.BULLISH, 7L)).isEmpty());
 	}
 
 	// ---- early exits: the stop, and Agent 11 changing its mind ----

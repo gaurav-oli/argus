@@ -3,6 +3,7 @@ import { BottomNav } from "@/components/shell/BottomNav";
 import { BottomStrip } from "@/components/shell/BottomStrip";
 import { RightPanel } from "@/components/shell/RightPanel";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { SystemAlertBanner } from "@/components/shell/SystemAlertBanner";
 import { TopBar } from "@/components/shell/TopBar";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { PanicProvider } from "@/features/panic/PanicProvider";
@@ -35,6 +36,7 @@ export default function DashboardLayout({
 
             <div className="flex min-w-0 flex-1 flex-col">
               <TopBar />
+              <SystemAlertBanner />
 
               <div className="flex min-h-0 flex-1">
                 <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>

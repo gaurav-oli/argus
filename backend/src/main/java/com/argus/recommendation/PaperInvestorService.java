@@ -2,6 +2,7 @@ package com.argus.recommendation;
 
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
+import com.argus.portfolio.CorrelationRisk;
 import com.argus.portfolio.LivePortfolioService;
 import com.argus.deepanalysis.DeepAnalysis;
 import com.argus.deepanalysis.DeepAnalysisService;
@@ -40,6 +41,10 @@ public class PaperInvestorService {
 
 	private static final Logger log = LoggerFactory.getLogger(PaperInvestorService.class);
 	private static final List<Integer> DEFAULT_HORIZONS = List.of(7, 30, 90);
+	/** Same bar {@link com.argus.portfolio.HealthScoreService} uses to flag a correlated pair in a real portfolio. */
+	private static final double CORRELATION_THRESHOLD = 0.7;
+	/** Below this many shared trading days, a correlation read is too thin to trust — stay silent, don't block. */
+	private static final int MIN_COMMON_TRADING_DAYS = 20;
 
 	private final SimulatedTradeRepository trades;
 	private final LivePortfolioService prices;
@@ -53,6 +58,7 @@ public class PaperInvestorService {
 	private final boolean horizonForced;
 	private final SectorClassifier sectors;
 	private final int maxOpenPerSectorDirection;
+	private final int maxOpenPerCorrelatedCluster;
 	private final Lessons lessons;
 	private final ChartStudyService charts;
 	private final DeepAnalysisService deepAnalyses;
@@ -66,6 +72,7 @@ public class PaperInvestorService {
 			@Value("${argus.paper-investor.horizon-days:0}") int legacySingleHorizon,
 			SectorClassifier sectors,
 			@Value("${argus.paper-investor.max-open-per-sector-direction:4}") int maxOpenPerSectorDirection,
+			@Value("${argus.paper-investor.max-open-per-correlated-cluster:3}") int maxOpenPerCorrelatedCluster,
 			Lessons lessons, ChartStudyService charts, DeepAnalysisService deepAnalyses,
 			RecommendationRepository recommendations) {
 		this.trades = trades;
@@ -79,6 +86,7 @@ public class PaperInvestorService {
 		this.horizonForced = legacySingleHorizon > 0;
 		this.sectors = sectors;
 		this.maxOpenPerSectorDirection = maxOpenPerSectorDirection;
+		this.maxOpenPerCorrelatedCluster = maxOpenPerCorrelatedCluster;
 		this.lessons = lessons;
 		this.charts = charts;
 		this.deepAnalyses = deepAnalyses;
@@ -152,6 +160,42 @@ public class PaperInvestorService {
 		return open >= maxOpenPerSectorDirection;
 	}
 
+	/**
+	 * Whether the book already holds as many same-direction positions that actually <em>move together</em>
+	 * with this one as we allow — {@link #sectorFull} catches five "different" semis names; this catches
+	 * the cross-sector blind spot (NVDA and TSLA are a different sector each, but a shock that hits one
+	 * tends to hit both). Uses the same deterministic Pearson-correlation read {@link
+	 * com.argus.portfolio.HealthScoreService} uses on a real portfolio, just pointed at the paper book
+	 * instead. Silent (never blocks) whenever there isn't enough shared price history to trust a read yet
+	 * — same discipline as everywhere else correlation is measured here.
+	 */
+	private boolean correlatedClusterFull(Recommendation rec) {
+		if (maxOpenPerCorrelatedCluster <= 0) {
+			return false;
+		}
+		List<CorrelationRisk.Bar> candidate = bars(rec.getTicker());
+		if (candidate.isEmpty()) {
+			return false;
+		}
+		long correlated = trades.findByStatus(SimulatedTrade.Status.OPEN).stream()
+				.filter(t -> t.getDirection() == rec.getDirection() && !t.getTicker().equals(rec.getTicker()))
+				.map(SimulatedTrade::getTicker).distinct()
+				.filter(ticker -> CorrelationRisk.correlation(candidate, bars(ticker), MIN_COMMON_TRADING_DAYS)
+						.map(c -> c >= CORRELATION_THRESHOLD).orElse(false))
+				.count();
+		return correlated >= maxOpenPerCorrelatedCluster;
+	}
+
+	private List<CorrelationRisk.Bar> bars(String ticker) {
+		try {
+			return charts.history(ticker).stream().map(c -> new CorrelationRisk.Bar(c.getCandleDate(), c.getClose().doubleValue())).toList();
+		}
+		catch (RuntimeException ex) {
+			log.debug("Investor: candle history unavailable for {} correlation check: {}", ticker, ex.getMessage());
+			return List.of();
+		}
+	}
+
 	/** Staggered horizons from the list prop; the legacy single-horizon knob (validation) wins when set. */
 	private static List<Integer> resolveHorizons(String list, int legacySingle) {
 		if (legacySingle > 0) {
@@ -214,6 +258,11 @@ public class PaperInvestorService {
 				log.info("Investor: {} book already holds {} {} names — not stacking {}",
 						sectors.sectorOf(rec.getTicker()).label(), maxOpenPerSectorDirection, rec.getDirection(),
 						rec.getTicker());
+				return List.of();
+			}
+			if (correlatedClusterFull(rec)) {
+				log.info("Investor: book already holds {} {} names correlated with {} — not stacking a concentrated bet",
+						maxOpenPerCorrelatedCluster, rec.getDirection(), rec.getTicker());
 				return List.of();
 			}
 
