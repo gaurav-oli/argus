@@ -14,6 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,6 +28,11 @@ import tools.jackson.databind.json.JsonMapper;
  * headlines only (no summary); relevance to holdings is resolved downstream by the tagger. Active by
  * default; disable with {@code argus.news.gdelt.enabled=false}. Failures yield an empty list so a
  * GDELT outage never breaks the cycle.
+ *
+ * <p>GDELT's free tier rate-limits aggressively; hitting it on every ingestion cycle regardless of a
+ * recent failure just earns more 429s / stalled connections. On a failure this backs off (doubling,
+ * capped) and skips the call entirely until the backoff clears — still polled from the same schedule,
+ * just not hammered while it's clearly throttling this source.
  */
 @Component
 @ConditionalOnProperty(name = "argus.news.gdelt.enabled", havingValue = "true", matchIfMissing = true)
@@ -38,10 +44,14 @@ public class GdeltNewsSource implements NewsSource {
 	private static final ObjectMapper JSON = JsonMapper.builder().build();
 	// GDELT seendate: e.g. 20260623T120000Z.
 	private static final DateTimeFormatter SEENDATE = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+	private static final Duration INITIAL_BACKOFF = Duration.ofMinutes(10);
+	private static final Duration MAX_BACKOFF = Duration.ofHours(2);
 
 	private final String query;
 	private final int maxRecords;
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
+	private volatile Instant backoffUntil = Instant.EPOCH;
 
 	public GdeltNewsSource(NewsIngestionProperties props) {
 		this.query = props.gdelt().query();
@@ -55,6 +65,11 @@ public class GdeltNewsSource implements NewsSource {
 
 	@Override
 	public List<RawArticle> fetch(Collection<String> heldTickers) {
+		Instant now = Instant.now();
+		if (now.isBefore(backoffUntil)) {
+			log.debug("GDELT: backing off ({} consecutive failure(s)) — skipping until {}", consecutiveFailures.get(), backoffUntil);
+			return List.of();
+		}
 		try {
 			String q = URLEncoder.encode(query, StandardCharsets.UTF_8);
 			URI uri = URI.create("https://api.gdeltproject.org/api/v2/doc/doc?query=" + q
@@ -63,6 +78,7 @@ public class GdeltNewsSource implements NewsSource {
 			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
 			if (res.statusCode() != 200) {
 				log.warn("GDELT returned HTTP {}", res.statusCode());
+				recordFailure(now);
 				return List.of();
 			}
 			JsonNode articles = JSON.readTree(res.body()).path("articles");
@@ -76,14 +92,23 @@ public class GdeltNewsSource implements NewsSource {
 				}
 				out.add(new RawArticle(NAME, url, url, headline, null, published, List.of()));
 			}
+			consecutiveFailures.set(0);
+			backoffUntil = Instant.EPOCH;
 			return out;
 		} catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			return List.of();
 		} catch (RuntimeException | java.io.IOException ex) {
 			log.warn("GDELT fetch failed: {}", ex.getMessage());
+			recordFailure(now);
 			return List.of();
 		}
+	}
+
+	private void recordFailure(Instant now) {
+		int failures = consecutiveFailures.incrementAndGet();
+		backoffUntil = now.plus(Backoff.duration(failures, INITIAL_BACKOFF, MAX_BACKOFF));
+		log.info("GDELT: {} consecutive failure(s) — backing off until {}", failures, backoffUntil);
 	}
 
 	/** Parse GDELT's seendate, or {@code null} if it's missing/malformed (caller drops the item). */
