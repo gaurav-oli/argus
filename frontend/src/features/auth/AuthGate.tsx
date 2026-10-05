@@ -58,9 +58,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // editorial-theme here too: AuthGate renders these outside the dashboard shell, which is the
+  // only place that class normally lives — without it, every pre-signed-in state would flash the
+  // generic default palette instead of the real brand.
   if (gate === "loading") {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background">
+      <main className="editorial-theme flex min-h-dvh items-center justify-center bg-background">
         <p className="text-sm text-text-secondary">Loading…</p>
       </main>
     );
@@ -68,9 +71,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (gate === "error") {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+      <main className="editorial-theme flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
         <p className="text-sm text-text-secondary">Can&apos;t reach Argus.</p>
-        <button onClick={retry} className="rounded-xl bg-accent px-4 py-2 font-medium text-background">
+        <button onClick={retry} className="border border-[var(--hairline)] px-4 py-2 font-medium text-accent transition-colors hover:border-accent">
           Retry
         </button>
       </main>
