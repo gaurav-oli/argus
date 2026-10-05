@@ -97,30 +97,30 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
     if (onboarding === "checking") {
       return (
-        <main className="editorial-theme flex min-h-dvh items-center justify-center bg-background">
-          <p className="text-sm text-text-secondary">Loading…</p>
+        <main className="terminal-theme flex min-h-dvh items-center justify-center bg-background">
+          <p className="font-mono text-sm text-accent">connecting<span className="term-caret" aria-hidden /></p>
         </main>
       );
     }
     return <>{children}</>;
   }
 
-  // editorial-theme here too: AuthGate renders these outside the dashboard shell, which is the
+  // terminal-theme here too: AuthGate renders these outside the dashboard shell, which is the
   // only place that class normally lives — without it, every pre-signed-in state would flash the
   // generic default palette instead of the real brand.
   if (gate === "loading") {
     return (
-      <main className="editorial-theme flex min-h-dvh items-center justify-center bg-background">
-        <p className="text-sm text-text-secondary">Loading…</p>
+      <main className="terminal-theme flex min-h-dvh items-center justify-center bg-background">
+        <p className="font-mono text-sm text-accent">connecting<span className="term-caret" aria-hidden /></p>
       </main>
     );
   }
 
   if (gate === "error") {
     return (
-      <main className="editorial-theme flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-        <p className="text-sm text-text-secondary">Can&apos;t reach Argus.</p>
-        <button onClick={retry} className="border border-[var(--hairline)] px-4 py-2 font-medium text-accent transition-colors hover:border-accent">
+      <main className="terminal-theme flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+        <p className="font-mono text-sm text-losses">! can&apos;t reach argus</p>
+        <button onClick={retry} className="border border-accent px-4 py-2 font-mono uppercase tracking-wider text-accent transition-colors hover:bg-accent hover:text-background">
           Retry
         </button>
       </main>

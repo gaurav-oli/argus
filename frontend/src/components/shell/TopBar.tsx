@@ -11,7 +11,8 @@ import { useEffect, useState } from "react";
 /**
  * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and the real total value
  * KPI (Story 3.4, /api/portfolio/value), a global "Ask AI" portfolio-chat launcher (Story 7.2), and
- * tap-to-reveal privacy (FR-36). Sensitive values are masked until revealed.
+ * tap-to-reveal privacy (FR-36). Sensitive values are masked until revealed. Terminal Noir: the value
+ * reads in the glowing VT323 display face and "Ask AI" is a shell prompt (`argus> ask_`).
  */
 export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
@@ -29,28 +30,28 @@ export function TopBar() {
 
   return (
     <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">
-      <div className="flex items-center gap-2 lg:hidden">
-        <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" aria-hidden />
-        <span className="font-serif-editorial text-lg font-normal tracking-tight">Argus</span>
+      <div className="flex items-center lg:hidden">
+        <span className="font-display term-glow text-2xl text-accent">ARGUS://</span>
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-5 lg:gap-6">
         <HealthScoreBadge />
         <div className="flex flex-col items-end leading-tight">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-            Total Value
+          <span className="text-[10px] uppercase tracking-[0.18em] text-text-secondary">
+            Total Value · CAD
           </span>
           <Sensitive className="text-lg font-normal text-text-primary">
-            <span className="font-serif-editorial text-lg font-normal text-text-primary">
+            <span className="font-display text-2xl text-accent">
               {usdOrDash(totalValue)}
             </span>
           </Sensitive>
         </div>
         <button
           onClick={() => setChatOpen(true)}
-          className="rounded-lg border border-accent/40 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
+          className="group flex min-h-9 items-center border border-accent/50 px-3 py-1.5 font-mono text-xs text-accent transition-colors hover:bg-accent hover:text-background"
         >
-          Ask AI
+          <span aria-hidden>argus&gt;&nbsp;</span>ask
+          <span className="term-caret group-hover:bg-background" aria-hidden />
         </button>
         <PrivacyToggle />
       </div>

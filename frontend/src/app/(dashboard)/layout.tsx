@@ -3,6 +3,7 @@ import { BottomNav } from "@/components/shell/BottomNav";
 import { BottomStrip } from "@/components/shell/BottomStrip";
 import { RightPanel } from "@/components/shell/RightPanel";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { TickerTape } from "@/components/terminal/TickerTape";
 import { SystemAlertBanner } from "@/components/shell/SystemAlertBanner";
 import { TopBar } from "@/components/shell/TopBar";
 import { AuthGate } from "@/features/auth/AuthGate";
@@ -27,15 +28,16 @@ export default function DashboardLayout({
       <PanicProvider>
       <DemoModeProvider>
       <PrivacyProvider>
-        {/* Private Bank Editorial (approved 2026-07-22) — the whole shell, not just Home, re-skins
+        {/* Terminal Noir (2026-10) — the whole shell, not just Home, re-skins
             via the same CSS-variable mechanism that powers light/dark mode. See globals.css. */}
-        <div className="editorial-theme">
+        <div className="terminal-theme">
           <AmbientBackground />
           <div className="flex h-dvh overflow-hidden">
             <Sidebar />
 
             <div className="flex min-w-0 flex-1 flex-col">
               <TopBar />
+              <TickerTape />
               <SystemAlertBanner />
 
               <div className="flex min-h-0 flex-1">

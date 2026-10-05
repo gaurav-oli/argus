@@ -205,6 +205,7 @@ in-memory tuning cache resets (otherwise multipliers derived from test data ling
 |---|---|
 | [docs/multi-user.md](docs/multi-user.md) | Google Sign-In, invites, private vs shared data, admin, **known security gaps** |
 | [docs/deploy-runbook.md](docs/deploy-runbook.md) | Mac Mini deploy, Tailscale Funnel, OAuth + Gmail setup |
+| [docs/design-terminal-noir.md](docs/design-terminal-noir.md) | The Terminal Noir design language: tokens, signature pieces, next ideas |
 | [RECOVERY.md](RECOVERY.md) | Restore from backup; restart after a reboot |
 | [docs/mac-mini-validation.md](docs/mac-mini-validation.md) | Hardware-only validation checklist (dated history) |
 | [docs/backup-build-checklist.md](docs/backup-build-checklist.md) | Backup build notes |

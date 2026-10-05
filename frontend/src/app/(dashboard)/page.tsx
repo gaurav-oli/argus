@@ -9,11 +9,10 @@ import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { MotionCard } from "@/components/ui/MotionCard";
 
 /**
- * Home — Private Bank Editorial skin. A serif display face for numerals and headings, thin
- * hairline rules standing in for card borders (no fills, no glow, no glass), and a horizontal
- * allocation bar in place of a donut. The `.editorial-theme` scope itself lives on the dashboard
- * shell (layout.tsx), so it applies app-wide; cards below the fold reveal on scroll (MotionCard
- * `reveal="viewport"`); all animation respects prefers-reduced-motion.
+ * Home — Terminal Noir. The greeting and the morning briefing headline type themselves out, panes
+ * boot in with a stepped CRT wipe (MotionCard), and cards below the fold boot as they scroll into
+ * view (`reveal="viewport"`). The `.terminal-theme` scope lives on the dashboard shell (layout.tsx),
+ * so it applies app-wide; all animation respects prefers-reduced-motion.
  *
  * Portfolio value and health score have their own compact readouts in the persistent TopBar (every
  * page, including this one) — the large PortfolioHero/HealthScoreRing cards that used to repeat the

@@ -2,7 +2,8 @@
 
 import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { googleSignInUrl } from "@/lib/apiClient";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
+import { useEffect, useState } from "react";
 
 export type SignInReason = "failed" | "not_invited" | null;
 
@@ -11,61 +12,86 @@ const MESSAGES: Record<Exclude<SignInReason, null>, string> = {
   not_invited: "That Google account hasn't been invited yet. Ask the admin to add you.",
 };
 
+/** The boot log, printed one line at a time before the login prompt appears. */
+const BOOT_LINES: { text: string; status?: string }[] = [
+  { text: "ARGUS research terminal" },
+  { text: "probing 15 agents", status: "OK" },
+  { text: "mounting market feeds", status: "OK" },
+  { text: "loading model gateway", status: "OK" },
+  { text: "isolating portfolios per user", status: "OK" },
+  { text: "access: invite-only. identity required." },
+];
+const LINE_MS = 280;
+
 /**
- * Full-screen Google Sign-In gate — replaces the PIN/passkey lock screen (multi-user). Deliberately
- * wrapped in `.editorial-theme` + `AmbientBackground` itself: `AuthGate` renders this OUTSIDE the
- * dashboard shell (where the theme class normally lives), so without this the screen a visitor sees
- * first would be the one place in the app with none of the real brand on it at all. A plain link to
- * the backend's OAuth start endpoint; Google and the backend do the rest, redirecting back here with
- * `?auth=failed`/`?auth=not_invited` on a rejection (see GoogleAuthController).
+ * Full-screen Google Sign-In gate — replaces the PIN/passkey lock screen (multi-user). Terminal
+ * Noir: a short boot log prints line by line, then a `login:` prompt with the Google button. Wrapped
+ * in `.terminal-theme` + `AmbientBackground` itself because `AuthGate` renders this OUTSIDE the
+ * dashboard shell (where the theme class normally lives). A plain link to the backend's OAuth start
+ * endpoint; Google and the backend do the rest, redirecting back here with
+ * `?auth=failed`/`?auth=not_invited` on a rejection (see GoogleAuthController). Reduced motion
+ * skips straight to the finished screen.
  */
 export function GoogleSignInScreen({ reason }: { reason: SignInReason }) {
   const reduce = useReducedMotion();
-  const rise = (delay: number) =>
-    reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] as const } };
+  const [lines, setLines] = useState(0);
+
+  useEffect(() => {
+    if (reduce) return;
+    const id = setInterval(() => {
+      setLines((n) => {
+        if (n >= BOOT_LINES.length) {
+          clearInterval(id);
+          return n;
+        }
+        return n + 1;
+      });
+    }, LINE_MS);
+    return () => clearInterval(id);
+  }, [reduce]);
+
+  const shown = reduce ? BOOT_LINES.length : lines;
+  const booted = shown >= BOOT_LINES.length;
 
   return (
-    <main className="editorial-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6">
+    <main className="terminal-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6">
       <AmbientBackground />
-      <div className="relative z-10 w-full max-w-sm text-center">
-        <motion.p {...rise(0)} className="text-[11px] font-medium uppercase tracking-[0.3em] text-text-secondary">
-          Private &amp; Invite-Only
-        </motion.p>
+      <div className="relative z-10 w-full max-w-md font-mono text-sm">
+        <h1 className="font-display term-glow text-6xl text-accent">ARGUS://</h1>
+        <p className="mt-1 text-xs uppercase tracking-[0.25em] text-text-secondary">Private &amp; invite-only</p>
 
-        <motion.h1 {...rise(0.12)} className="font-serif-editorial mt-3 text-5xl font-normal tracking-tight text-text-primary">
-          Argus
-        </motion.h1>
-
-        <motion.div
-          initial={reduce ? undefined : { scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
-          style={{ transformOrigin: "left" }}
-          className="mx-auto mt-5 h-px w-20 bg-accent"
-        />
-
-        <motion.p {...rise(0.75)} className="mt-5 text-sm leading-relaxed text-text-secondary">
-          Your fifteen-agent research desk.
-          <br />
-          Sign in to continue.
-        </motion.p>
+        <ol className="mt-8 min-h-[11rem] space-y-1.5" aria-label="Startup">
+          {BOOT_LINES.slice(0, shown).map((l) => (
+            <li key={l.text} className="term-line-in flex gap-2 text-text-primary">
+              <span className="text-accent" aria-hidden>
+                &gt;
+              </span>
+              <span className="flex-1">{l.text}</span>
+              {l.status && <span className="text-gains">[ {l.status} ]</span>}
+            </li>
+          ))}
+        </ol>
 
         {reason && (
-          <motion.p initial={reduce ? undefined : { opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 text-sm text-losses" role="alert">
-            {MESSAGES[reason]}
-          </motion.p>
+          <p className="mt-4 border border-losses/60 px-3 py-2 text-losses" role="alert">
+            ! {MESSAGES[reason]}
+          </p>
         )}
 
-        <motion.a
-          {...rise(1)}
-          href={googleSignInUrl()}
-          whileHover={reduce ? undefined : { borderColor: "var(--color-accent)" }}
-          whileTap={reduce ? undefined : { scale: 0.98 }}
-          className="group mt-10 flex w-full items-center justify-center gap-3 border border-[var(--hairline)] py-3.5 text-sm font-medium text-text-primary transition-colors"
-        >
-          <GoogleLogo />
-          Sign in with Google
-        </motion.a>
+        {booted && (
+          <div className="term-line-in mt-6">
+            <p className="text-accent">
+              login:<span className="term-caret" aria-hidden />
+            </p>
+            <a
+              href={googleSignInUrl()}
+              className="mt-4 flex w-full items-center justify-center gap-3 border border-accent py-3.5 uppercase tracking-wider text-accent transition-colors hover:bg-accent hover:text-background"
+            >
+              <GoogleLogo />
+              Sign in with Google
+            </a>
+          </div>
+        )}
       </div>
     </main>
   );

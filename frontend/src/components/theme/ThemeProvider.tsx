@@ -11,7 +11,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * The app is a single fixed dark palette (Private Bank Editorial, 2026-07-22) — there is no
+ * The app is a single fixed dark palette (Terminal Noir, 2026-10) — there is no
  * light variant and no toggle. This context now exists only so existing consumers (e.g.
  * PortfolioChart, which re-reads CSS vars keyed off `theme`) don't need to change; `theme` is
  * always "dark".

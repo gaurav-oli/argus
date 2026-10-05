@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono, Space_Grotesk, VT323 } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider, ThemeScript } from "@/components/theme/ThemeProvider";
 
@@ -28,6 +28,14 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
+// Terminal Noir (2026-10) — the CRT display face for big numerals, page titles and the wordmark.
+// Bitmap-style, single weight; body copy stays JetBrains Mono.
+const vt323 = VT323({
+  variable: "--font-vt323",
+  weight: "400",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "Argus",
   description: "AI-powered investment intelligence.",
@@ -38,7 +46,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0f" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a08" },
   ],
   viewportFit: "cover",
 };
@@ -51,7 +59,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable} ${fraunces.variable} ${vt323.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

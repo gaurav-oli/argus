@@ -310,6 +310,193 @@ body {
   animation: rule-draw 0.7s ease-out both;
 }
 
+/* ====================================================================================
+ * Terminal Noir — the app's design language (2026-10, supersedes Private Bank Editorial).
+ * An amber-phosphor CRT terminal: JetBrains Mono for everything, VT323 for big numerals and
+ * titles, square corners, box-drawn panes, scanlines. Scoped under `.terminal-theme` on the
+ * dashboard shell (layout.tsx) and on the screens AuthGate renders outside it, and re-skins
+ * nested components through the same "swap the variable set" mechanism as the themes above.
+ * ==================================================================================== */
+.terminal-theme {
+  --glow-1: transparent;
+  --glow-2: transparent;
+  --glow-3: transparent;
+
+  --c-background: #0a0a08;
+  --c-surface: #0f0e0a;
+  --c-elevated: #15140e;
+  --c-border: rgba(255, 176, 0, 0.28);
+  --c-accent: #ffb000;
+  --c-gains: #8ce99a;
+  --c-losses: #ff6b57;
+  --c-warning: #ffd166;
+  --c-text-primary: #e9e4d4;
+  --c-text-secondary: #a39d86; /* ~7:1 on the background */
+
+  /* Same alias re-declaration the editorial block needed — see the comment there. */
+  --color-background: var(--c-background);
+  --color-surface: var(--c-surface);
+  --color-elevated: var(--c-elevated);
+  --color-border: var(--c-border);
+  --color-accent: var(--c-accent);
+  --color-gains: var(--c-gains);
+  --color-losses: var(--c-losses);
+  --color-warning: var(--c-warning);
+  --color-text-primary: var(--c-text-primary);
+  --color-text-secondary: var(--c-text-secondary);
+
+  /* The `font-sans` / `font-display` utilities resolve these per element, so re-declaring
+     them here makes the whole subtree monospace without touching any component. */
+  --font-sans: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-display: var(--font-vt323), var(--font-jetbrains-mono), monospace;
+
+  --accent-2: #ffb000;
+  --glass-bg: rgba(15, 14, 10, 0.88);
+  --glass-border: rgba(255, 176, 0, 0.28);
+  --glass-sheen: transparent;
+  --chrome-bg: rgba(10, 10, 8, 0.94);
+  --hairline: rgba(255, 176, 0, 0.22);
+  --hover-wash: rgba(255, 176, 0, 0.06);
+
+  --chart-accent: #ffb000;
+  --chart-gains: #8ce99a;
+  --chart-losses: #ff6b57;
+  --chart-grid: rgba(255, 176, 0, 0.07);
+  --chart-axis: #a39d86;
+
+  --cat-1: #ffb000;
+  --cat-2: #8ce99a;
+  --cat-3: #ff6b57;
+  --cat-4: #ffd166;
+  --cat-5: #c9a46a;
+  --cat-6: #6e6a5a;
+
+  --term-glow: 0 0 8px rgba(255, 176, 0, 0.45);
+
+  color-scheme: dark;
+  position: relative;
+  font-family: var(--font-sans);
+  font-variant-ligatures: none;
+}
+.terminal-theme ::selection {
+  background: #ffb000;
+  color: #0a0a08;
+}
+
+/* Display faces → VT323 with a phosphor glow. font-size-adjust keeps VT323's small x-height
+   reading at the size each component already asked for. */
+.terminal-theme :is(.font-serif-editorial, .font-display) {
+  font-family: var(--font-vt323), var(--font-jetbrains-mono), monospace;
+  font-size-adjust: 0.62;
+  letter-spacing: 0.01em;
+  font-weight: 400;
+  text-shadow: var(--term-glow);
+}
+.terminal-theme h1 {
+  text-shadow: var(--term-glow);
+}
+
+/* Square everything: a terminal has no rounded corners. */
+.terminal-theme :is(.rounded-full, .rounded-3xl, .rounded-2xl, .rounded-xl, .rounded-lg, .rounded-md, .rounded, .rounded-sm) {
+  border-radius: 0;
+}
+
+/* Panes: solid dark fill, amber 1px frame, no blur or sheen. */
+.terminal-theme .glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+}
+.terminal-theme .glass::after {
+  display: none;
+}
+.terminal-theme .glass-chrome {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.terminal-theme .glass-interactive:hover {
+  border-color: var(--c-accent);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 0, 0.15), 0 0 24px -12px rgba(255, 176, 0, 0.6);
+}
+
+/* Section labels become box-drawn pane headers:  ┌─ MORNING BRIEFING ─  */
+.terminal-theme h3,
+.terminal-theme h4 {
+  color: var(--c-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.terminal-theme .glass h3::before {
+  content: "┌─ ";
+  color: var(--c-accent);
+  opacity: 0.7;
+}
+.terminal-theme .glass h3::after {
+  content: " ─";
+  color: var(--c-accent);
+  opacity: 0.7;
+}
+
+/* Form controls look like prompt fields. */
+.terminal-theme :is(input, textarea, select) {
+  caret-color: var(--c-accent);
+  border-radius: 0;
+}
+
+.terminal-theme :where(a, button, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+  border-radius: 0;
+}
+
+/* Thin amber scrollbars. */
+.terminal-theme * {
+  scrollbar-color: rgba(255, 176, 0, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+/* ---- Terminal motion primitives (all neutralised by the reduced-motion block below) ---- */
+@keyframes term-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.term-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--c-accent, #ffb000);
+  animation: term-caret 1s step-end infinite;
+}
+@keyframes term-tape {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes term-flicker {
+  0%, 46%, 49%, 100% { opacity: 0.55; }
+  47% { opacity: 0.38; }
+  48% { opacity: 0.6; }
+}
+@keyframes term-glow {
+  0%, 100% { text-shadow: 0 0 6px rgba(255, 176, 0, 0.35); }
+  50% { text-shadow: 0 0 14px rgba(255, 176, 0, 0.65); }
+}
+.term-glow {
+  animation: term-glow 4s ease-in-out infinite;
+}
+@keyframes term-line-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.term-line-in {
+  animation: term-line-in 0.3s ease-out both;
+}
+
 /* Respect the OS "reduce motion" setting — kills the skeleton pulse, theme
  * cross-fade, and all transitions/animations for motion-sensitive users. */
 @media (prefers-reduced-motion: reduce) {

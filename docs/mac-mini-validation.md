@@ -343,6 +343,34 @@ Fully validated live via the API (route is `/api/investor-profile`, not `/api/pr
       returns the current profile correctly in all cases.
 [Source: Story 7.6; `com.argus.conversation` (InvestorProfile, InvestorProfileService, InvestorProfileController), `V44__investor_profile.sql`, `features/profile/InvestorProfileSetting.tsx`]
 
+## 15. Terminal Noir redesign (branch `design/terminal-noir`)  ⏳ TODO on the Mini
+Built on the MacBook. `tsc --noEmit`, `npm run lint` (0 errors; the 4 warnings were already there)
+and `npm run build` pass. The look and the live-data pieces need the real stack. Deploy the branch
+with `git fetch && git checkout design/terminal-noir && docker compose --profile deploy up -d --build`.
+Design notes: `docs/design-terminal-noir.md`.
+- [ ] **Sign-in (signed out / private window):** the boot log prints line by line, then `login:`
+      with a blinking caret and **Sign in with Google**. `?auth=not_invited` shows the red `!` message.
+- [ ] **Shell:**
+  - [ ] Amber-on-black everywhere, with faint scanlines that don't hurt readability.
+  - [ ] Sidebar shows `ARGUS://` and `[1] HOME` … with the active row inverted.
+  - [ ] **Alt+1…5** jump between pages (Option+digit on the Mac keyboard).
+- [ ] **Ticker tape:**
+  - [ ] Your own holdings scroll under the top bar with live price and day %.
+  - [ ] Hidden when Demo Mode is on, and for an account with no holdings.
+  - [ ] A friend's account shows **their** holdings, not yours.
+- [ ] **Status line (desktop):** mode, agents x/y, haiku $spent / $budget, and a ticking clock.
+- [ ] **Home:** the greeting and the briefing headline type out. Panes boot in with a stepped wipe.
+- [ ] **Intelligence:** each recommendation shows its bull/bear odds as a `███░░` block bar.
+- [ ] **Agents:** the `tail -f` agent log lists real recent runs, and new runs animate in within
+      about 15s.
+- [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
+- [ ] **iPhone:** the bottom nav uses an inverted amber block for the active tab, and nothing scrolls
+      sideways at phone width.
+- [ ] **Reduced motion** (macOS Accessibility → Display → Reduce motion): no typing, flicker or tape
+      motion. Text appears in full immediately.
+- [ ] Happy with it → merge `design/terminal-noir` into `main`. Not happy →
+      `git checkout main && docker compose --profile deploy up -d --build` returns to the old look.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

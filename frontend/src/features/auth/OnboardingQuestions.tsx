@@ -71,13 +71,13 @@ export function OnboardingQuestions({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <main className="editorial-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6 py-12">
+    <main className="terminal-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6 py-12">
       <AmbientBackground />
       <div className="relative z-10 w-full max-w-md">
-        <motion.p {...rise(0)} className="text-center text-[11px] font-medium uppercase tracking-[0.3em] text-text-secondary">
-          Before you start
+        <motion.p {...rise(0)} className="text-center font-mono text-xs text-accent/80">
+          ~/argus/setup $ ./first-run
         </motion.p>
-        <motion.h1 {...rise(0.08)} className="font-serif-editorial mt-3 text-center text-3xl font-normal tracking-tight text-text-primary">
+        <motion.h1 {...rise(0.08)} className="font-display mt-3 text-center text-5xl text-accent">
           A few quick questions
         </motion.h1>
         <motion.p {...rise(0.16)} className="mx-auto mt-3 max-w-xs text-center text-sm leading-relaxed text-text-secondary">

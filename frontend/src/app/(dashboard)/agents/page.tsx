@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AgentFleet } from "@/features/agents/AgentFleet";
+import { AgentLogTail } from "@/features/agents/AgentLogTail";
 import { AgentPerformance } from "@/features/agents/AgentPerformance";
 import { DataStorage } from "@/features/agents/DataStorage";
 import { LogicReview } from "@/features/agents/LogicReview";
@@ -23,6 +24,7 @@ export default function AgentsPage() {
         subtitle="Your AI fleet, working in real time."
       />
       <AgentFleet />
+      <AgentLogTail />
 
       <div className="mt-8">
         <h2 className="mb-1 font-display text-lg font-semibold text-text-primary">Analyst &amp; Investor</h2>

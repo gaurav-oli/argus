@@ -1,0 +1,94 @@
+# Terminal Noir — design language
+
+Branch: `design/terminal-noir`. It replaces Private Bank Editorial. The concept was picked from the
+October 2026 redesign exploration (concept 2 of 5), which lives on the "Argus Redesign Concepts"
+canvas.
+
+## The idea
+
+Argus as an amber-phosphor research terminal: a Bloomberg desk crossed with a 1980s CRT. Everything
+is monospace and corners are square. Panes are framed in amber with box-drawn headers (`┌─ MORNING
+BRIEFING ─`). Motion is mechanical: text types itself out, panes "boot" with a stepped wipe, a ticker
+tape scrolls, and a caret blinks where input lives.
+
+## Tokens (`.terminal-theme` in `frontend/src/app/globals.css`)
+
+| Role | Value |
+|---|---|
+| Background / surface / elevated | `#0a0a08` / `#0f0e0a` / `#15140e` |
+| Accent (phosphor amber) | `#ffb000` |
+| Text / secondary | `#e9e4d4` / `#a39d86` (about 7:1 on the background) |
+| Gains / losses / warning | `#8ce99a` / `#ff6b57` / `#ffd166` |
+| Body font | JetBrains Mono (everything; ligatures off) |
+| Display font | VT323, with `font-size-adjust` and a soft amber glow |
+
+The theme works the same way the editorial skin did: it swaps the CSS variable set and re-declares
+the Tailwind `--color-*` and `--font-*` aliases. Every existing component re-skins without being
+edited. `.font-serif-editorial` and `.font-display` both map to VT323.
+
+## Signature pieces (built)
+
+| Where | What |
+|---|---|
+| Every page | CRT backdrop: scanlines with a slow flicker, an amber centre bloom and a vignette (`AmbientBackground`) |
+| Every page | **Ticker tape** of *your own* holdings (price + day %) under the top bar. Hidden in Demo Mode and when there are no holdings (`components/terminal/TickerTape.tsx`) |
+| Sidebar | `ARGUS://` wordmark, `[1] HOME` numbered menu with the active row inverted to amber, **Alt+1…5** shortcuts, and a blinking `argus@mini:~$` prompt |
+| Mobile nav | Monospace tabs; the active tab is an inverted amber block |
+| Top bar | Value in glowing VT323; "Ask AI" is a shell prompt, `argus> ask▌` |
+| Status line (desktop footer) | `● NORMAL MODE · ▲ agents 15/15 · haiku $6.12 / $20.00 · 08:42:17` with a live clock |
+| Page headers | The eyebrow becomes the working directory (`~/argus/operations $`) and the title types itself out (`TypedText`) |
+| Panes | Stepped CRT "boot" wipe on entrance (`MotionCard`); hover lights the frame instead of lifting the card |
+| Home | The greeting types itself out with a caret. The briefing headline prints as you arrive. |
+| Sign-in | A boot log (`> probing 15 agents [ OK ]` …) then a `login:` prompt with Sign in with Google |
+| Recommendation cards | Bull/bear odds as an ASCII block bar `██████████████░░░░░░` (`AsciiBar`) |
+| Agents | A live **`tail -f` agent log**: each agent's last run as a log line, with new lines animating in (`AgentLogTail`) |
+
+Every animation is disabled under `prefers-reduced-motion`. `TypedText` gives screen readers the
+full string immediately.
+
+## Ideas for the next pass, page by page
+
+These are not built yet. They are ordered by how much each would add.
+
+### Home
+- **`argus> brief` command bar** under the briefing, with chips: `brief`, `why <top call>`, `risk`,
+  `events`. Each one retypes its answer in the briefing pane, using data already on the page
+  (recommendations, health score, calendar). This is the interaction from the concept artboard.
+- **Upcoming events as a cron table**: `28 OCT  FOMC  ·  30 OCT  SHOP.TO earnings [HELD]`.
+
+### Portfolio
+- **Holdings as `ls -l`**: monospace columns with a block-bar weight column (`AsciiBar`) and a 7-day
+  sparkline in `▁▂▃▅▇` characters.
+- **Net worth "odometer"**: digits roll into place in VT323 on load and on each live tick.
+- **Import as a progress log**: statement import shows `> parsing page 3/7 … > reconciling totals
+  [ OK ]`, which surfaces the self-healing parser's real steps.
+
+### Intelligence
+- **Probability Weather inside the terminal**, borrowing concept 4: each call gets an ASCII return
+  histogram (`▁▃▆█▆▃▁`) with the "beats SPY" side highlighted, plus a 7/30/90-day horizon toggle.
+- **The command palette as the primary nav for tickers**: `/` focuses an `argus>` prompt with fuzzy
+  ticker search.
+- **Personas as a chat transcript**: `[buffett] AGREE — durable moat…` lines that print in order.
+
+### Agents
+- **`htop` view of the fleet**: one row per agent with a CPU-style activity meter (captures in the
+  last 24h), uptime, next run and status in `[ RUN ]` / `[IDLE]` / `[PLAN]` brackets.
+- **Budget as a fuel gauge**: `haiku [████████░░░░░░░░] 31% · 22 days left`.
+
+### Profile
+- **Settings as a config file**: `~/.argus/profile.yml` rendered with line numbers. Each setting is
+  a `key: value` line you edit in place.
+- **Admin "People on Argus" as `who`**: `gaurav  tty1  last 08:42  42 logins`, with invite status as
+  `sent → opened → joined` arrows.
+
+### System-wide
+- **Boot-once splash**: the first load of a session plays a 1-second POST before the shell appears.
+  Later loads skip it.
+- **Alt+K command palette** available from every page.
+- **A "phosphor" setting**: amber (default), green or white, which swaps only `--c-accent`.
+
+## Verification status
+
+Built on the MacBook. Typecheck, lint (no new warnings) and the production build all pass. The
+visual and live-data checks need the running stack on the Mini: see
+`docs/mac-mini-validation.md` §15.

@@ -1,12 +1,13 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { TypedText } from "@/components/terminal/TypedText";
+import { promptFor } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/utils";
 
 /**
- * Home-only header — Private Bank Editorial skin. Small-caps gold eyebrow, serif title, and a
- * thin gold rule that draws in beneath the whole block instead of a boxed card. Kept separate
- * from the shared PageHeader (used by every other route) so this trial doesn't change other pages.
+ * Home-only header — Terminal Noir. The greeting types itself out after a shell prompt, in the
+ * glowing VT323 face, with the caret left blinking (Home is where the session "starts"). Kept
+ * separate from the shared PageHeader because Home's greeting is personal and keeps its caret.
  */
 export function HomeHeader({
   eyebrow,
@@ -19,22 +20,13 @@ export function HomeHeader({
   subtitle?: string;
   className?: string;
 }) {
-  const reduce = useReducedMotion();
   return (
-    <header className={cn("mb-6 pb-5", className)}>
-      {eyebrow && (
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-accent">{eyebrow}</p>
-      )}
-      <motion.h1
-        className="font-serif-editorial text-3xl font-normal text-text-primary lg:text-4xl"
-        initial={reduce ? false : { opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={reduce ? { duration: 0 } : { duration: 0.5, ease: "easeOut" }}
-      >
-        {title}
-      </motion.h1>
+    <header className={cn("mb-6 border-b border-[var(--hairline)] pb-5", className)}>
+      {eyebrow && <p className="mb-1 font-mono text-xs text-accent/80">{promptFor(eyebrow)} ./greet</p>}
+      <h1 className="font-display text-4xl text-accent lg:text-6xl">
+        <TypedText text={title} />
+      </h1>
       {subtitle && <p className="mt-2 text-sm text-text-secondary">{subtitle}</p>}
-      <div className="rule-draw mt-5 h-px bg-[var(--hairline)]" />
     </header>
   );
 }

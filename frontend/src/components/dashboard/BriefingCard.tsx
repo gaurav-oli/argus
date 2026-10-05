@@ -9,6 +9,7 @@ import {
   type Briefing,
   type MarketPulse,
 } from "@/lib/apiClient";
+import { TypedText } from "@/components/terminal/TypedText";
 import { RefreshIcon } from "@/components/ui/RefreshIcon";
 import { absTime } from "@/lib/time";
 
@@ -22,7 +23,8 @@ import { absTime } from "@/lib/time";
  * (seeded at {@link DEFAULT_ETA_MS}, then learned from each refresh's real duration via localStorage)
  * and the button counts down the estimated time remaining. On load, a stale pulse ({@link STALE_MS})
  * silently re-refreshes so it's current shortly after login. Timestamps are absolute ("as of" time).
- * `undefined` = loading, `null` = none yet.
+ * `undefined` = loading, `null` = none yet. Terminal Noir: the headline types itself out with a
+ * blinking caret, like the briefing is being printed to the terminal as you arrive.
  */
 
 /** Re-refresh a pulse this old (or older) automatically on load. Market news is intraday, so 4h. */
@@ -164,8 +166,8 @@ export function BriefingCard() {
         </div>
       ) : (
         <div className="mt-2">
-          <p className="font-serif-editorial text-lg font-normal leading-snug text-text-primary">
-            {briefing.headline}
+          <p className="font-display text-2xl leading-snug text-accent">
+            <TypedText text={briefing.headline} />
           </p>
           <p className="mt-2 text-sm leading-relaxed text-text-secondary">{briefing.body}</p>
         </div>

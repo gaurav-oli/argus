@@ -3,10 +3,13 @@
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
+/** Quantise progress into N hard steps — the stuttering line-by-line paint of a CRT. */
+const crtSteps = (n: number) => (t: number) => Math.min(1, Math.ceil(t * n) / n);
+
 /**
- * Premium surface card — gradient surface, hairline border, soft depth, and a
- * lift-on-hover micro-interaction. Each card self-animates its entrance with an
- * index-based delay so a panel cascades in (no parent-variant dependency).
+ * Terminal Noir pane — amber-framed surface (styled by `.terminal-theme .glass`). Each pane "boots"
+ * in: a stepped top-to-bottom wipe like a CRT painting rows, cascading by `index`. No hover lift —
+ * a terminal pane doesn't float; hover lights the frame instead (CSS).
  */
 export function MotionCard({
   className,
@@ -26,19 +29,18 @@ export function MotionCard({
 }) {
   const reduce = useReducedMotion();
   const skip = reduce || entrance === "none";
+  const shown = { opacity: 1, clipPath: "inset(0% 0% 0% 0%)" };
   const revealProps =
     reveal === "viewport"
-      ? { whileInView: { opacity: 1, y: 0, scale: 1 }, viewport: { once: true, margin: "-60px" } }
-      : { animate: { opacity: 1, y: 0, scale: 1 } };
+      ? { whileInView: shown, viewport: { once: true, margin: "-60px" } }
+      : { animate: shown };
   return (
     <motion.div
-      initial={skip ? false : { opacity: 0, y: 16, scale: 0.985 }}
+      initial={skip ? false : { opacity: 0, clipPath: "inset(0% 0% 100% 0%)" }}
       {...revealProps}
-      transition={skip ? { duration: 0 } : { delay: index * 0.07, type: "spring", stiffness: 120, damping: 18 }}
-      whileHover={interactive && !reduce ? { y: -4, transition: { type: "spring", stiffness: 300, damping: 20 } } : undefined}
+      transition={skip ? { duration: 0 } : { delay: index * 0.08, duration: 0.55, ease: crtSteps(12) }}
       className={cn(
-        // Cinematic Glass surface — frosted fill, hairline, inner sheen, soft depth.
-        "group relative overflow-hidden rounded-2xl p-5 glass",
+        "group relative overflow-hidden p-5 glass",
         interactive && "glass-interactive",
         className,
       )}

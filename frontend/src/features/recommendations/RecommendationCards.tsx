@@ -1,5 +1,6 @@
 "use client";
 
+import { AsciiBar } from "@/components/terminal/AsciiBar";
 import {
   decideRecommendation,
   getGraduation,
@@ -320,9 +321,7 @@ function ForecastCard({
 
       {/* Bull/bear probability bar */}
       <div>
-        <div className="flex h-2.5 overflow-hidden rounded-full bg-losses/30">
-          <div className="bg-gains" style={{ width: `${bull}%` }} />
-        </div>
+        <AsciiBar percent={bull} cells={30} label={`${bull}% bull, ${100 - bull}% bear`} className="text-sm tracking-[-0.05em]" />
         <div className="mt-1 flex justify-between text-[11px] tabular-nums text-text-secondary">
           <span className="text-gains">{bull}% bull</span>
           <span title="Model odds after calibration — the conviction score above is the number to act on">
