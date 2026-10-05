@@ -71,12 +71,16 @@ export function UpcomingEvents() {
         <p className="text-sm text-text-secondary">No events in the last 30 days or next two weeks.</p>
       ) : (
         <ul className="flex flex-col">
-          {sorted.map((e) => {
+          {sorted.map((e, i) => {
             const past = e.daysUntil < 0;
+            // The soonest still-upcoming event gets the live glow — a cue that THIS is the next
+            // thing the feed is counting down to, not just a static list.
+            const isNext = !past && e.daysUntil === Math.min(...sorted.filter((x) => x.daysUntil >= 0).map((x) => x.daysUntil));
             return (
               <li
                 key={e.id}
-                className="flex items-start gap-2.5 border-b border-[var(--hairline)] py-2.5 last:border-b-0"
+                className="term-line-in flex items-start gap-2.5 border-b border-[var(--hairline)] py-2.5 last:border-b-0"
+                style={{ animationDelay: `${i * 0.06}s` }}
               >
                 <CompanyIcon ticker={e.ticker} logoUrl={e.logoUrl} title={e.title} className="mt-0.5" />
                 <div className="min-w-0 flex-1">
@@ -85,7 +89,11 @@ export function UpcomingEvents() {
                       {e.ticker && <span className="font-semibold">{e.ticker} </span>}
                       {e.title}
                     </p>
-                    <span className="shrink-0 text-[11px] text-text-secondary">{when(e.daysUntil)}</span>
+                    <span
+                      className={`shrink-0 text-[11px] tabular-nums ${isNext ? "term-glow text-accent" : "text-text-secondary"}`}
+                    >
+                      {when(e.daysUntil)}
+                    </span>
                   </div>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-text-secondary">
                     <span className="uppercase tracking-wide">{label(e.type)}</span>
@@ -99,6 +107,12 @@ export function UpcomingEvents() {
             );
           })}
         </ul>
+      )}
+      {events != null && events.length > 0 && (
+        <p className="mt-2 text-xs text-accent" aria-hidden="true">
+          ${" "}
+          <span className="term-caret" />
+        </p>
       )}
     </div>
   );
