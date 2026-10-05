@@ -3,7 +3,8 @@
 How to rebuild Argus after a failure (disk loss, corrupted DB, Mini replacement). Pairs with the
 deploy procedure in [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 
-> Scope: Argus is a single-user, single-host system on the Mac Mini. Postgres holds all durable state;
+> Scope: Argus is a single-host, invite-only multi-user system on the Mac Mini. Every user's data lives
+> in the same Postgres, so one restore covers everyone. Postgres holds all durable state;
 > Redis is a cache/stream and is **rebuildable** (sessions, dedup windows, agent streams). The only
 > thing you must restore is **Postgres**.
 
@@ -11,14 +12,17 @@ deploy procedure in [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 
 | Data | Store | Backup | Restore source |
 |------|-------|--------|----------------|
-| Portfolio, recommendations, outcomes, news/calendar/cost history, briefings, push subs | **Postgres** | `pg_dump` every 6h + critical-table incremental every 15 min to the external SSD (Story 10.1) | latest `pg_dump` |
+| Users + invite allowlist (`app_user`, `invited_email`), per-user portfolios, investor profiles, briefings, push subs, recommendations, outcomes, news/calendar/cost history | **Postgres** | `pg_dump` every 6h + critical-table incremental every 15 min to the external SSD (Story 10.1) | latest `pg_dump` |
 | Sessions, alert-dedup windows, agent streams | **Redis** | none (ephemeral) | rebuilt on restart |
-| Secrets (`.env`: VAPID private key, `ANTHROPIC_API_KEY`, FileVault) | host | your password manager / FileVault | re-entered |
+| Secrets (`.env`: VAPID private key, `ANTHROPIC_API_KEY`, Google OAuth client secret, Gmail App Password; FileVault) | host | your password manager / FileVault | re-entered |
 | Local model weights (Gemma via Ollama) | host | re-pullable | `ollama pull` |
 
-> **Automated backups (Story 10.1) are not built yet** — until then, take a manual dump before risky
-> changes: `docker compose exec -T postgres pg_dump -U argus argus | gzip > argus-$(date +%F-%H%M).sql.gz`
-> and copy it to the external SSD.
+> **Automated backups (Story 10.1)** run on the host via launchd: `scripts/backup.sh`, installed with
+> `scripts/install-backup-schedule.sh` (6h full + 15-min critical tables, 14-day retention). The
+> backend's `BackupWatcher` pushes an alert if the destination disappears or the newest dump goes
+> stale. Status is shown in the Ops "System health" card. `POST /api/ops/backup/trigger` takes an
+> on-demand dump. Before risky changes you can still take a manual one:
+> `docker compose exec -T postgres pg_dump -U argus argus | gzip > argus-$(date +%F-%H%M).sql.gz`.
 
 ## Expected data loss
 
@@ -54,7 +58,9 @@ deploy procedure in [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 ## Verification checklist
 
 - [ ] `GET /api/system-info` → `"profile":"prod"`.
-- [ ] PIN login works; portfolio holdings + value render (Postgres restored).
+- [ ] Google Sign-In works for the admin; portfolio holdings + value render (Postgres restored).
+- [ ] Profile → People on Argus lists the users and invites (allowlist restored). An invited
+      friend can still sign in.
 - [ ] `GET /api/ops/freshness` shows recent timestamps after the first agent cycle (sources catching up).
 - [ ] `GET /api/ops/platform-mode` → `NORMAL` once connectivity is confirmed.
 - [ ] A manual `POST /api/briefing/generate` succeeds (model reachable).
@@ -86,27 +92,28 @@ you don't touch Postgres. Two things break and must be brought back in order.
    curl -s http://127.0.0.1:8080/actuator/health   # want {"status":"UP"}
    ```
 
-2. **Restore Tailscale serve.** The `.ts.net` URL is fronted by `tailscale serve` (tailnet-only HTTPS →
-   loopback). Tailscale being stopped, *and* the serve config, do **not** survive a reboot. Symptoms:
-   the URL won't resolve at all (Tailscale down) or nothing listens on `:443` (`tailscale serve status`
-   → `No serve config`). Restore both:
+2. **Restore Tailscale Funnel.** The `.ts.net` URL is fronted by `tailscale funnel` (public HTTPS →
+   loopback; invited users are not on the tailnet). If Tailscale was stopped, the Funnel config may not
+   come back after a reboot. Symptoms: the URL won't resolve at all (Tailscale down), or nothing
+   listens on `:443` (`tailscale funnel status` shows no config). Restore both:
    ```bash
    tailscale up                                                              # reconnect the tailnet
-   tailscale serve --bg --https=443 --set-path=/    http://127.0.0.1:3000    # / → frontend
-   tailscale serve --bg --https=443 --set-path=/api http://127.0.0.1:8080/api  # /api → backend
-   tailscale serve --bg --https=443 --set-path=/ws  http://127.0.0.1:8080/ws   # /ws → backend WS
-   tailscale serve status            # confirm the three mappings; must say "(tailnet only)"
-   tailscale funnel status           # must be OFF — never Funnel (NFR-3)
+   tailscale funnel --bg --https=443 http://127.0.0.1:3000                     # / → frontend
+   tailscale funnel --bg --https=443 --set-path=/api http://127.0.0.1:8080/api # /api → backend
+   tailscale funnel --bg --https=443 --set-path=/ws  http://127.0.0.1:8080/ws  # /ws → backend WS
+   tailscale funnel status           # confirm the three mappings with Funnel on
    ```
    > Serve CLI syntax varies by version (see `docs/deploy-runbook.md`). If `/api` 404s, point it at the
    > bare origin (`http://127.0.0.1:8080`); if live pushes never arrive, the `/ws` upgrade is being
    > dropped — serve `/ws` to the bare `:8080` origin.
 
 **Verify:** `https://<mini>.<tailnet>.ts.net/` → 200; `/api/system-info` reaching the backend (401 until
-you log in is expected — it means the proxy hit the app). Then log in with your PIN.
+you sign in is expected — it means the proxy hit the app). Then sign in with Google. Check from a device
+**off** the tailnet as well, since that is how invited users reach the app.
 
 ## Related
 
 - Deploy: `docs/deploy-runbook.md`
 - Hardware/runtime validation: `docs/mac-mini-validation.md`
+- Multi-user access, data isolation, known gaps: `docs/multi-user.md`
 - Backup automation + status: Stories 10.1 / 10.2 (pending on the Mini — external SSD).

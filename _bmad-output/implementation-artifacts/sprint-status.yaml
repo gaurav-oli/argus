@@ -36,7 +36,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-17
-last_updated: 2026-07-15
+last_updated: 2026-10-05
 project: ProjectX
 project_key: NOKEY
 tracking_system: file-system
@@ -151,3 +151,12 @@ development_status:
   # Epic 11: Phase 2 — Intelligence Layer (not yet PRD-expanded; stories scoped ad hoc as picked up)
   epic-11: in-progress
   11-1-trade-journal: done   # F22. Scoped + implemented 2026-07-24: /api/journal list+detail, entry price/size + real persona verdicts added to the FR-15 snapshot, TradeJournal.tsx on the Agents page. 388/388 backend tests green, live-verified against prod. See 11-1-trade-journal.md
+
+  # Epic 12: Invite-only multi-user (scoped ad hoc, no story files — see docs/multi-user.md)
+  epic-12: in-progress
+  12-1-google-sign-in-and-invite-allowlist: done     # ba1b583 (+9530761): hand-rolled Google OAuth, invited_email allowlist, app_user, admin usage stats (V68/V69)
+  12-2-per-user-portfolio-isolation: done            # 3487e04: Hibernate @TenantId on portfolio tables, briefings, push routing (V70/V71)
+  12-3-in-app-invites-and-email: done                # 4145892, 4b34c28, 4d5fb07: admin invite form, Gmail SMTP invite links, sent/opened/joined funnel (V74)
+  12-4-onboarding-and-per-user-profile: done         # 5e70054: 3 first-login questions; investor_profile keyed by user (V72)
+  12-5-retire-pin-webauthn: done                     # 23dd9de: PIN/passkey/lockout removed (V73). Panic mode, tap-to-reveal and Demo Mode remain
+  12-6-multi-user-hardening: backlog                 # open gaps in docs/multi-user.md section 5: sessions list/revoke not user-scoped, global settings + ops actions not admin-gated, sendToAll pushes, shared journal/watchlist/prefs
