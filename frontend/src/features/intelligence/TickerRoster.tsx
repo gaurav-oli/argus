@@ -8,7 +8,6 @@ import {
 } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
@@ -135,9 +134,7 @@ export function TickerRow({
         <motion.span layoutId={`avatar-${row.ticker}`} className="shrink-0">
           <CompanyIcon ticker={row.ticker} logoUrl={logoUrl} title={row.ticker} size={dense ? 20 : 22} />
         </motion.span>
-        <span className="truncate text-[13px] font-semibold text-text-primary">
-          <Sensitive>{row.ticker}</Sensitive>
-        </span>
+        <span className="truncate text-[13px] font-semibold text-text-primary">{row.ticker}</span>
       </span>
       <Tooltip content={ACTION_GLOSSARY[row.action] ?? ACTION_GLOSSARY.WATCH}>
         <span className={`w-fit rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${ACTION_CLS[row.action] ?? ACTION_CLS.WATCH}`}>

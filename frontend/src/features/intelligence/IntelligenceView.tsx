@@ -20,7 +20,6 @@ import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { TiltCard } from "@/components/ui/TiltCard";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -153,9 +152,7 @@ export function IntelligenceView() {
                               <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-2">
                                   <CompanyIcon ticker={r.ticker} logoUrl={logos[r.ticker]} title={r.ticker} size={20} />
-                                  <span className="text-[13px] font-semibold text-text-primary">
-                                    <Sensitive>{r.ticker}</Sensitive>
-                                  </span>
+                                  <span className="text-[13px] font-semibold text-text-primary">{r.ticker}</span>
                                 </span>
                                 {r.conviction != null && <ConvictionRing value={r.conviction} size={40} tone={r.action.includes("AVOID") ? "losses" : "accent"} />}
                               </div>

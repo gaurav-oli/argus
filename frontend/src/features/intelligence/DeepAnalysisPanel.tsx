@@ -16,7 +16,6 @@ import {
   type VerdictModel,
 } from "@/lib/apiClient";
 import { DeepAnalysisDetail, DeepSummaryLine, ageText } from "@/features/intelligence/DeepAnalysisCard";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useState } from "react";
 
@@ -117,9 +116,7 @@ export function DeepAnalysisPanel() {
                   onClick={() => setOpen(isOpen ? null : a.ticker)}
                   className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left"
                 >
-                  <span className="w-14 shrink-0 text-sm font-bold text-text-primary">
-                    <Sensitive>{a.ticker}</Sensitive>
-                  </span>
+                  <span className="w-14 shrink-0 text-sm font-bold text-text-primary">{a.ticker}</span>
                   <DeepSummaryLine a={a} />
                   <span className="min-w-0 flex-1 truncate text-xs text-text-secondary">{a.headline}</span>
                   {a.stale && <span className="text-[10px] text-warning">stale</span>}
@@ -249,9 +246,7 @@ function Scorecard() {
       <ul className="mt-2 flex flex-col gap-0.5">
         {sc.rows.slice(0, 12).map((r) => (
           <li key={`${r.ticker}-${r.analyzedOn}`} className="flex flex-wrap gap-x-3 text-[11px] text-text-secondary">
-            <span className="w-14 font-semibold text-text-primary">
-              <Sensitive>{r.ticker}</Sensitive>
-            </span>
+            <span className="w-14 font-semibold text-text-primary">{r.ticker}</span>
             <span>{r.verdict === "WORTH_BUYING" ? "worth buying" : r.verdict === "WAIT" ? "wait" : "not worth buying"}</span>
             <span>{r.analyzedOn}</span>
             <span className="tabular-nums">since: {pct(r.sincePct)} ({pct(r.sinceExcessPct)} vs S&amp;P)</span>

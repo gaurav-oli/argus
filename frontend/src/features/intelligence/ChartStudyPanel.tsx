@@ -1,7 +1,6 @@
 "use client";
 
 import { getChartDetail, getChartStudies, type ChartDetail, type ChartStudyRow } from "@/lib/apiClient";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CandlestickChart } from "./CandlestickChart";
 import { useEffect, useState } from "react";
@@ -88,9 +87,7 @@ export function ChartStudyPanel() {
                     onClick={() => setSelected(r.ticker)}
                     className={`cursor-pointer border-t border-border transition-colors hover:bg-[var(--hover-wash)] ${selected === r.ticker ? "bg-accent/10" : ""}`}
                   >
-                    <td className="px-2 py-1.5 font-semibold text-text-primary">
-                      <Sensitive>{r.ticker}</Sensitive>
-                    </td>
+                    <td className="px-2 py-1.5 font-semibold text-text-primary">{r.ticker}</td>
                     <td className="px-2 py-1.5">
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${BIAS_CLS[r.bias]}`}>
                         {r.bias.toLowerCase()} {r.score >= 0 ? "+" : ""}
@@ -110,9 +107,7 @@ export function ChartStudyPanel() {
           {detail && detail.study.ticker === selected && (
             <div className="flex flex-col gap-3 border-t border-border pt-3">
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-bold text-text-primary">
-                  <Sensitive>{detail.study.ticker}</Sensitive>
-                </span>
+                <span className="text-sm font-bold text-text-primary">{detail.study.ticker}</span>
                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${BIAS_CLS[detail.study.bias]}`}>{detail.study.bias.toLowerCase()}</span>
                 <span className="text-xs text-text-secondary">as of {detail.study.asOf}</span>
               </div>

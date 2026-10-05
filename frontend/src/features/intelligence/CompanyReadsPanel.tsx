@@ -1,7 +1,6 @@
 "use client";
 
 import { getFilings, getFundamentals, type FilingRow, type FundamentalsRow } from "@/lib/apiClient";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useEffect, useState } from "react";
 
@@ -44,9 +43,7 @@ export function FundamentalsPanel() {
           {rows.slice(0, 12).map((r) => (
             <li key={r.ticker} className="rounded-lg border border-border px-3 py-2">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="w-14 shrink-0 text-sm font-bold text-text-primary">
-                  <Sensitive>{r.ticker}</Sensitive>
-                </span>
+                <span className="w-14 shrink-0 text-sm font-bold text-text-primary">{r.ticker}</span>
                 <span
                   className={`text-xs font-semibold ${r.bias === "BULLISH" ? "text-gains" : r.bias === "BEARISH" ? "text-losses" : "text-text-secondary"}`}
                 >
@@ -112,9 +109,7 @@ export function FilingsPanel() {
           {rows.slice(0, 12).map((r) => (
             <li key={`${r.ticker}-${r.filedAt}-${r.form}`} className="rounded-lg border border-border px-3 py-2">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="w-14 shrink-0 text-sm font-bold text-text-primary">
-                  <Sensitive>{r.ticker}</Sensitive>
-                </span>
+                <span className="w-14 shrink-0 text-sm font-bold text-text-primary">{r.ticker}</span>
                 <span className="text-[11px] text-text-secondary">
                   {r.form} · {KIND_LABEL[r.kind]} · {r.filedAt}
                 </span>

@@ -254,7 +254,7 @@ export function DeepAnalysisForTicker({ ticker }: { ticker: string }) {
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-          Deep analysis · Agent 11 · <Sensitive>{ticker}</Sensitive>
+          Deep analysis · Agent 11 · {ticker}
         </h3>
         {!running && (
           <button type="button" onClick={() => void run()} className="rounded border border-accent/40 px-3 py-1 text-[11px] font-medium text-accent hover:bg-accent/10">

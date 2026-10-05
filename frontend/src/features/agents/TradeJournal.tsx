@@ -78,9 +78,7 @@ function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: stri
       <button onClick={toggle} className="flex w-full items-center justify-between gap-3 text-left">
         <div className="flex items-center gap-2">
           <CompanyIcon ticker={entry.ticker} logoUrl={logoUrl} title={entry.ticker} size={20} />
-          <Sensitive className="text-sm font-semibold">
-            <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
-          </Sensitive>
+          <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
           <span
             className={cn(
               "text-xs font-medium",

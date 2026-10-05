@@ -103,9 +103,7 @@ export function PaperInvestorScoreboard() {
               <li key={i} className="flex flex-col gap-1">
                 <div className="flex items-center gap-3 text-sm">
                   <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
-                  <Sensitive className="w-14 shrink-0 font-mono font-semibold">
-                    <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
-                  </Sensitive>
+                  <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
                   <span
                     className="w-16 shrink-0 text-[11px] font-semibold uppercase"
                     style={{ color: t.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
@@ -179,9 +177,7 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
         {board.openByTicker.map((p) => (
           <li key={p.ticker} className="flex items-center gap-3 text-sm">
             <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
-            <Sensitive className="w-14 shrink-0 font-mono font-semibold">
-              <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
-            </Sensitive>
+            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
             <span
               className="w-14 shrink-0 text-[11px] font-semibold uppercase"
               style={{ color: p.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}

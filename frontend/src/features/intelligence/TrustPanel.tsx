@@ -2,7 +2,6 @@
 
 import { getSourceCredibility, getStrangerAlerts, type SourceCredibilityItem, type StrangerAlertItem } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { riskColorClass } from "@/lib/scoreBands";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
@@ -104,9 +103,7 @@ export function TrustPanel() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <CompanyIcon ticker={a.ticker} logoUrl={logos[a.ticker]} title={a.ticker} size={18} />
-                    <span className="text-sm font-semibold text-text-primary">
-                      <Sensitive>{a.ticker}</Sensitive>
-                    </span>
+                    <span className="text-sm font-semibold text-text-primary">{a.ticker}</span>
                   </div>
                   <span className={`text-sm font-bold tabular-nums ${riskColorClass(a.riskScore)}`}>
                     {a.riskScore}

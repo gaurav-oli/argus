@@ -20,7 +20,6 @@ import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { Sensitive } from "@/features/privacy/Sensitive";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ACTION_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -114,7 +113,7 @@ export function TickerDetail({
         </motion.span>
         <div className="min-w-[180px] flex-1">
           <h1 className="font-display text-xl font-bold text-text-primary">
-            <Sensitive>{ticker}</Sensitive>
+            {ticker}
           </h1>
           <p className="mt-0.5 text-xs text-text-secondary">{roster?.reason ?? "Followed by Argus"}</p>
         </div>
