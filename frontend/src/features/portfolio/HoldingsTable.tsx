@@ -4,9 +4,11 @@ import { BankIcon } from "@/components/ui/BankIcon";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import {
   getCash,
+  getHoldingOutlooks,
   getPortfolioValue,
   setCash,
   type CashBalanceView,
+  type HoldingOutlook,
   type PortfolioSnapshot,
   type PositionValue,
 } from "@/lib/apiClient";
@@ -67,6 +69,7 @@ type TypeRollup = {
 export function HoldingsTable() {
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
   const [cash, setCashRows] = useState<CashBalanceView[]>([]);
+  const [outlooks, setOutlooks] = useState<Map<number, HoldingOutlook>>(new Map());
   const [selectedOwner, setSelectedOwner] = useState<string>("all");
 
   const refetchCash = () => getCash().then(setCashRows).catch(() => {});
@@ -75,6 +78,9 @@ export function HoldingsTable() {
     let active = true;
     getPortfolioValue().then((s) => active && setSnap(s)).catch(() => {});
     refetchCash();
+    getHoldingOutlooks()
+      .then((rows) => active && setOutlooks(new Map(rows.map((r) => [r.positionId, r]))))
+      .catch(() => {}); // the holdings themselves still render fine without this
     // Personal destination (Phase 2, multi-user): the backend pushes only THIS signed-in person's own
     // snapshot here, never a shared topic — see SessionPrincipalHandshakeHandler on the backend.
     const handle = subscribeToTopic<PortfolioSnapshot>("/user/queue/portfolio", (s) => setSnap(s));
@@ -128,7 +134,7 @@ export function HoldingsTable() {
 
       <OwnerTabs owners={owners} selected={selectedOwner} onSelect={setSelectedOwner} />
 
-      <Ledger owners={visibleOwners} fx={fx} logos={logos} onRemoveCash={removeCash} />
+      <Ledger owners={visibleOwners} fx={fx} logos={logos} outlooks={outlooks} onRemoveCash={removeCash} />
     </div>
   );
 }
@@ -206,11 +212,13 @@ function Ledger({
   owners,
   fx,
   logos,
+  outlooks,
   onRemoveCash,
 }: {
   owners: OwnerGroup[];
   fx: number;
   logos: Record<string, string>;
+  outlooks: Map<number, HoldingOutlook>;
   onRemoveCash: (c: CashBalanceView) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -295,6 +303,7 @@ function Ledger({
                               account={a}
                               fx={fx}
                               logos={logos}
+                              outlooks={outlooks}
                               onRemoveCash={onRemoveCash}
                               showAccountSummary={r.accounts.length > 1}
                             />
@@ -318,16 +327,23 @@ function Ledger({
  * a type has only one account — the parent row already shows those totals), cash as a plain labelled
  * stat with a remove action, then just that account's positions.
  */
+/** Registered accounts (TFSA/RRSP/RRIF/RESP/LIRA) — frequent trading here can trigger CRA "business
+ * income" reclassification, separate from whether the stock itself is a good holding. Mirrors the
+ * backend's HoldingOutlookService set. */
+const REGISTERED_ACCOUNT_TYPES = new Set(["TFSA", "RRSP", "RRIF", "RESP", "LIRA"]);
+
 function AccountDetail({
   account,
   fx,
   logos,
+  outlooks,
   onRemoveCash,
   showAccountSummary,
 }: {
   account: AccountGroup;
   fx: number;
   logos: Record<string, string>;
+  outlooks: Map<number, HoldingOutlook>;
   onRemoveCash: (c: CashBalanceView) => void;
   showAccountSummary: boolean;
 }) {
@@ -338,6 +354,7 @@ function AccountDetail({
   const sortedPositions = [...account.positions].sort(
     (a, b) => (b.cadMarketValue ?? 0) - (a.cadMarketValue ?? 0),
   );
+  const registered = account.accountType != null && REGISTERED_ACCOUNT_TYPES.has(account.accountType.toUpperCase());
 
   return (
     <div className="flex flex-col gap-2">
@@ -349,6 +366,14 @@ function AccountDetail({
             <Pill muted icon={<BankIcon institution={account.institution} size={12} />}>
               {account.institution}
             </Pill>
+          )}
+          {registered && (
+            <span
+              className="cursor-help rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent"
+              title={`This is a registered account (${account.accountType}) — frequent trading here can trigger CRA "business income" reclassification. Best treated as buy-and-hold.`}
+            >
+              Buy & hold
+            </span>
           )}
         </div>
         {showAccountSummary ? (
@@ -426,6 +451,7 @@ function AccountDetail({
                       />
                       {p.ticker}
                       {p.afterHours && <span className="text-[10px] text-warning">AH</span>}
+                      <OutlookBadge outlook={outlooks.get(p.id)} />
                     </span>
                   </td>
                   <td className="hidden px-3 py-1.5 text-text-secondary md:table-cell">
@@ -448,6 +474,28 @@ function AccountDetail({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Does Argus currently think this holding is a genuine long-term compounder, or worth reconsidering?
+ * Deliberately silent for NOT_ENOUGH_DATA — most holdings won't have a confident call, and a badge on
+ * every row would be noise, not signal. Hover for the reason (and, for a stale "keep", a nudge to log
+ * a recent buy).
+ */
+function OutlookBadge({ outlook }: { outlook: HoldingOutlook | undefined }) {
+  if (!outlook || outlook.outlook === "NOT_ENOUGH_DATA") return null;
+  const keep = outlook.outlook === "KEEP";
+  const title = [outlook.reason, outlook.timingNote, outlook.updateNudge].filter(Boolean).join(" — ");
+  return (
+    <span
+      className={`cursor-help rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+        keep ? "bg-gains/15 text-gains" : "bg-warning/15 text-warning"
+      }`}
+      title={title || undefined}
+    >
+      {keep ? "Keep — long-term" : "Reconsider"}
+    </span>
   );
 }
 

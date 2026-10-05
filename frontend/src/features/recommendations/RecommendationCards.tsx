@@ -3,6 +3,7 @@
 import {
   decideRecommendation,
   getGraduation,
+  getInvestorProfile,
   getPersonas,
   getRecommendations,
   type GraduationSummary,
@@ -34,6 +35,10 @@ import { useEffect, useMemo, useState } from "react";
 export function RecommendationCards() {
   const [cards, setCards] = useState<Card[] | null>(null);
   const [grad, setGrad] = useState<GraduationSummary | null>(null);
+  // This person's stated trading horizon (Phase 2 onboarding), for the "matches your style" sticker —
+  // purely a client-side comparison against each card's own priceGuidance.style; never changes the
+  // underlying call, which stays the same objective read for everyone.
+  const [horizon, setHorizon] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +47,9 @@ export function RecommendationCards() {
       .catch(() => active && setCards([]));
     getGraduation()
       .then((g) => active && setGrad(g))
+      .catch(() => {});
+    getInvestorProfile()
+      .then((p) => active && setHorizon(p.tradingHorizon))
       .catch(() => {});
     return () => {
       active = false;
@@ -98,6 +106,7 @@ export function RecommendationCards() {
           <ForecastCard
             card={c}
             logoUrl={logos[c.ticker]}
+            horizon={horizon}
             onDecided={(id) => setCards((cs) => cs?.filter((x) => x.id !== id) ?? null)}
           />
         )}
@@ -110,10 +119,12 @@ export function RecommendationCards() {
 function ForecastCard({
   card,
   logoUrl,
+  horizon,
   onDecided,
 }: {
   card: Card;
   logoUrl: string | undefined;
+  horizon: string | null;
   onDecided: (id: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -174,6 +185,11 @@ function ForecastCard({
                 className={`cursor-help rounded px-1.5 py-0.5 text-[10px] font-medium ${card.badge === "FROZEN" ? "bg-losses/15 text-losses" : "bg-border/60 text-text-secondary"}`}
               >
                 {card.badge}
+              </span>
+            )}
+            {styleFitLabel(card.priceGuidance, horizon) && (
+              <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                {styleFitLabel(card.priceGuidance, horizon)}
               </span>
             )}
           </div>
@@ -587,6 +603,19 @@ function PriceGuidanceStrip({ guidance: g }: { guidance: PriceGuidance }) {
       </p>
     </div>
   );
+}
+
+/**
+ * Purely informational — never a warning. A viewer's stated trading horizon (Profile → Investor
+ * profile) is compared against this specific call's own style; the call itself never changes per
+ * viewer, only whether we point out it happens to fit how they said they like to invest.
+ */
+function styleFitLabel(guidance: PriceGuidance | null, horizon: string | null): string | null {
+  if (!guidance || !horizon) return null;
+  const longStyle = guidance.style === "CORE_HOLD";
+  if (horizon === "LONG_TERM_HOLDER") return longStyle ? "Matches your long-term style" : null;
+  if (horizon === "ACTIVE_TRADER") return longStyle ? null : "Matches your active-trading style";
+  return null; // MIX, or an unrecognized value
 }
 
 function formatDay(iso: string): string {

@@ -12,6 +12,11 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 	/** Recommendations newest-first for the feed/UI. */
 	List<Recommendation> findTop50ByOrderByCreatedAtDesc();
 
+	/** The single latest recommendation ever made for one ticker, regardless of staleness — for
+	 * checking what Argus currently thinks of a stock someone actually holds (not the "current feed"
+	 * window {@link #latestPerTickerSince} applies). */
+	java.util.Optional<Recommendation> findFirstByTickerOrderByCreatedAtDescIdDesc(String ticker);
+
 	/** The newest recommendation for each ticker since {@code since} — what each name currently says. */
 	@Query(value = "select distinct on (ticker) * from recommendations where created_at > :since "
 			+ "order by ticker, created_at desc, id desc", nativeQuery = true)

@@ -462,6 +462,31 @@ export interface PortfolioSnapshot {
 export const getPortfolioValue = (): Promise<PortfolioSnapshot> =>
   apiGet<PortfolioSnapshot>("/api/portfolio/value");
 
+/**
+ * Does Argus currently think a stock you hold is a genuine long-term compounder worth continuing to
+ * accumulate, or should it be reconsidered? Reuses the same recommendation/deep-analysis data shown
+ * elsewhere, reframed against what you actually own — never a new model call. `reason`/`timingNote`
+ * are null only for NOT_ENOUGH_DATA (Argus won't force a confident call on thin evidence).
+ */
+export interface HoldingOutlook {
+  positionId: number;
+  ticker: string;
+  outlook: "KEEP" | "RECONSIDER" | "NOT_ENOUGH_DATA";
+  outlookLabel: string;
+  reason: string | null;
+  /** The existing chart-derived buy note, reused as a qualitative "good time to add, or wait" steer —
+   * never a fabricated number. */
+  timingNote: string | null;
+  registeredAccount: boolean;
+  /** Set only when `registeredAccount` — the CRA "business income" caution for active trading there. */
+  registeredAccountNote: string | null;
+  /** A contextual reminder to log a change, only for a long-held "keep" position that's gone stale. */
+  updateNudge: string | null;
+}
+
+export const getHoldingOutlooks = (): Promise<HoldingOutlook[]> =>
+  apiGet<HoldingOutlook[]>("/api/portfolio/outlook");
+
 /** Uninvested cash per account+currency, folded into the portfolio total. */
 export interface CashBalanceView {
   id: number;
