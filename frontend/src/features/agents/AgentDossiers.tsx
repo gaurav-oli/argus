@@ -28,6 +28,25 @@ const BLURB: Record<Stream, string> = {
   analysis: "where it comes together into your calls",
 };
 
+/** Short, meaningful codenames — scaled to fit the card, so none is ever clipped. */
+const CODENAME: Record<string, string> = {
+  news: "NEWS",
+  macro: "MACRO",
+  social: "SOCIAL",
+  internet: "WEB",
+  filings: "INSIDER",
+  calendar: "CALENDAR",
+  technical: "CHARTS",
+  fundamentals: "FUNDAMENTALS",
+  "filings-reader": "FILINGS",
+  strategies: "STRATEGIES",
+  deep: "DEEP",
+  research: "RESEARCH",
+  learner: "LEARNER",
+  recommender: "RECOMMENDER",
+  cost: "COST",
+};
+
 const STAMP_COLOR: Record<Stamp, string> = {
   ACTIVE: "var(--color-gains)",
   "ON WATCH": "var(--color-gains)",
@@ -41,8 +60,8 @@ const STAMP_COLOR: Record<Stamp, string> = {
  * "What each agent is doing" (Agents page, below the pipeline) as classified dossiers, filed into the
  * same three cabinets as the pipeline: Sources / Market / Analysis, in the same colours.
  *
- * Each file's front shows a codename, a rubber stamp (ACTIVE / ON WATCH / ON CALL / OFF GRID / NO
- * DATA) and three segmented stat bars: VOLUME (output so far), TEMPO (how often it runs) and FRESH
+ * Each file's front shows a codename, a status line (ACTIVE / ON WATCH / ON CALL / OFF GRID / NO
+ * DATA, with when it last reported) and three segmented stat bars: VOLUME (output so far), TEMPO (how often it runs) and FRESH
  * (how much of its allowed quiet time is left). The bars load segment by segment; on a working
  * agent they then shed a stardust of rising 0/1 bits, and on a stalled one the freshness bar's bits
  * crumble downward in red. Turning a file over shows the brief: what it does, its shift, its note
@@ -119,7 +138,9 @@ export function AgentDossiers({
                 {off > 0 && <span className="text-losses"> · {off} off grid</span>}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+            {/* Columns come from the space the cards actually get (the page is width-capped), not from
+                the screen size — a wide monitor with a narrow page used to squeeze six cards in. */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,13.5rem),1fr))] gap-3">
               {cab.files.map((f, i) => (
                 <Dossier
                   key={f.agent.id}
@@ -177,11 +198,11 @@ function Dossier({
         ? "on demand"
         : `every ${formatMinutes(agent.intervalMinutes)}`;
   const freshLabel = wire.ageMinutes == null ? "—" : wireLabel(wire);
-  const short = codename(agent.name);
+  const short = CODENAME[agent.id] ?? codename(agent.name);
   const reports = reportsTo(agent.id);
 
   return (
-    <div className="dz-card h-[250px]" style={{ animationDelay: `${index * 0.04}s` }}>
+    <div className="dz-card h-[268px]" style={{ animationDelay: `${index * 0.04}s` }}>
       <div className={cn("dz-inner", turned && "dz-turned", reduce && "dz-still")}>
         {/* Front — the whole face turns the file over. */}
         <button
@@ -191,7 +212,7 @@ function Dossier({
           aria-label={`${agent.code} ${agent.name}: ${stamp.toLowerCase()}. Turn over for the brief.`}
           tabIndex={turned ? -1 : 0}
           className={cn(
-            "dz-face glass flex flex-col p-3 text-left transition-colors hover:border-accent",
+            "dz-face glass flex flex-col p-3 text-left transition-colors [container-type:inline-size] hover:border-accent",
             stalled && "border-losses/70",
           )}
         >
@@ -199,17 +220,32 @@ function Dossier({
             <span>File A-{num}</span>
             <span style={{ color: tone }}>{streamOf(agent.id)}</span>
           </span>
-          <span className="mt-2 font-display text-4xl leading-none" style={{ color: tone }}>
+          <span
+            className="mt-2 block overflow-hidden whitespace-nowrap font-display leading-none"
+            style={{ color: tone, fontSize: `min(2.5rem, calc(100cqw / ${Math.max(4, short.length) * 0.55}))` }}
+          >
             {short}
           </span>
           <span className="mt-0.5 truncate text-xs text-text-primary">{agent.name}</span>
-          <span
-            className={cn("dz-stamp absolute right-2 top-14 border-2 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.14em]", reduce && "dz-still")}
-            style={{ color: STAMP_COLOR[stamp], borderColor: STAMP_COLOR[stamp], animationDelay: `${0.4 + index * 0.05}s` }}
-          >
-            {stamp}
+          <span className="mt-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.12em]">
+            <span
+              className="inline-flex items-center gap-1.5 border px-1.5 py-0.5 font-bold"
+              style={{ color: STAMP_COLOR[stamp], borderColor: STAMP_COLOR[stamp] }}
+            >
+              <span className="relative inline-flex h-1.5 w-1.5" aria-hidden>
+                {!reduce && (stamp === "ACTIVE" || stamp === "ON WATCH") && (
+                  <span className="absolute inset-0 animate-ping" style={{ background: STAMP_COLOR[stamp], opacity: 0.6 }} />
+                )}
+                <span
+                  className={cn("relative inline-flex h-1.5 w-1.5", !reduce && stalled && "animate-pulse")}
+                  style={{ background: STAMP_COLOR[stamp] }}
+                />
+              </span>
+              {stamp}
+            </span>
+            {wire.ageMinutes != null && <span className="truncate tracking-normal text-text-secondary">{freshLabel}</span>}
           </span>
-          <span className="mt-4 flex flex-col gap-2">
+          <span className="mt-3 flex flex-col gap-2">
             <StatBar label="Volume" value={compact(agent.captured)} frac={stats.volume} color="var(--color-text-primary)" live={stats.live} shownCells={shownCells} seed={index * 3} reduce={reduce} />
             <StatBar label="Tempo" value={tempoLabel} frac={stats.tempo} color="var(--color-warning)" live={stats.live} shownCells={shownCells} seed={index * 3 + 1} reduce={reduce} />
             <StatBar

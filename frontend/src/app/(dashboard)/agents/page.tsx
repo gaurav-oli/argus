@@ -16,8 +16,9 @@ import { TradeJournal } from "@/features/agents/TradeJournal";
  * /api/agents and /api/recommendations endpoints.
  */
 export default function AgentsPage() {
+  // Wider on very large screens (e.g. a 49" ultrawide) so the pipeline and dossiers get room.
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl 2xl:max-w-7xl">
       <PageHeader
         eyebrow="Operations"
         title="Agents"
