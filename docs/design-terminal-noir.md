@@ -40,7 +40,7 @@ edited. `.font-serif-editorial` and `.font-display` both map to VT323.
 | Panes | Stepped CRT "boot" wipe on entrance (`MotionCard`); hover lights the frame instead of lifting the card |
 | Home | The greeting types itself out with a caret. The briefing headline prints as you arrive. |
 | Sign-in | A boot log (`> probing 15 agents [ OK ]` …) then a `login:` prompt with Sign in with Google |
-| Recommendation cards | Bull/bear odds as an ASCII block bar `██████████████░░░░░░` (`AsciiBar`) |
+| Intelligence → ticker detail | **Forecast spread**: the call's model odds as a big VT323 %, a bull/bear block bar, and an ASCII return histogram (`▁▃▆█▆▃▁`) for the call's own horizon. The side the call bets on is lit; stop `S`, entry `│` and target `T` sit on a rail underneath. Columns grow upward on open (`ForecastSpread`, math in `lib/forecastSpread.ts`) |
 | Agents | A live **`tail -f` agent log**: each agent's last run as a log line, with new lines animating in (`AgentLogTail`) |
 
 Every animation is disabled under `prefers-reduced-motion`. `TypedText` gives screen readers the
@@ -64,8 +64,10 @@ These are not built yet. They are ordered by how much each would add.
   [ OK ]`, which surfaces the self-healing parser's real steps.
 
 ### Intelligence
-- **Probability Weather inside the terminal**, borrowing concept 4: each call gets an ASCII return
-  histogram (`▁▃▆█▆▃▁`) with the "beats SPY" side highlighted, plus a 7/30/90-day horizon toggle.
+- ~~Probability Weather inside the terminal~~: **built** as the forecast spread (see above). It
+  deliberately has **no 7/30/90 toggle**. The model scores each call at one horizon only, and
+  showing odds for horizons it never scored would mean inventing probabilities. A toggle can come
+  back if the engine starts scoring every horizon.
 - **The command palette as the primary nav for tickers**: `/` focuses an `argus>` prompt with fuzzy
   ticker search.
 - **Personas as a chat transcript**: `[buffett] AGREE — durable moat…` lines that print in order.
@@ -92,3 +94,22 @@ These are not built yet. They are ordered by how much each would add.
 Built on the MacBook. Typecheck, lint (no new warnings) and the production build all pass. The
 visual and live-data checks need the running stack on the Mini: see
 `docs/mac-mini-validation.md` §15.
+
+## How the forecast spread stays honest
+
+Argus's probabilities come from the scoring engine and are never generated in the UI, so the spread
+adds **no new number**. It takes:
+
+1. the model's calibrated bull odds `p` for the call's own `holdDays`, and
+2. the stock's realized volatility: the sample standard deviation of daily log returns over the last
+   60 closes from Agent 10's candles.
+
+It then draws the one normal curve with that spread (`σ = σ_daily·√trading days`) that puts exactly
+`p` of its area above zero (`μ = σ·Φ⁻¹(p)`). The on-screen caption says the shape illustrates the
+odds and is not a second forecast. With fewer than 21 usable closes, no curve is drawn. The math is
+covered by `npm test` (16 tests, Node's built-in runner, no new dependencies).
+
+> Note: an earlier pass put the ASCII odds bar in `features/recommendations/RecommendationCards.tsx`.
+> That component is no longer mounted anywhere (it predates the Intelligence rebuild), so the bar
+> now lives in the ticker detail instead. `RecommendationCards` is dead code and could be deleted.
+

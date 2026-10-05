@@ -1,5 +1,6 @@
 "use client";
 
+import { ForecastSpread } from "@/features/intelligence/ForecastSpread";
 import {
   getChartDetail,
   getFilingsFor,
@@ -170,6 +171,10 @@ export function TickerDetail({
             )}
           </div>
         </div>
+      )}
+
+      {roster?.forecast && roster.action !== "WATCH" && (
+        <ForecastSpread ticker={ticker} forecast={roster.forecast} candles={chart === undefined ? null : (chart?.candles ?? [])} />
       )}
 
       <SlidingTabs id="ticker-detail" tabs={TABS} value={tab} onChange={setTab} className="mt-5" />

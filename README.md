@@ -157,7 +157,8 @@ cd frontend
 npm install                   # first time
 npm run dev                   # starts on http://localhost:3000
 npm run lint                  # eslint
-npx tsc --noEmit              # typecheck (no script; there are no frontend unit tests)
+npx tsc --noEmit              # typecheck
+npm test                      # unit tests (Node's built-in runner, src/**/*.test.mjs)
 ```
 
 ## Backend package structure (feature/domain-based)

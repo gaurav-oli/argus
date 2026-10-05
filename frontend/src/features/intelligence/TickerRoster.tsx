@@ -7,6 +7,7 @@ import {
   type WatchItem,
 } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
+import type { ForecastInput } from "./ForecastSpread";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { motion } from "motion/react";
@@ -25,6 +26,8 @@ export interface RosterRow {
   chart: RecommendationCard["chart"] | null;
   valuation: string | null;
   reason: string | null;
+  /** The call's model odds + horizon + price levels, for the forecast spread. Null for a WATCH. */
+  forecast: ForecastInput | null;
 }
 
 const ACTION_CLS: Record<string, string> = {
@@ -67,6 +70,10 @@ export function useTickerRoster() {
         chart: r.chart,
         valuation: r.valuation,
         reason: r.thesis,
+        forecast:
+          r.holdDays != null && r.holdDays > 0
+            ? { bullProbability: r.bullProbability, direction: r.direction, holdDays: r.holdDays, priceGuidance: r.priceGuidance }
+            : null,
       });
     }
     for (const w of watching) {
@@ -81,6 +88,7 @@ export function useTickerRoster() {
         chart: null,
         valuation: null,
         reason: w.reason,
+        forecast: null,
       });
     }
     return [...byTicker.values()].sort((a, b) => {

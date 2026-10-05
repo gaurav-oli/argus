@@ -360,7 +360,12 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] A friend's account shows **their** holdings, not yours.
 - [ ] **Status line (desktop):** mode, agents x/y, haiku $spent / $budget, and a ticking clock.
 - [ ] **Home:** the greeting and the briefing headline type out. Panes boot in with a stepped wipe.
-- [ ] **Intelligence:** each recommendation shows its bull/bear odds as a `███░░` block bar.
+- [ ] **Intelligence → open a BUY/AVOID ticker:** the **forecast** pane shows:
+  - [ ] the model's % (matching the roster's call) and the `███░░` bull/bear bar
+  - [ ] the ASCII histogram growing upward, with the call's side lit and the other side dimmed
+  - [ ] `S`/`│`/`T` markers that line up with the price guidance's stop, entry and target
+  - [ ] a WATCH ticker shows no forecast pane
+  - [ ] a ticker with under a month of candles shows the "not enough price history" line instead
 - [ ] **Agents:** the `tail -f` agent log lists real recent runs, and new runs animate in within
       about 15s.
 - [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
