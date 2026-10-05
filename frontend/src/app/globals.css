@@ -497,6 +497,27 @@ body {
   animation: term-line-in 0.3s ease-out both;
 }
 
+/* ---- Argus logo (ArgusMark, L1 · Panoptes ring) ----
+ * The ring's sixteen eyes blink in sequence (each delayed 0.3s), so some are always open;
+ * the centre eye blinks occasionally. Both freeze under the reduced-motion block below. */
+@keyframes argus-ring-eye {
+  0%, 100% { opacity: 1; }
+  4% { opacity: 0.12; }
+  9% { opacity: 1; }
+}
+.argus-ring-eye {
+  animation: argus-ring-eye 4.8s ease-in-out infinite;
+}
+@keyframes argus-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94% { transform: scaleY(0.08); }
+}
+.argus-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: argus-blink 4.5s ease-in-out infinite;
+}
+
 /* ---- Agent pipeline (AgentActivity) ---- */
 @keyframes pv-flow {
   0% { left: 0%; opacity: 0; }

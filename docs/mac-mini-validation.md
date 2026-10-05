@@ -381,6 +381,16 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] Phone width: the streams stack, the core and calls box sit underneath, and nothing scrolls
         sideways.
 - [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
+- [ ] **Logo (L1):**
+  - [ ] The sidebar and mobile top bar show the ring-of-eyes mark with ARGUS. The ring's eyes blink in
+        turn and the centre eye blinks occasionally.
+  - [ ] The sign-in, first-run and "connecting" screens show the larger mark.
+  - [ ] Nothing animates with Reduce Motion on.
+- [ ] **App icon (L3):**
+  - [ ] The browser tab shows the amber A-eye. Hard-refresh: browsers cache favicons.
+  - [ ] iPhone: remove the old Home Screen icon, then Share → Add to Home Screen. It should show the
+        amber A-eye tile.
+  - [ ] A push notification uses the new icon. On Android the small badge is the A-eye silhouette.
 - [ ] **iPhone:** the bottom nav uses an inverted amber block for the active tab, and nothing scrolls
       sideways at phone width.
 - [ ] **Reduced motion** (macOS Accessibility → Display → Reduce motion): no typing, flicker or tape

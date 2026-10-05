@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ArgusLockup } from "@/components/brand/ArgusMark";
 import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { cn } from "@/lib/utils";
 import { isActive, visibleNavItems } from "./navItems";
 
 /**
- * Fixed left navigation — desktop only (the shell layout hides it below `lg`). Terminal Noir: a
- * glowing `ARGUS://` wordmark, numbered menu entries (`[1] HOME`) with the active one inverted to a
+ * Fixed left navigation — desktop only (the shell layout hides it below `lg`). Terminal Noir: the
+ * Argus logo and wordmark, numbered menu entries (`[1] HOME`) with the active one inverted to a
  * solid amber block, Alt+1…5 shortcuts to jump between them, and a shell prompt with a blinking
  * caret at the foot.
  */
@@ -37,7 +38,7 @@ export function Sidebar() {
   return (
     <aside className="glass-chrome hidden h-full w-60 shrink-0 flex-col border-r border-[var(--glass-border)] lg:flex">
       <div className="flex h-16 items-center px-5">
-        <span className="font-display term-glow text-3xl text-accent">ARGUS://</span>
+        <ArgusLockup size={36} wordClassName="text-3xl" />
       </div>
 
       <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 px-3 py-2 font-mono text-sm">

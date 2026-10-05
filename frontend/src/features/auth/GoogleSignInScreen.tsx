@@ -1,5 +1,6 @@
 "use client";
 
+import { ArgusMark } from "@/components/brand/ArgusMark";
 import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { googleSignInUrl } from "@/lib/apiClient";
 import { useReducedMotion } from "motion/react";
@@ -57,8 +58,13 @@ export function GoogleSignInScreen({ reason }: { reason: SignInReason }) {
     <main className="terminal-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6">
       <AmbientBackground />
       <div className="relative z-10 w-full max-w-md font-mono text-sm">
-        <h1 className="font-display term-glow text-6xl text-accent">ARGUS://</h1>
-        <p className="mt-1 text-xs uppercase tracking-[0.25em] text-text-secondary">Private &amp; invite-only</p>
+        <div className="flex items-center gap-5 text-accent">
+          <ArgusMark size={88} className="drop-shadow-[0_0_14px_rgba(255,176,0,0.45)]" />
+          <div>
+            <h1 className="font-display term-glow text-6xl leading-none tracking-[0.06em] text-accent">ARGUS</h1>
+            <p className="mt-1 text-xs uppercase tracking-[0.25em] text-text-secondary">Private &amp; invite-only</p>
+          </div>
+        </div>
 
         <ol className="mt-8 min-h-[11rem] space-y-1.5" aria-label="Startup">
           {BOOT_LINES.slice(0, shown).map((l) => (

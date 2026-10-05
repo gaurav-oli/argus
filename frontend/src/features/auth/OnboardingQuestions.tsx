@@ -1,5 +1,6 @@
 "use client";
 
+import { ArgusMark } from "@/components/brand/ArgusMark";
 import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { putInvestorProfile, skipOnboarding } from "@/lib/apiClient";
 import { motion, useReducedMotion } from "motion/react";
@@ -74,6 +75,9 @@ export function OnboardingQuestions({ onDone }: { onDone: () => void }) {
     <main className="terminal-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-6 py-12">
       <AmbientBackground />
       <div className="relative z-10 w-full max-w-md">
+        <div className="mb-4 flex justify-center text-accent">
+          <ArgusMark size={56} />
+        </div>
         <motion.p {...rise(0)} className="text-center font-mono text-xs text-accent/80">
           ~/argus/setup $ ./first-run
         </motion.p>

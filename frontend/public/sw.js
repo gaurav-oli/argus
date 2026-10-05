@@ -14,7 +14,7 @@ self.addEventListener("push", function (event) {
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/badge-96.png",
     vibrate: [100, 50, 100],
     // CRITICAL alerts set requireInteraction so the notification stays until acted on (Story 8.2).
     requireInteraction: !!data.requireInteraction,

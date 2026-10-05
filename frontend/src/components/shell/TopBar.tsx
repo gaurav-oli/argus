@@ -1,5 +1,6 @@
 "use client";
 
+import { ArgusLockup } from "@/components/brand/ArgusMark";
 import { PortfolioChat } from "@/features/conversation/PortfolioChat";
 import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
@@ -31,7 +32,7 @@ export function TopBar() {
   return (
     <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">
       <div className="flex items-center lg:hidden">
-        <span className="font-display term-glow text-2xl text-accent">ARGUS://</span>
+        <ArgusLockup size={28} wordClassName="text-2xl" />
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-5 lg:gap-6">

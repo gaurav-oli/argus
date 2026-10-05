@@ -1,5 +1,6 @@
 "use client";
 
+import { ArgusMark } from "@/components/brand/ArgusMark";
 import {
   type AuthStatus,
   getAuthStatus,
@@ -98,7 +99,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (onboarding === "checking") {
       return (
         <main className="terminal-theme flex min-h-dvh items-center justify-center bg-background">
-          <p className="font-mono text-sm text-accent">connecting<span className="term-caret" aria-hidden /></p>
+          <div className="flex flex-col items-center gap-4 text-accent"><ArgusMark size={64} /><p className="font-mono text-sm">connecting<span className="term-caret" aria-hidden /></p></div>
         </main>
       );
     }
@@ -111,7 +112,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (gate === "loading") {
     return (
       <main className="terminal-theme flex min-h-dvh items-center justify-center bg-background">
-        <p className="font-mono text-sm text-accent">connecting<span className="term-caret" aria-hidden /></p>
+        <div className="flex flex-col items-center gap-4 text-accent"><ArgusMark size={64} /><p className="font-mono text-sm">connecting<span className="term-caret" aria-hidden /></p></div>
       </main>
     );
   }

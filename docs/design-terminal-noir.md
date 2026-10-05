@@ -26,6 +26,27 @@ The theme works the same way the editorial skin did: it swaps the CSS variable s
 the Tailwind `--color-*` and `--font-*` aliases. Every existing component re-skins without being
 edited. `.font-serif-editorial` and `.font-display` both map to VT323.
 
+## Logo and app icon
+
+Argus is named after **Argus Panoptes**, the hundred-eyed watchman of Greek myth who never closed
+every eye at once.
+
+- **Logo (L1 · Panoptes ring):** a central eye inside a ring of sixteen smaller eyes. In the app the
+  ring's eyes blink one after another, so some are always open. Component: `ArgusMark` /
+  `ArgusLockup` in `components/brand/ArgusMark.tsx`. It draws in `currentColor`. Used in the
+  sidebar, the mobile top bar, sign-in, first-run setup and the "connecting" screen.
+- **App icon (L3 · A-eye monogram):** an **A** whose crossbar is an open eye, dark on a solid amber
+  tile. It's static and legible down to 16px. The SVG sources are in `frontend/brand/`, and
+  `node brand/build-icons.mjs` regenerates every icon file with `sharp` (already installed by
+  Next.js):
+  - `icon-192/512.png`: PWA icons, also maskable
+  - `apple-icon.png` (180): iPhone home screen
+  - `icon.svg` plus `favicon.ico` (16/32/48): browser tab
+  - `badge-96.png`: a white silhouette for Android notification badges
+
+The design exploration (five directions, plus mockups of the logo in use) is on the "Argus Redesign
+Concepts" canvas, on its Logo and Logo in use pages.
+
 ## Signature pieces (built)
 
 | Where | What |
