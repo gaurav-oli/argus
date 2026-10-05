@@ -15,13 +15,24 @@ export interface SystemInfo {
   time: string;
 }
 
-/** Mirrors the backend `AuthStatus` record (Story 2.1 + 2.2 + 2.6). */
+/** The signed-in Google account — never the raw Google subject id. */
+export interface AuthUser {
+  name: string;
+  email: string;
+  pictureUrl: string | null;
+  admin: boolean;
+}
+
+/** Mirrors the backend `AuthStatus` record. `pinSet`/`passkeyEnrolled`/the lockout fields are the
+ * retired PIN/WebAuthn flow (kept only because the backend still compiles them in); `user` is the
+ * real multi-user signal — null means not signed in with Google. */
 export interface AuthStatus {
   pinSet: boolean;
   authenticated: boolean;
   passkeyEnrolled: boolean;
   fullyLocked: boolean;
   lockoutSecondsRemaining: number;
+  user: AuthUser | null;
 }
 
 /** Mirrors the backend `WebAuthnController.PasskeyInfo` record (Story 2.2). */
@@ -133,6 +144,32 @@ export const setupPin = (pin: string): Promise<void> =>
 
 export const login = (pin: string): Promise<AuthStatus> =>
   apiPost<AuthStatus>("/api/auth/login", { pin });
+
+/** Starts Google Sign-In — a plain browser navigation, not a fetch (the backend replies with a 302
+ * to Google's consent screen), so callers set `window.location.href` (or an `<a href>`) to this.
+ * Uses the full backend origin, not a bare relative path — needed in local dev where the frontend
+ * and backend are cross-origin; same-origin on the Mini, where BASE_URL is empty. */
+export const googleSignInUrl = (): string => `${BASE_URL}/api/auth/google/login`;
+
+// ---- Admin usage stats (multi-user) ----
+
+/** Mirrors the backend `AdminController.UserStatsView` — engagement only, never portfolio data. */
+export interface AdminUserStats {
+  name: string;
+  email: string;
+  pictureUrl: string | null;
+  admin: boolean;
+  joinedAt: string;
+  lastLoginAt: string | null;
+  loginCount: number;
+  activeDays: number;
+  totalActiveMinutes: number;
+  lastActiveAt: string | null;
+}
+
+/** 403 (ApiError) for a non-admin — the caller should already know not to show this to one. */
+export const getAdminUserStats = (): Promise<AdminUserStats[]> =>
+  apiGet<AdminUserStats[]>("/api/admin/users");
 
 export const logout = (): Promise<void> => apiPost("/api/auth/logout");
 

@@ -33,21 +33,26 @@ public class AuthController {
 	private final SessionStore sessions;
 	private final SecurityProperties securityProperties;
 	private final com.argus.security.webauthn.WebAuthnService webAuthn;
+	private final CurrentUserService currentUser;
 
 	public AuthController(AuthService auth, SessionStore sessions, SecurityProperties securityProperties,
-			com.argus.security.webauthn.WebAuthnService webAuthn) {
+			com.argus.security.webauthn.WebAuthnService webAuthn, CurrentUserService currentUser) {
 		this.auth = auth;
 		this.sessions = sessions;
 		this.securityProperties = securityProperties;
 		this.webAuthn = webAuthn;
+		this.currentUser = currentUser;
 	}
 
 	@GetMapping("/status")
 	public AuthStatus status(HttpServletRequest request) {
 		boolean authenticated = auth.isAuthenticated(SessionCookie.read(request));
 		LockoutService.Lockout lock = auth.lockoutState();
+		AuthStatus.UserView user = authenticated
+				? currentUser.resolve(request).map(AuthStatus.UserView::from).orElse(null)
+				: null;
 		return new AuthStatus(auth.isPinSet(), authenticated, webAuthn.anyPasskeyEnrolled(),
-				lock.full(), lock.secondsRemaining());
+				lock.full(), lock.secondsRemaining(), user);
 	}
 
 	@PostMapping("/pin")
@@ -62,7 +67,7 @@ public class AuthController {
 		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookie.toString())
-				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled(), false, 0));
+				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled(), false, 0, null));
 	}
 
 	@PostMapping("/logout")

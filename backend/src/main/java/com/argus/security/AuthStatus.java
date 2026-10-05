@@ -1,19 +1,31 @@
 package com.argus.security;
 
 /**
- * Auth state for the frontend's initial routing decision (setup vs login vs app), whether to offer
- * biometric unlock, and any active failed-attempt lockout (FR-38 / Story 2.6).
+ * Auth state for the frontend's initial routing decision. {@code pinSet}/{@code passkeyEnrolled}/
+ * the lockout fields are the retired PIN/WebAuthn flow (kept only so that still-compiling dead code
+ * doesn't need touching yet — Google Sign-In is the only flow actually reachable from the UI now);
+ * {@code user} is the real multi-user signal and is what the frontend acts on.
  *
- * @param pinSet                 whether the owner has completed first-launch PIN setup
- * @param authenticated          whether the caller presented a valid session
- * @param passkeyEnrolled        whether at least one WebAuthn passkey is registered (Story 2.2)
- * @param fullyLocked            whether PIN login is fully locked (needs another device — FR-38)
- * @param lockoutSecondsRemaining seconds left on a timed lockout (0 if none)
+ * @param pinSet                  retired — always reflects whatever PIN state happens to exist
+ * @param authenticated           whether the caller presented a valid session
+ * @param passkeyEnrolled         retired
+ * @param fullyLocked             retired
+ * @param lockoutSecondsRemaining retired
+ * @param user                    the signed-in Google account, or null when not authenticated
  */
 public record AuthStatus(
 		boolean pinSet,
 		boolean authenticated,
 		boolean passkeyEnrolled,
 		boolean fullyLocked,
-		long lockoutSecondsRemaining) {
+		long lockoutSecondsRemaining,
+		UserView user) {
+
+	/** What the frontend actually needs about the signed-in person — never their raw Google sub. */
+	public record UserView(String name, String email, String pictureUrl, boolean admin) {
+
+		static UserView from(AppUser u) {
+			return new UserView(u.getName(), u.getEmail(), u.getPictureUrl(), u.isAdmin());
+		}
+	}
 }

@@ -34,6 +34,7 @@ public class SessionStore {
 	private static final String F_CREATED = "created";
 	private static final String F_SEEN = "seen";
 	private static final String F_DEVICE = "device";
+	private static final String F_USER_ID = "userId";
 
 	// Atomic check-and-touch: only refresh last-seen / slide TTL if the session still EXISTS, so a
 	// session that idle-expired or was remote-killed between checks is never resurrected by HSET
@@ -55,12 +56,22 @@ public class SessionStore {
 		this.settings = settings;
 	}
 
-	/** Create a session for the given device label; returns its opaque id. */
+	/** Create a session for the given device label; returns its opaque id. No user attached (legacy
+	 * PIN path — {@link #userId(String)} returns empty for a session created this way). */
 	public String create(String device) {
+		return create(device, null);
+	}
+
+	/** Create a session for the given device, signed in as {@code userId} (Google login). */
+	public String create(String device, Long userId) {
 		String id = newId();
 		String now = Instant.now().toString();
-		redis.opsForHash().putAll(key(id), Map.of(
+		Map<String, String> fields = new java.util.HashMap<>(Map.of(
 				F_CREATED, now, F_SEEN, now, F_DEVICE, device == null || device.isBlank() ? "Unknown device" : device));
+		if (userId != null) {
+			fields.put(F_USER_ID, userId.toString());
+		}
+		redis.opsForHash().putAll(key(id), fields);
 		settings.sessionTimeout().ifPresent(ttl -> redis.expire(key(id), ttl));
 		return id;
 	}
@@ -68,6 +79,16 @@ public class SessionStore {
 	/** Convenience for callers/tests without device context. */
 	public String create() {
 		return create("Unknown device");
+	}
+
+	/** The signed-in user's id for a live session, or empty if the session is gone, invalid, or
+	 * predates user accounts (the old PIN login created sessions with no user attached). */
+	public Optional<Long> userId(String id) {
+		if (id == null || id.isBlank()) {
+			return Optional.empty();
+		}
+		Object v = redis.opsForHash().get(key(id), F_USER_ID);
+		return v == null ? Optional.empty() : Optional.of(Long.parseLong(v.toString()));
 	}
 
 	/**

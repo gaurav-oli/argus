@@ -2,35 +2,35 @@
 
 import { type AuthStatus, getAuthStatus, setUnauthorizedHandler } from "@/lib/apiClient";
 import { useEffect, useState } from "react";
-import { PinScreen } from "./PinScreen";
+import { GoogleSignInScreen, type SignInReason } from "./GoogleSignInScreen";
 
-type Gate = "loading" | "setup" | "login" | "authed" | "error";
+type Gate = "loading" | "signed-out" | "authed" | "error";
 
-function toGate(status: AuthStatus): Gate {
-  if (status.authenticated) return "authed";
-  return status.pinSet ? "login" : "setup";
+/** The backend redirects back here with `?auth=failed|not_invited` on a rejected Google sign-in
+ * (see GoogleAuthController) — read once on mount, not reactively, so this never forces the whole
+ * shell into dynamic rendering just to notice a query param. */
+function readSignInReason(): SignInReason {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("auth");
+  return v === "failed" || v === "not_invited" ? v : null;
 }
 
 /**
- * Client-side auth gate (Story 2.1). On mount it asks the backend for auth status and routes to
- * first-launch PIN setup, the lock screen, or the app. Wraps the dashboard shell so unauthenticated
- * users never see it (the backend also gates /api/** independently — this is UX, not the enforcement).
+ * Client-side auth gate. On mount it asks the backend for auth status and routes to either the
+ * Google Sign-In screen or the app. The backend also gates /api/** independently — this is UX, not
+ * the enforcement.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [gate, setGate] = useState<Gate>("loading");
-  const [passkeyEnrolled, setPasskeyEnrolled] = useState(false);
-  const [fullyLocked, setFullyLocked] = useState(false);
-  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [reason, setReason] = useState<SignInReason>(null);
 
   useEffect(() => {
     let active = true;
     getAuthStatus()
-      .then((status) => {
+      .then((status: AuthStatus) => {
         if (!active) return;
-        setPasskeyEnrolled(status.passkeyEnrolled);
-        setFullyLocked(status.fullyLocked);
-        setLockoutSeconds(status.lockoutSecondsRemaining);
-        setGate(toGate(status));
+        if (!status.authenticated) setReason(readSignInReason());
+        setGate(status.authenticated ? "authed" : "signed-out");
       })
       .catch(() => {
         if (active) setGate("error");
@@ -40,22 +40,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Any 401 (e.g. the Story 2.3 idle timeout expired) drops back to the lock screen. This also
-  // unmounts the shell + PrivacyProvider, resetting tap-to-reveal on lock (FR-36 / Story 2.4).
+  // Any 401 (e.g. the idle timeout expired) drops back to the sign-in screen. This also unmounts
+  // the shell + PrivacyProvider, resetting tap-to-reveal on lock (Demo Mode).
   useEffect(() => {
-    setUnauthorizedHandler(() => setGate((g) => (g === "authed" ? "login" : g)));
+    setUnauthorizedHandler(() => setGate((g) => (g === "authed" ? "signed-out" : g)));
     return () => setUnauthorizedHandler(null);
   }, []);
 
   function retry() {
     setGate("loading");
     getAuthStatus()
-      .then((status) => {
-        setPasskeyEnrolled(status.passkeyEnrolled);
-        setFullyLocked(status.fullyLocked);
-        setLockoutSeconds(status.lockoutSecondsRemaining);
-        setGate(toGate(status));
-      })
+      .then((status: AuthStatus) => setGate(status.authenticated ? "authed" : "signed-out"))
       .catch(() => setGate("error"));
   }
 
@@ -82,14 +77,5 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <PinScreen
-      mode={gate}
-      passkeyEnrolled={passkeyEnrolled}
-      initialFullyLocked={fullyLocked}
-      initialLockoutSeconds={lockoutSeconds}
-      onAuthenticated={() => setGate("authed")}
-      onPinExists={() => setGate("login")}
-    />
-  );
+  return <GoogleSignInScreen reason={reason} />;
 }

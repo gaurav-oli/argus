@@ -1,5 +1,6 @@
 import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { AdminUserStats } from "@/features/auth/AdminUserStats";
 import { LogoutButton } from "@/features/auth/LogoutButton";
 import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionManager } from "@/features/auth/SessionManager";
@@ -104,6 +105,10 @@ export default function ProfilePage() {
         >
           <DemoModeSetting />
         </SettingsCard>
+
+        {/* Renders nothing at all (no card, no title) for anyone but the admin — self-gating on the
+            backend's 403, so a friend never even sees that this section exists. */}
+        <AdminUserStats index={6} />
 
         <div className="mt-2 flex justify-end">
           <LogoutButton />

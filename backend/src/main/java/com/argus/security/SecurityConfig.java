@@ -11,13 +11,13 @@ import org.springframework.context.annotation.Configuration;
  * ({@link SessionStore} and {@link PinHasher} are component-scanned.)
  */
 @Configuration
-@EnableConfigurationProperties(SecurityProperties.class)
+@EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class})
 public class SecurityConfig {
 
 	@Bean
-	FilterRegistrationBean<SessionAuthFilter> sessionAuthFilter(SessionStore sessions) {
+	FilterRegistrationBean<SessionAuthFilter> sessionAuthFilter(SessionStore sessions, UserActivityService activity) {
 		FilterRegistrationBean<SessionAuthFilter> registration = new FilterRegistrationBean<>(
-				new SessionAuthFilter(sessions));
+				new SessionAuthFilter(sessions, activity));
 		registration.addUrlPatterns("/api/*");
 		registration.setOrder(0);
 		return registration;

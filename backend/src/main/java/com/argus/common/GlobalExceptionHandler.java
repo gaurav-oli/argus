@@ -32,6 +32,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem;
 	}
 
+	@ExceptionHandler(ForbiddenException.class)
+	ProblemDetail handleForbidden(ForbiddenException ex) {
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+		problem.setTitle("Forbidden");
+		problem.setType(URI.create("https://argus.local/problems/forbidden"));
+		return problem;
+	}
+
 	@ExceptionHandler(ConflictException.class)
 	ProblemDetail handleConflict(ConflictException ex) {
 		ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());

@@ -26,9 +26,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class SessionAuthFilter extends OncePerRequestFilter {
 
 	private final SessionStore sessions;
+	private final UserActivityService activity;
 
-	public SessionAuthFilter(SessionStore sessions) {
+	public SessionAuthFilter(SessionStore sessions, UserActivityService activity) {
 		this.sessions = sessions;
+		this.activity = activity;
 	}
 
 	@Override
@@ -42,10 +44,20 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 		}
 
 		if (isAllowlisted(request) || isAuthenticated(request)) {
+			touchActivity(request);
 			chain.doFilter(request, response);
 			return;
 		}
 		writeUnauthorized(request, response);
+	}
+
+	/** Best-effort usage-stats signal (admin's user-stats view) — never blocks the request. */
+	private void touchActivity(HttpServletRequest request) {
+		try {
+			sessions.userId(SessionCookie.read(request)).ifPresent(activity::touch);
+		} catch (RuntimeException ex) {
+			// swallow — see UserActivityService's own fail-open contract
+		}
 	}
 
 	/** Fail-closed: any error reaching the session store counts as "not authenticated". */
@@ -69,7 +81,11 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 				|| (HttpMethod.POST.equals(method) && "/api/auth/pin".equals(path))
 				// WebAuthn unlock is pre-session (like /login); registration stays gated.
 				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/start".equals(path))
-				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/finish".equals(path));
+				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/finish".equals(path))
+				// Google Sign-In (multi-user): the redirect-to-Google start and Google's own
+				// callback both happen before any session cookie exists.
+				|| (HttpMethod.GET.equals(method) && "/api/auth/google/login".equals(path))
+				|| (HttpMethod.GET.equals(method) && "/api/login/oauth2/code/google".equals(path));
 	}
 
 	/** Strip a single trailing slash (but keep root "/") so proxy normalization can't 401 a match. */
