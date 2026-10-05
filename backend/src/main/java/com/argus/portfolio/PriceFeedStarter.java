@@ -1,5 +1,6 @@
 package com.argus.portfolio;
 
+import com.argus.marketdata.ListingResolver;
 import com.argus.marketdata.PriceFeed;
 import jakarta.annotation.PreDestroy;
 import java.util.Collection;
@@ -20,12 +21,14 @@ public class PriceFeedStarter {
 	private final ObjectProvider<PriceFeed> priceFeed;
 	private final PositionRepository positions;
 	private final LivePortfolioService live;
+	private final ListingResolver listing;
 
 	public PriceFeedStarter(ObjectProvider<PriceFeed> priceFeed, PositionRepository positions,
-			LivePortfolioService live) {
+			LivePortfolioService live, ListingResolver listing) {
 		this.priceFeed = priceFeed;
 		this.positions = positions;
 		this.live = live;
+		this.listing = listing;
 	}
 
 	@EventListener(ApplicationReadyEvent.class)
@@ -62,8 +65,17 @@ public class PriceFeedStarter {
 
 	/** Every ticker anyone holds, across ALL users (Phase 2) — the feed's own socket thread has no
 	 * signed-in user on it, so the normal @TenantId-scoped finder would see nothing; streaming a live
-	 * PRICE for a ticker is not financial data about any one person, unlike the position itself. */
+	 * PRICE for a ticker is not financial data about any one person, unlike the position itself.
+	 *
+	 * <p>Declared TSX tickers ({@link ListingResolver}) are excluded: Finnhub's free tier doesn't
+	 * cover the TSX, and subscribing to the bare symbol can silently stream a DIFFERENT US instrument
+	 * instead (e.g. bare {@code DOL} is a US ETF, not Dollarama) — a wrong-but-present price that then
+	 * never shows up in {@link LivePortfolioService#unpricedHeldTickers()} for the TSX feed to correct.
+	 * Leaving these tickers unsubscribed here is what lets {@link
+	 * com.argus.marketdata.CanadianEtfPriceFeed} be the one source of truth for them. */
 	private Collection<String> heldTickers() {
-		return positions.allTickersAcrossAllUsers();
+		return positions.allTickersAcrossAllUsers().stream()
+				.filter(t -> !listing.isTsx(t))
+				.toList();
 	}
 }
