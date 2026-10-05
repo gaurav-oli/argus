@@ -1,10 +1,14 @@
 "use client";
 
-import { type AuthStatus, getAuthStatus, setUnauthorizedHandler } from "@/lib/apiClient";
+import { type AuthStatus, getAuthStatus, getInvestorProfile, setUnauthorizedHandler } from "@/lib/apiClient";
 import { useEffect, useState } from "react";
 import { GoogleSignInScreen, type SignInReason } from "./GoogleSignInScreen";
+import { OnboardingQuestions } from "./OnboardingQuestions";
 
 type Gate = "loading" | "signed-out" | "authed" | "error";
+/** Whether this signed-in person still needs the first-login questions (Phase 2). Checked once per
+ * mount right after `authed`, not on every render — "done" also covers "already answered before". */
+type Onboarding = "checking" | "needed" | "done";
 
 /** The backend redirects back here with `?auth=failed|not_invited` on a rejected Google sign-in
  * (see GoogleAuthController) — read once on mount, not reactively, so this never forces the whole
@@ -23,6 +27,7 @@ function readSignInReason(): SignInReason {
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [gate, setGate] = useState<Gate>("loading");
   const [reason, setReason] = useState<SignInReason>(null);
+  const [onboarding, setOnboarding] = useState<Onboarding>("checking");
 
   useEffect(() => {
     let active = true;
@@ -40,6 +45,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Once signed in, check (once) whether this person still needs the first-login questions.
+  useEffect(() => {
+    if (gate !== "authed") return;
+    let active = true;
+    getInvestorProfile()
+      .then((p) => active && setOnboarding(p.needsOnboarding ? "needed" : "done"))
+      .catch(() => active && setOnboarding("done")); // never trap someone behind this on a network blip
+    return () => {
+      active = false;
+    };
+  }, [gate]);
+
   // Any 401 (e.g. the idle timeout expired) drops back to the sign-in screen. This also unmounts
   // the shell + PrivacyProvider, resetting tap-to-reveal on lock (Demo Mode).
   useEffect(() => {
@@ -55,6 +72,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (gate === "authed") {
+    if (onboarding === "needed") {
+      return <OnboardingQuestions onDone={() => setOnboarding("done")} />;
+    }
+    if (onboarding === "checking") {
+      return (
+        <main className="editorial-theme flex min-h-dvh items-center justify-center bg-background">
+          <p className="text-sm text-text-secondary">Loading…</p>
+        </main>
+      );
+    }
     return <>{children}</>;
   }
 

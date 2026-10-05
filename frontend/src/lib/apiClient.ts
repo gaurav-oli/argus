@@ -1148,6 +1148,8 @@ export const putNotificationPrefs = (prefs: NotificationPrefs): Promise<Notifica
 export interface InvestorProfile {
   /** "CONSERVATIVE" | "BALANCED" | "GROWTH" | "AGGRESSIVE", or null when unset. */
   riskTolerance: string | null;
+  /** "LONG_TERM_HOLDER" | "ACTIVE_TRADER" | "MIX", or null when unset. */
+  tradingHorizon: string | null;
   financialGoal: string | null;
   /** Destination amount in the home currency, or null. */
   targetAmount: number | null;
@@ -1158,17 +1160,24 @@ export interface InvestorProfile {
   /** 3-letter code; overrides the argus.investor.home-currency default when set. */
   homeCurrency: string | null;
   notes: string | null;
+  /** True until this person has saved (or skipped) a profile at least once — AuthGate uses this to
+   * show the first-login questions exactly once. */
+  needsOnboarding: boolean;
   updatedAt: string | null;
 }
 
-/** The editable fields (the PUT body); `updatedAt` is server-owned and not sent. */
-export type InvestorProfileUpdate = Omit<InvestorProfile, "updatedAt">;
+/** The editable fields (the PUT body); `needsOnboarding`/`updatedAt` are server-owned and not sent. */
+export type InvestorProfileUpdate = Omit<InvestorProfile, "needsOnboarding" | "updatedAt">;
 
 export const getInvestorProfile = (): Promise<InvestorProfile> =>
   apiGet<InvestorProfile>("/api/investor-profile");
 
 export const putInvestorProfile = (profile: InvestorProfileUpdate): Promise<InvestorProfile> =>
   apiPut<InvestorProfile>("/api/investor-profile", profile);
+
+/** Dismiss the first-login questions without answering — never asked again. */
+export const skipOnboarding = (): Promise<InvestorProfile> =>
+  apiPost<InvestorProfile>("/api/investor-profile/skip-onboarding");
 
 // ---- Morning Briefing (Epic 8, FR-16) ----
 

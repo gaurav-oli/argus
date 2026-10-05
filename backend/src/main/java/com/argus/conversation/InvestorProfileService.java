@@ -4,6 +4,7 @@ import com.argus.portfolio.AccountMeta;
 import com.argus.portfolio.AccountMetaRepository;
 import com.argus.portfolio.Position;
 import com.argus.portfolio.PositionRepository;
+import com.argus.security.CurrentUserContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
@@ -43,25 +44,62 @@ public class InvestorProfileService {
 		this.configHomeCurrency = configHomeCurrency;
 	}
 
-	/** The saved profile, or a fresh empty one when nothing has been persisted yet (never null). */
+	/** This signed-in person's saved profile, or a fresh empty one when nothing has been persisted yet
+	 * (never null; not itself saved until {@link #save} or {@link #skipOnboarding} is called). No
+	 * signed-in user (a pre-Google-login session, or a stray unauthenticated call) degrades to the same
+	 * fresh-empty-profile fallback rather than a hard failure — never a 500 for this. */
 	@Transactional(readOnly = true)
 	public InvestorProfile current() {
-		return profiles.findSingleton().orElseGet(InvestorProfile::new);
+		Long userId = CurrentUserContext.get();
+		if (userId == null) {
+			return new InvestorProfile(null);
+		}
+		return profiles.findById(userId).orElseGet(() -> new InvestorProfile(userId));
 	}
 
-	/** Get-or-create then overwrite the profile fields and persist (Story 7.6 PUT). */
+	/** True until this person has saved a profile at least once (first login, or a skip) — the signal
+	 * the frontend uses to show the first-login questions exactly once. */
+	@Transactional(readOnly = true)
+	public boolean needsOnboarding() {
+		return current().getOnboardingCompletedAt() == null;
+	}
+
+	/** Get-or-create then overwrite this person's profile fields and persist (Story 7.6 PUT, and the
+	 * first-login onboarding screen) — either path counts as onboarding done. */
 	@Transactional
-	public InvestorProfile save(RiskTolerance riskTolerance, String financialGoal, BigDecimal targetAmount,
-			LocalDate targetDate, String residency, String homeCurrency, String notes) {
-		InvestorProfile p = profiles.findSingleton().orElseGet(InvestorProfile::new);
+	public InvestorProfile save(RiskTolerance riskTolerance, TradingHorizon tradingHorizon, String financialGoal,
+			BigDecimal targetAmount, LocalDate targetDate, String residency, String homeCurrency, String notes) {
+		Long userId = requireUser();
+		InvestorProfile p = profiles.findById(userId).orElseGet(() -> new InvestorProfile(userId));
 		p.setRiskTolerance(riskTolerance);
+		p.setTradingHorizon(tradingHorizon);
 		p.setFinancialGoal(financialGoal);
 		p.setTargetAmount(targetAmount);
 		p.setTargetDate(targetDate);
 		p.setResidency(residency);
 		p.setHomeCurrency(homeCurrency);
 		p.setNotes(notes);
+		p.completeOnboarding();
 		return profiles.save(p);
+	}
+
+	/** Dismiss the first-login questions without answering them — never asked again. */
+	@Transactional
+	public InvestorProfile skipOnboarding() {
+		Long userId = requireUser();
+		InvestorProfile p = profiles.findById(userId).orElseGet(() -> new InvestorProfile(userId));
+		p.completeOnboarding();
+		return profiles.save(p);
+	}
+
+	/** Writes need a real signed-in person (should be unreachable given {@code SessionAuthFilter}
+	 * already gates {@code /api/**}, but fails clearly rather than as a raw DB constraint violation). */
+	private static Long requireUser() {
+		Long userId = CurrentUserContext.get();
+		if (userId == null) {
+			throw new com.argus.common.UnauthorizedException("No signed-in user");
+		}
+		return userId;
 	}
 
 	/** Effective residency: the saved profile's value when set, else the config default. */
@@ -143,6 +181,9 @@ public class InvestorProfileService {
 		// User-set profile (Story 7.6) — only what has been filled in.
 		if (profile.getRiskTolerance() != null) {
 			b.append(" Risk tolerance: ").append(profile.getRiskTolerance().label()).append('.');
+		}
+		if (profile.getTradingHorizon() != null) {
+			b.append(" Prefers to be a ").append(profile.getTradingHorizon().label().toLowerCase()).append('.');
 		}
 		if (profile.getFinancialGoal() != null && !profile.getFinancialGoal().isBlank()) {
 			b.append(" Goal: ").append(profile.getFinancialGoal().trim());

@@ -13,6 +13,7 @@ import com.argus.recommendation.RecommendationRepository;
 import com.argus.recommendation.RecommendationService;
 import com.argus.recommendation.SignalDirection;
 import com.argus.recommendation.TradeDecisionRepository;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
 import java.time.LocalDate;
 import java.util.List;
@@ -56,6 +57,12 @@ class PortfolioChatIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository credentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	@BeforeEach
 	void clean() {
 		decisions.deleteAll(); // FK → recommendations; clear children first
@@ -64,12 +71,10 @@ class PortfolioChatIntegrationTest {
 		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk()).andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} — the chat grounds itself in THIS person's
+	 * own portfolio/profile (Phase 2), which a PIN session (no user attached) can no longer provide. */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	private void seedGroundingData() {

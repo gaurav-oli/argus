@@ -11,24 +11,32 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * Single-row, user-editable investor profile (Story 7.6) — the parts of the profile that can't be
- * derived from imported accounts. Every field is nullable; a blank profile falls back to the
- * {@code argus.investor.*} config defaults (residency/home currency) and the account-derived facts, so
- * the pre-7.6 behavior is unchanged until the user edits it. Follows the {@code AppSettings} singleton
- * pattern (fixed id = 1, DB {@code CHECK (id = 1)}). Setters stamp {@code updatedAt}.
+ * One person's editable investor profile (Story 7.6; made per-person in Phase 2, multi-user) — the
+ * parts of the profile that can't be derived from imported accounts. Every field is nullable; a blank
+ * profile falls back to the {@code argus.investor.*} config defaults (residency/home currency) and the
+ * account-derived facts. Keyed directly by {@code userId} (not a separate generated id) since it is a
+ * strict one-row-per-person table — no Hibernate {@code @TenantId} needed here, unlike the portfolio
+ * entities, because a lookup is always a direct {@code findById(userId)}, never a list to filter.
+ *
+ * <p>{@code onboardingCompletedAt} is null until this person has saved a profile at least once (via
+ * the first-login questions or later in Settings) — that's the signal the frontend uses to show the
+ * onboarding screen exactly once.
  */
 @Entity
 @Table(name = "investor_profile")
 public class InvestorProfile {
 
-	static final short SINGLETON_ID = 1;
-
 	@Id
-	private short id = SINGLETON_ID;
+	@Column(name = "user_id")
+	private Long userId;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "risk_tolerance")
 	private RiskTolerance riskTolerance;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "trading_horizon")
+	private TradingHorizon tradingHorizon;
 
 	@Column(name = "financial_goal")
 	private String financialGoal;
@@ -48,6 +56,9 @@ public class InvestorProfile {
 	@Column(name = "notes")
 	private String notes;
 
+	@Column(name = "onboarding_completed_at")
+	private Instant onboardingCompletedAt;
+
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt = Instant.now();
 
@@ -55,8 +66,12 @@ public class InvestorProfile {
 		// JPA
 	}
 
-	public short getId() {
-		return id;
+	public InvestorProfile(Long userId) {
+		this.userId = userId;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public RiskTolerance getRiskTolerance() {
@@ -65,6 +80,15 @@ public class InvestorProfile {
 
 	public void setRiskTolerance(RiskTolerance riskTolerance) {
 		this.riskTolerance = riskTolerance;
+		this.updatedAt = Instant.now();
+	}
+
+	public TradingHorizon getTradingHorizon() {
+		return tradingHorizon;
+	}
+
+	public void setTradingHorizon(TradingHorizon tradingHorizon) {
+		this.tradingHorizon = tradingHorizon;
 		this.updatedAt = Instant.now();
 	}
 
@@ -120,6 +144,17 @@ public class InvestorProfile {
 	public void setNotes(String notes) {
 		this.notes = notes;
 		this.updatedAt = Instant.now();
+	}
+
+	public Instant getOnboardingCompletedAt() {
+		return onboardingCompletedAt;
+	}
+
+	/** Mark onboarding done (first save of any kind, or an explicit skip) — idempotent. */
+	public void completeOnboarding() {
+		if (this.onboardingCompletedAt == null) {
+			this.onboardingCompletedAt = Instant.now();
+		}
 	}
 
 	public Instant getUpdatedAt() {

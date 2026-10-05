@@ -11,6 +11,11 @@ import { getInvestorProfile, putInvestorProfile } from "@/lib/apiClient";
  * blank fields fall back to the derived/config defaults.
  */
 const RISK_OPTIONS = ["CONSERVATIVE", "BALANCED", "GROWTH", "AGGRESSIVE"] as const;
+const HORIZON_OPTIONS = [
+  { value: "LONG_TERM_HOLDER", label: "Long-term holder" },
+  { value: "ACTIVE_TRADER", label: "Active trader" },
+  { value: "MIX", label: "A mix of both" },
+] as const;
 
 const inputClass =
   "rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm text-text-primary outline-none focus:border-accent";
@@ -18,6 +23,7 @@ const inputClass =
 export function InvestorProfileSetting() {
   const [loaded, setLoaded] = useState(false);
   const [riskTolerance, setRiskTolerance] = useState<string>("");
+  const [tradingHorizon, setTradingHorizon] = useState<string>("");
   const [financialGoal, setFinancialGoal] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
@@ -34,6 +40,7 @@ export function InvestorProfileSetting() {
       .then((p) => {
         if (!active) return;
         setRiskTolerance(p.riskTolerance ?? "");
+        setTradingHorizon(p.tradingHorizon ?? "");
         setFinancialGoal(p.financialGoal ?? "");
         setTargetAmount(p.targetAmount == null ? "" : String(p.targetAmount));
         setTargetDate(p.targetDate ?? "");
@@ -54,6 +61,7 @@ export function InvestorProfileSetting() {
     try {
       await putInvestorProfile({
         riskTolerance: riskTolerance || null,
+        tradingHorizon: tradingHorizon || null,
         financialGoal: financialGoal.trim() || null,
         targetAmount: targetAmount.trim() === "" ? null : Number(targetAmount),
         targetDate: targetDate || null,
@@ -84,6 +92,17 @@ export function InvestorProfileSetting() {
           {RISK_OPTIONS.map((r) => (
             <option key={r} value={r}>
               {r.charAt(0) + r.slice(1).toLowerCase()}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Trading horizon">
+        <select value={tradingHorizon} onChange={(e) => setTradingHorizon(e.target.value)} className={inputClass}>
+          <option value="">— Not set —</option>
+          {HORIZON_OPTIONS.map((h) => (
+            <option key={h.value} value={h.value}>
+              {h.label}
             </option>
           ))}
         </select>
