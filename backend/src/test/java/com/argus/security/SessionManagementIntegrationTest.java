@@ -18,7 +18,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Active-sessions list + remote kill (FR-39 / Story 2.7). */
@@ -31,7 +30,7 @@ class SessionManagementIntegrationTest {
 	MockMvc mockMvc;
 
 	@Autowired
-	AppCredentialRepository pinCredentials;
+	AppUserRepository appUsers;
 
 	@Autowired
 	StringRedisTemplate redis;
@@ -43,28 +42,18 @@ class SessionManagementIntegrationTest {
 
 	@BeforeEach
 	void reset() {
-		pinCredentials.deleteAll();
 		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
 			redis.delete(keys);
 		}
 	}
 
-	private Cookie login(String userAgent) throws Exception {
-		return mockMvc.perform(post("/api/auth/login")
-						.header("User-Agent", userAgent)
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
-	}
-
 	@Test
 	void listAndRemotelyKillAnotherSession() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-
-		Cookie phone = login("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari");
-		Cookie laptop = login("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Safari");
+		// Same real person, two devices — e.g. the phone and the laptop both signed in with Google.
+		Cookie phone = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "iPhone");
+		Long userId = sessionStore.userId(phone.getValue()).orElseThrow();
+		Cookie laptop = TestUserSessions.loginAs(sessionStore, userId, "Mac");
 
 		// Sessions list (from the laptop) shows both, with device labels and exactly one "current".
 		String listJson = mockMvc.perform(get("/api/auth/sessions").cookie(laptop))

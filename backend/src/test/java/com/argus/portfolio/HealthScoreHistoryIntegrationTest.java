@@ -38,9 +38,6 @@ class HealthScoreHistoryIntegrationTest {
 	HealthScoreRepository scores;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository pinCredentials;
-
-	@Autowired
 	com.argus.security.AppUserRepository appUsers;
 
 	@Autowired
@@ -51,7 +48,6 @@ class HealthScoreHistoryIntegrationTest {
 	@BeforeEach
 	void reset() {
 		scores.deleteAll();
-		pinCredentials.deleteAll();
 		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
 			redis.delete(keys);

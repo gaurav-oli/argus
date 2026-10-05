@@ -55,9 +55,6 @@ class PortfolioChatIntegrationTest {
 	CalendarEventRepository calendarEvents;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository credentials;
-
-	@Autowired
 	com.argus.security.AppUserRepository appUsers;
 
 	@Autowired
@@ -68,7 +65,6 @@ class PortfolioChatIntegrationTest {
 		decisions.deleteAll(); // FK → recommendations; clear children first
 		recRepo.deleteAll();
 		calendarEvents.deleteAll();
-		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 	}
 
 	/** A real signed-in {@link com.argus.security.AppUser} — the chat grounds itself in THIS person's

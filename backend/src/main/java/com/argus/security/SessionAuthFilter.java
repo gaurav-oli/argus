@@ -86,7 +86,8 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 		}
 	}
 
-	/** Pre-login endpoints reachable without a session (path matched tolerant of a trailing slash). */
+	/** The two pre-login Google Sign-In endpoints, plus status — reachable without a session (path
+	 * matched tolerant of a trailing slash). */
 	private boolean isAllowlisted(HttpServletRequest request) {
 		String path = normalize(request.getRequestURI());
 		HttpMethod method = HttpMethod.valueOf(request.getMethod());
@@ -94,11 +95,6 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 			return false;
 		}
 		return (HttpMethod.GET.equals(method) && "/api/auth/status".equals(path))
-				|| (HttpMethod.POST.equals(method) && "/api/auth/login".equals(path))
-				|| (HttpMethod.POST.equals(method) && "/api/auth/pin".equals(path))
-				// WebAuthn unlock is pre-session (like /login); registration stays gated.
-				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/start".equals(path))
-				|| (HttpMethod.POST.equals(method) && "/api/auth/webauthn/login/finish".equals(path))
 				// Google Sign-In (multi-user): the redirect-to-Google start and Google's own
 				// callback both happen before any session cookie exists.
 				|| (HttpMethod.GET.equals(method) && "/api/auth/google/login".equals(path))

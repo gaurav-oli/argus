@@ -1,91 +1,57 @@
 package com.argus.security;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Owner authentication endpoints (Story 2.1). All paths under {@code /api/auth} except the
- * authenticated ones are allowlisted in {@link SessionAuthFilter}.
+ * Session endpoints shared by every signed-in person, regardless of how they signed in — Google is
+ * now the only path (see {@link GoogleAuthController}); the PIN/WebAuthn flow this used to also serve
+ * is retired and removed.
  *
  * <ul>
- *   <li>{@code GET  /api/auth/status} — pinSet / authenticated (drives frontend routing)</li>
- *   <li>{@code POST /api/auth/pin}    — first-launch PIN setup (201; 409 if already set)</li>
- *   <li>{@code POST /api/auth/login}  — PIN → Redis session + cookie (200; 401 on wrong PIN)</li>
- *   <li>{@code POST /api/auth/logout} — destroy session + clear cookie (200)</li>
+ *   <li>{@code GET    /api/auth/status}         — authenticated + who, for the frontend's routing</li>
+ *   <li>{@code POST   /api/auth/logout}          — destroy session + clear cookie</li>
+ *   <li>{@code GET    /api/auth/sessions}        — list this person's active sessions (FR-39)</li>
+ *   <li>{@code DELETE /api/auth/sessions/{{handle}}} — remotely terminate one of them</li>
  * </ul>
  */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-	private final AuthService auth;
 	private final SessionStore sessions;
 	private final SecurityProperties securityProperties;
-	private final com.argus.security.webauthn.WebAuthnService webAuthn;
 	private final CurrentUserService currentUser;
 
-	public AuthController(AuthService auth, SessionStore sessions, SecurityProperties securityProperties,
-			com.argus.security.webauthn.WebAuthnService webAuthn, CurrentUserService currentUser) {
-		this.auth = auth;
+	public AuthController(SessionStore sessions, SecurityProperties securityProperties,
+			CurrentUserService currentUser) {
 		this.sessions = sessions;
 		this.securityProperties = securityProperties;
-		this.webAuthn = webAuthn;
 		this.currentUser = currentUser;
 	}
 
 	@GetMapping("/status")
 	public AuthStatus status(HttpServletRequest request) {
-		boolean authenticated = auth.isAuthenticated(SessionCookie.read(request));
-		LockoutService.Lockout lock = auth.lockoutState();
+		boolean authenticated = sessions.validate(SessionCookie.read(request));
 		AuthStatus.UserView user = authenticated
 				? currentUser.resolve(request).map(AuthStatus.UserView::from).orElse(null)
 				: null;
-		return new AuthStatus(auth.isPinSet(), authenticated, webAuthn.anyPasskeyEnrolled(),
-				lock.full(), lock.secondsRemaining(), user);
-	}
-
-	@PostMapping("/pin")
-	public ResponseEntity<Void> setupPin(@Valid @RequestBody PinRequest body) {
-		auth.setupPin(body.pin());
-		return ResponseEntity.status(HttpStatus.CREATED).build();
-	}
-
-	@PostMapping("/login")
-	public ResponseEntity<AuthStatus> login(@Valid @RequestBody PinRequest body, HttpServletRequest request) {
-		String sessionId = auth.login(body.pin(), DeviceLabel.from(request.getHeader("User-Agent")));
-		ResponseCookie cookie = SessionCookie.issue(sessionId, sessions.cookieMaxAge(), securityProperties.cookieSecure());
-		return ResponseEntity.ok()
-				.header(HttpHeaders.SET_COOKIE, cookie.toString())
-				.body(new AuthStatus(true, true, webAuthn.anyPasskeyEnrolled(), false, 0, null));
+		return new AuthStatus(authenticated, user);
 	}
 
 	@PostMapping("/logout")
 	public ResponseEntity<Void> logout(HttpServletRequest request) {
-		auth.logout(SessionCookie.read(request));
+		sessions.destroy(SessionCookie.read(request));
 		return ResponseEntity.noContent()
 				.header(HttpHeaders.SET_COOKIE, SessionCookie.expired(securityProperties.cookieSecure()).toString())
 				.build();
-	}
-
-	/**
-	 * Clear a failed-attempt lockout (FR-38 full-lock recovery). Session-gated, so only an
-	 * already-authenticated device (e.g. another Tailscale-connected device) can call it.
-	 */
-	@PostMapping("/lockout/clear")
-	public ResponseEntity<Void> clearLockout() {
-		auth.clearLockout();
-		return ResponseEntity.noContent().build();
 	}
 
 	/** List active sessions (FR-39 / Story 2.7), marking the caller's own. Session-gated. */

@@ -63,9 +63,6 @@ class CorporateActionIntegrationTest {
 	FxRateRepository fxRates;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository pinCredentials;
-
-	@Autowired
 	com.argus.security.AppUserRepository appUsers;
 
 	@Autowired
@@ -83,7 +80,6 @@ class CorporateActionIntegrationTest {
 		positions.deleteAll();
 		imports.deleteAll();
 		fxRates.deleteAll();
-		pinCredentials.deleteAll();
 		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
 			redis.delete(keys);

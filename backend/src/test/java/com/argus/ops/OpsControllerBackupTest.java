@@ -6,14 +6,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.argus.TestcontainersConfiguration;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,20 +32,13 @@ class OpsControllerBackupTest {
 	MockMvc mockMvc;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository credentials;
+	com.argus.security.AppUserRepository appUsers;
 
-	@BeforeEach
-	void clean() {
-		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
-	}
+	@Autowired
+	com.argus.security.SessionStore sessions;
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test

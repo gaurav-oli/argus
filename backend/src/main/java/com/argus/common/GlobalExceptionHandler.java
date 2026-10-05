@@ -77,19 +77,4 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem;
 	}
 
-	@ExceptionHandler(com.argus.security.LockedException.class)
-	ResponseEntity<ProblemDetail> handleLocked(com.argus.security.LockedException ex) {
-		HttpStatus status = ex.isFull() ? HttpStatus.LOCKED : HttpStatus.TOO_MANY_REQUESTS;
-		ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
-		problem.setTitle(ex.isFull() ? "Locked" : "Too Many Attempts");
-		problem.setType(URI.create("https://argus.local/problems/locked"));
-		problem.setProperty("fullyLocked", ex.isFull());
-		problem.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
-
-		ResponseEntity.BodyBuilder builder = ResponseEntity.status(status);
-		if (!ex.isFull()) {
-			builder.header("Retry-After", Long.toString(ex.getRetryAfterSeconds()));
-		}
-		return builder.body(problem);
-	}
 }

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.argus.TestcontainersConfiguration;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
 import java.util.List;
 import java.util.Set;
@@ -37,24 +38,21 @@ class PortfolioImportSizeLimitTest {
 	StringRedisTemplate redis;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository pinCredentials;
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
 
 	@BeforeEach
 	void reset() {
-		pinCredentials.deleteAll();
 		Set<String> keys = redis.keys("argus:*");
 		if (keys != null && !keys.isEmpty()) {
 			redis.delete(keys);
 		}
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test

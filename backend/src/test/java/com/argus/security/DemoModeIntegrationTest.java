@@ -28,7 +28,10 @@ class DemoModeIntegrationTest {
 	MockMvc mockMvc;
 
 	@Autowired
-	AppCredentialRepository credentials;
+	AppUserRepository appUsers;
+
+	@Autowired
+	SessionStore sessions;
 
 	@Autowired
 	AppSettingsRepository settings;
@@ -38,7 +41,6 @@ class DemoModeIntegrationTest {
 
 	@BeforeEach
 	void clean() {
-		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 		settings.deleteAll();
 		// DemoModeService caches demoMode in memory (@PostConstruct load()) — the Spring context (and
 		// so the bean) is reused across tests in this class, so wiping the DB row alone leaves a
@@ -46,13 +48,8 @@ class DemoModeIntegrationTest {
 		demoMode.load();
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test

@@ -84,7 +84,6 @@ public class StorageService {
 					new TableSpec("briefings", "Briefings", "Daily morning briefings"),
 					new TableSpec("market_pulse", "Market pulse", "Latest market-pulse summary"))),
 			new GroupSpec("system", "System", "Auth, settings, health", List.of(
-					new TableSpec("webauthn_credential", "Passkeys", "Your WebAuthn credentials"),
 					new TableSpec("app_settings", "Settings", "App preferences"),
 					new TableSpec("health_score", "Health score", "Portfolio health snapshot"))));
 

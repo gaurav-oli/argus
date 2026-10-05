@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.argus.TestcontainersConfiguration;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,7 +49,10 @@ class IntelligenceControllerIntegrationTest {
 	BreakingAlertRepository breaking;
 
 	@Autowired
-	com.argus.security.AppCredentialRepository credentials;
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
 
 	@BeforeEach
 	void clean() {
@@ -56,16 +60,10 @@ class IntelligenceControllerIntegrationTest {
 		articles.deleteAll();
 		sources.deleteAll();
 		breaking.deleteAll();
-		credentials.deleteAll(); // shared test DB — start without a PIN so setup returns 201
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test

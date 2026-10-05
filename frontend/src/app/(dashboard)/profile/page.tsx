@@ -2,7 +2,6 @@ import { MotionCard } from "@/components/ui/MotionCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AdminUserStats } from "@/features/auth/AdminUserStats";
 import { LogoutButton } from "@/features/auth/LogoutButton";
-import { PasskeyManager } from "@/features/auth/PasskeyManager";
 import { SessionManager } from "@/features/auth/SessionManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 import { NotificationsSetting } from "@/features/notifications/NotificationsSetting";
@@ -19,20 +18,14 @@ export default function ProfilePage() {
         <SettingsCard
           index={0}
           title="Security"
-          desc="Session timeout and biometric unlock."
+          desc="Session timeout."
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
           }
         >
-          <div className="flex flex-col gap-6">
-            <SessionTimeoutSetting />
-            <div>
-              <h3 className="mb-3 text-sm font-medium text-text-primary">Biometric unlock</h3>
-              <PasskeyManager />
-            </div>
-          </div>
+          <SessionTimeoutSetting />
         </SettingsCard>
 
         <SettingsCard

@@ -34,7 +34,7 @@ class SettingsIntegrationTest {
 	MockMvc mockMvc;
 
 	@Autowired
-	AppCredentialRepository pinCredentials;
+	AppUserRepository appUsers;
 
 	@Autowired
 	AppSettingsRepository settingsRepo;
@@ -50,7 +50,6 @@ class SettingsIntegrationTest {
 
 	@BeforeEach
 	void reset() {
-		pinCredentials.deleteAll();
 		settingsRepo.deleteAll();
 		settingsService.load(); // resync the in-memory cache to the default after clearing the row
 		Set<String> keys = redis.keys("argus:*");
@@ -59,13 +58,8 @@ class SettingsIntegrationTest {
 		}
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessionStore);
 	}
 
 	@Test

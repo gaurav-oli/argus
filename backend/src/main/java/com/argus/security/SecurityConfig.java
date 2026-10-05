@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Wires the custom session-auth layer (Decision 5 keeps full Spring Security deferred). Binds
  * {@link SecurityProperties} and registers {@link SessionAuthFilter} for {@code /api/*} only.
- * ({@link SessionStore} and {@link PinHasher} are component-scanned.)
+ * ({@link SessionStore} is component-scanned.)
  */
 @Configuration
 @EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class, AdminProperties.class})
