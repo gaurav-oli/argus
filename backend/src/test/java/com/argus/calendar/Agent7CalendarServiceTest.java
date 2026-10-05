@@ -116,6 +116,44 @@ class Agent7CalendarServiceTest {
 	}
 
 	@Test
+	void aRevisedDateEstimateSupersedesTheStaleUnreportedRowInsteadOfAccumulating() {
+		heldAapl();
+		CalendarSource src = mock(CalendarSource.class);
+		when(src.name()).thenReturn("finnhub-earnings");
+		// Finnhub now estimates AAPL earnings on the 14th; an earlier run stored a never-reported
+		// guess of the 7th for the same ticker — that stale guess must be dropped, not kept alongside.
+		when(src.fetch(any())).thenReturn(List.of(earnings("AAPL", "2026-09-14")));
+		when(events.findBySourceAndExternalId("finnhub-earnings", "EARNINGS:AAPL:2026-09-14"))
+				.thenReturn(Optional.empty());
+		CalendarEvent staleGuess = new CalendarEvent(CalendarEventType.EARNINGS, "AAPL", "AAPL earnings",
+				LocalDate.parse("2026-09-07"), "finnhub-earnings", "EARNINGS:AAPL:2026-09-07");
+		when(events.findBySourceAndTypeAndTickerAndEpsActualIsNull("finnhub-earnings", CalendarEventType.EARNINGS, "AAPL"))
+				.thenReturn(List.of(staleGuess));
+
+		assertEquals(1, service(List.of(src)).ingestOnce());
+
+		verify(events).deleteAll(List.of(staleGuess));
+		verify(events, times(1)).save(any(CalendarEvent.class));
+	}
+
+	@Test
+	void anAlreadyReportedRowIsNeverSupersededByTheNextQuartersEstimate() {
+		heldAapl();
+		CalendarSource src = mock(CalendarSource.class);
+		when(src.name()).thenReturn("finnhub-earnings");
+		// The repository query itself excludes reported rows (eps_actual not null) — simulated here
+		// by returning no stale rows, exactly as the real query would for an already-closed event.
+		when(src.fetch(any())).thenReturn(List.of(earnings("AAPL", "2026-12-15")));
+		when(events.findBySourceAndExternalId(anyString(), anyString())).thenReturn(Optional.empty());
+		when(events.findBySourceAndTypeAndTickerAndEpsActualIsNull(anyString(), any(), anyString()))
+				.thenReturn(List.of());
+
+		assertEquals(1, service(List.of(src)).ingestOnce());
+
+		verify(events, never()).deleteAll(any());
+	}
+
+	@Test
 	void passesHeldTickersToSources() {
 		heldAapl();
 		CalendarSource src = mock(CalendarSource.class);

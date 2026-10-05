@@ -16,6 +16,14 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 	/** Lookup for the store-or-update path — lets a revisit backfill EPS on an existing row. */
 	Optional<CalendarEvent> findBySourceAndExternalId(String source, String externalId);
 
+	/** Still-open rows (not yet reported — forever true for IPO, until the actual EPS lands for
+	 * EARNINGS) for one ticker. A source's date ESTIMATE for the same underlying event can shift
+	 * between daily runs; since {@code externalId} is date-keyed, a shift used to leave the old
+	 * guess behind as a permanent duplicate. {@link Agent7CalendarService#store} supersedes these
+	 * instead of accumulating them. */
+	List<CalendarEvent> findBySourceAndTypeAndTickerAndEpsActualIsNull(
+			String source, CalendarEventType type, String ticker);
+
 	/** Most-recent calendar ingest — Agent 7 "last run" (Operations dashboard). */
 	@Query("select max(c.ingestedAt) from CalendarEvent c")
 	Instant latestIngestedAt();

@@ -102,6 +102,16 @@ public class Agent7CalendarService {
 	 * once Finnhub has one (the row was ingested before it reported; {@link FinnhubEarningsSource}
 	 * revisits recent past dates so this catches up without a second pass). Only counts toward the
 	 * "new events" return value on first insert.
+	 *
+	 * <p>A source's DATE ESTIMATE for the same underlying earnings/IPO can shift between daily runs
+	 * before the real date is confirmed (Finnhub revises it as it firms up) — e.g. "ORCL earnings"
+	 * estimated for the 7th, then the 10th, then the 14th, before actually reporting on the 10th.
+	 * Since {@code externalId} is date-keyed, each revision used to insert a brand-new row rather
+	 * than correct the old guess, leaving the stale ones behind forever as apparent duplicates in
+	 * the UI. Fix: before inserting a fresh row for a ticker-scoped event, any other still-open row
+	 * for the same (source, type, ticker) — i.e. never reported — is superseded (deleted), since the
+	 * newest fetch is always the best current estimate. A row that already reported (has its actual
+	 * EPS) is never touched by this — it's a closed historical fact, not an estimate.
 	 */
 	private boolean store(RawEvent raw) {
 		Optional<CalendarEvent> existing = events.findBySourceAndExternalId(raw.source(), raw.externalId());
@@ -112,6 +122,13 @@ public class Agent7CalendarService {
 				events.save(event);
 			}
 			return false;
+		}
+		if (raw.ticker() != null && (raw.type() == CalendarEventType.EARNINGS || raw.type() == CalendarEventType.IPO)) {
+			List<CalendarEvent> superseded =
+					events.findBySourceAndTypeAndTickerAndEpsActualIsNull(raw.source(), raw.type(), raw.ticker());
+			if (!superseded.isEmpty()) {
+				events.deleteAll(superseded);
+			}
 		}
 		events.save(new CalendarEvent(raw.type(), raw.ticker(), raw.title(), raw.eventDate(),
 				raw.source(), raw.externalId(), raw.epsActual(), raw.epsEstimate(), raw.epsSurprisePercent()));
