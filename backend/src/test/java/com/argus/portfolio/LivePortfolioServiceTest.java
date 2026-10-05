@@ -14,6 +14,8 @@ import static org.mockito.Mockito.when;
 import com.argus.common.LivePushService;
 import com.argus.marketdata.FxRateService;
 import com.argus.marketdata.MarketClock;
+import com.argus.security.AppUser;
+import com.argus.security.AppUserRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,8 +37,14 @@ class LivePortfolioServiceTest {
 	private final CashService cash = new CashService(mock(CashBalanceRepository.class));
 	// Mockito returns an empty list for findAll() by default → no owner enrichment in these tests.
 	private final AccountMetaRepository accountMeta = mock(AccountMetaRepository.class);
+	// One signed-in person (Phase 2) so onPriceTick's per-user push loop has someone to push to.
+	private final AppUserRepository users = mock(AppUserRepository.class);
 	private final LivePortfolioService service =
-			new LivePortfolioService(positions, fx, new MarketClock(), livePush, cash, accountMeta);
+			new LivePortfolioService(positions, fx, new MarketClock(), livePush, cash, accountMeta, users);
+
+	{
+		when(users.findAll()).thenReturn(List.of(new AppUser("sub", "person@example.com", "Person", null, false)));
+	}
 
 	private static final Instant REGULAR =
 			ZonedDateTime.of(LocalDate.of(2023, 6, 15), LocalTime.of(14, 0), ZoneId.of("America/New_York")).toInstant();
@@ -55,7 +63,7 @@ class LivePortfolioServiceTest {
 		when(fx.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
 		service.onPriceTick(ticker, new BigDecimal(price), when);
 		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
-		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		verify(livePush).publishToUser(any(), eq("/queue/portfolio"), captor.capture());
 		return captor.getValue();
 	}
 
@@ -90,7 +98,7 @@ class LivePortfolioServiceTest {
 		service.onPriceTick("NVDA", new BigDecimal("200"), REGULAR); // default USD (Finnhub path)
 
 		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
-		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		verify(livePush).publishToUser(any(), eq("/queue/portfolio"), captor.capture());
 		PortfolioSnapshot snap = captor.getValue();
 		PositionValue pv = snap.positions().get(0);
 
@@ -111,7 +119,7 @@ class LivePortfolioServiceTest {
 		service.onPriceTick("VFV", new BigDecimal("180"), REGULAR, "CAD");
 
 		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
-		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		verify(livePush).publishToUser(any(), eq("/queue/portfolio"), captor.capture());
 		PositionValue pv = captor.getValue().positions().get(0);
 
 		assertEquals(0, pv.cadMarketValue().compareTo(new BigDecimal("1800.00")));    // 10 × 180, no FX
@@ -125,7 +133,7 @@ class LivePortfolioServiceTest {
 		service.onPriceTick("AAPL", new BigDecimal("120"), REGULAR);
 
 		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
-		verify(livePush).publish(eq("/topic/portfolio"), captor.capture());
+		verify(livePush).publishToUser(any(), eq("/queue/portfolio"), captor.capture());
 		PositionValue pv = captor.getValue().positions().get(0);
 
 		assertEquals(0, pv.dayPnl().compareTo(new BigDecimal("200.00")));        // (120−100) × 10
@@ -146,7 +154,7 @@ class LivePortfolioServiceTest {
 		service.onPriceTick("TSLA", new BigDecimal("100"), REGULAR); // cadMv 675 (still priced though FX-estimated)
 
 		ArgumentCaptor<PortfolioSnapshot> captor = ArgumentCaptor.forClass(PortfolioSnapshot.class);
-		verify(livePush, atLeastOnce()).publish(eq("/topic/portfolio"), captor.capture());
+		verify(livePush, atLeastOnce()).publishToUser(any(), eq("/queue/portfolio"), captor.capture());
 		PortfolioSnapshot snap = captor.getValue();
 
 		assertEquals(0, snap.totalValueCad().compareTo(new BigDecimal("2295.00"))); // 1620 + 675 — includes FX-estimated

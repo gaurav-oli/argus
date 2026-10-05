@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import org.hibernate.annotations.TenantId;
 
 /** Uninvested cash held in a brokerage account (one row per account + currency). */
 @Entity
@@ -17,6 +18,10 @@ public class CashBalance {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false)
 	private String account;
@@ -42,6 +47,10 @@ public class CashBalance {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public String getAccount() {

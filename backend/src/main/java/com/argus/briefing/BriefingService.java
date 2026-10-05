@@ -10,6 +10,9 @@ import com.argus.portfolio.PortfolioSnapshot;
 import com.argus.push.PushService;
 import com.argus.recommendation.Recommendation;
 import com.argus.recommendation.RecommendationService;
+import com.argus.security.AppUser;
+import com.argus.security.AppUserRepository;
+import com.argus.security.CurrentUserContext;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,10 +32,15 @@ import tools.jackson.databind.json.JsonMapper;
  * The Morning Briefing (Epic 8, FR-16). On a daily schedule (08:00 America/Toronto) it gathers the
  * facts — portfolio value/health, the overnight news count, current recommendations, and today's
  * calendar — asks the local model ({@link ModelGateway}, BIG tier) for a short narrative, persists it,
- * and pushes the headline to every device. The model call is best-effort: any failure (flaky local
- * model, unparseable output) falls back to a deterministic briefing built from the same facts, so the
- * briefing never hard-fails. A manual {@code POST /api/briefing/generate} drives the same path for
- * testing on the Mac Mini.
+ * and pushes the headline to that person's own device(s). The model call is best-effort: any failure
+ * (flaky local model, unparseable output) falls back to a deterministic briefing built from the same
+ * facts, so the briefing never hard-fails. A manual {@code POST /api/briefing/generate} drives the
+ * same path for testing on the Mac Mini.
+ *
+ * <p>Phase 2 (multi-user): {@link #generate()} always builds ONE person's briefing, from THEIR OWN
+ * portfolio ({@code @TenantId}-scoped reads) — who that is comes from {@link CurrentUserContext},
+ * already set by the time a real request reaches here, or set by {@link #scheduledBriefing()} itself,
+ * which loops over every {@link AppUser} and generates each of theirs in turn.
  */
 @Service
 public class BriefingService {
@@ -53,6 +61,7 @@ public class BriefingService {
 	private final com.argus.notification.NotificationPreferencesService prefs;
 	private final com.argus.notification.DeferredNotificationRepository deferred;
 	private final BriefingRepository briefings;
+	private final AppUserRepository users;
 	private final long overnightHours;
 
 	public BriefingService(LivePortfolioService livePortfolio, HealthScoreService healthScore,
@@ -60,6 +69,7 @@ public class BriefingService {
 			ModelGateway gateway, PushService push,
 			com.argus.notification.NotificationPreferencesService prefs,
 			com.argus.notification.DeferredNotificationRepository deferred, BriefingRepository briefings,
+			AppUserRepository users,
 			@Value("${argus.briefing.overnight-hours:16}") long overnightHours) {
 		this.livePortfolio = livePortfolio;
 		this.healthScore = healthScore;
@@ -71,16 +81,20 @@ public class BriefingService {
 		this.prefs = prefs;
 		this.deferred = deferred;
 		this.briefings = briefings;
+		this.users = users;
 		this.overnightHours = overnightHours;
 	}
 
-	/** Daily generation + morning push. Swallows failures so a flaky model can't break the scheduler. */
+	/** Daily generation + personal push, for EVERY invited person in turn (Phase 2). One person's
+	 * briefing failing (flaky model, no priced holdings yet) never stops the others'. */
 	@Scheduled(cron = "${argus.briefing.cron:0 0 8 * * *}", zone = "America/Toronto")
 	public void scheduledBriefing() {
-		try {
-			generate();
-		} catch (RuntimeException ex) {
-			log.warn("Scheduled morning briefing failed: {}", ex.getMessage());
+		for (AppUser user : users.findAll()) {
+			try {
+				CurrentUserContext.runAs(user.getId(), this::generate);
+			} catch (RuntimeException ex) {
+				log.warn("Scheduled morning briefing failed for user {}: {}", user.getId(), ex.getMessage());
+			}
 		}
 	}
 
@@ -94,18 +108,19 @@ public class BriefingService {
 	 * method-level transaction would be bypassed by the proxy anyway.)
 	 */
 	public Briefing generate() {
+		String firstName = currentFirstName();
 		Facts facts = gatherFacts();
 
 		Parsed parsed = null;
 		try {
-			parsed = parse(gateway.generate(prompt(facts))); // BIG (local) tier
+			parsed = parse(gateway.generate(prompt(facts, firstName))); // BIG (local) tier
 		} catch (RuntimeException ex) {
 			log.warn("Briefing model call failed ({}) — using deterministic fallback", ex.getMessage());
 		}
 
 		boolean usedFallback = parsed == null;
 		String headline = usedFallback ? fallbackHeadline(facts) : parsed.headline();
-		String body = usedFallback ? fallbackBody(facts) : parsed.body();
+		String body = usedFallback ? fallbackBody(facts, firstName) : parsed.body();
 
 		Briefing saved = briefings.save(new Briefing(headline, body, usedFallback));
 		try {
@@ -115,13 +130,32 @@ public class BriefingService {
 		}
 		try {
 			if (prefs.allow(com.argus.notification.NotificationPreferencesService.Category.BRIEFING)) {
-				push.sendToAll("Your morning briefing", headline, "/");
+				// Personal content — only this person's own device(s), never anyone else's (Phase 2).
+				push.sendToUser(CurrentUserContext.get(), "Your morning briefing", headline, "/");
 			}
 		} catch (RuntimeException ex) {
 			log.warn("Briefing push failed: {}", ex.getMessage());
 		}
 		log.info("Morning briefing generated: {}", headline);
 		return saved;
+	}
+
+	/** The signed-in person's first name for the greeting, or {@code null} if nobody is resolvable
+	 * (shouldn't happen given the session gate / scheduler's own runAs, but degrades gracefully). */
+	private String currentFirstName() {
+		Long userId = CurrentUserContext.get();
+		if (userId == null) {
+			return null;
+		}
+		return users.findById(userId).map(AppUser::getName).map(BriefingService::firstNameOf).orElse(null);
+	}
+
+	private static String firstNameOf(String fullName) {
+		if (fullName == null || fullName.isBlank()) {
+			return null;
+		}
+		int space = fullName.indexOf(' ');
+		return (space > 0 ? fullName.substring(0, space) : fullName).strip();
 	}
 
 	private Facts gatherFacts() {
@@ -148,7 +182,7 @@ public class BriefingService {
 		deferred.saveAll(f.deferredItems());
 	}
 
-	private String prompt(Facts f) {
+	private String prompt(Facts f, String firstName) {
 		StringBuilder recs = new StringBuilder();
 		f.recommendations().stream().limit(MAX_RECS_IN_PROMPT).forEach(r -> recs.append("- ")
 				.append(r.getTicker()).append(": ").append(r.getDirection().name().toLowerCase())
@@ -167,10 +201,12 @@ public class BriefingService {
 			held.append("- (none)\n");
 		}
 
+		String who = firstName == null ? "the owner" : firstName;
 		return """
-				You are Argus, a calm and concise personal investing assistant writing the owner's morning \
-				briefing. The owner is a Canadian solo investor. Write in second person ("your portfolio"), \
-				warm but factual, no hype, no financial advice disclaimers.
+				You are Argus, a calm and concise personal investing assistant writing %s's morning \
+				briefing. %s is a Canadian solo investor. Write in second person ("your portfolio"), \
+				addressing them by name once near the start (e.g. "Good morning, %s —"), warm but factual, \
+				no hype, no financial advice disclaimers.
 
 				TODAY'S FACTS
 				Portfolio value: %s CAD (unrealized P&L %s CAD)
@@ -188,7 +224,7 @@ public class BriefingService {
 
 				Respond with ONLY a JSON object, no prose, no markdown fences:
 				{"headline":"<=12 words, scannable","body":"<2-4 sentence narrative>"}
-				""".formatted(money(f.snapshot().totalValueCad()), money(f.snapshot().totalPnlCad()),
+				""".formatted(who, who, who, money(f.snapshot().totalValueCad()), money(f.snapshot().totalPnlCad()),
 				f.health(), f.overnightNews(), recs, events, held);
 	}
 
@@ -219,7 +255,8 @@ public class BriefingService {
 		return "Portfolio at %s CAD · health %d/100".formatted(money(f.snapshot().totalValueCad()), f.health());
 	}
 
-	private static String fallbackBody(Facts f) {
+	private static String fallbackBody(Facts f, String firstName) {
+		String greeting = firstName == null ? "Good morning." : "Good morning, " + firstName + ".";
 		String pnl = money(f.snapshot().totalPnlCad());
 		String recLine = f.recommendations().isEmpty()
 				? "No open recommendations need your attention."
@@ -231,8 +268,8 @@ public class BriefingService {
 				: " " + f.deferredItems().size() + " lower-priority alert(s) were held for this briefing: "
 						+ f.deferredItems().stream().map(com.argus.notification.DeferredNotification::getTitle)
 								.reduce((a, b) -> a + "; " + b).orElse("") + ".";
-		return "Your portfolio is worth %s CAD (unrealized P&L %s CAD) with a health score of %d/100. %d news article(s) came in overnight. %s %s%s"
-				.formatted(money(f.snapshot().totalValueCad()), pnl, f.health(), f.overnightNews(), recLine,
+		return "%s Your portfolio is worth %s CAD (unrealized P&L %s CAD) with a health score of %d/100. %d news article(s) came in overnight. %s %s%s"
+				.formatted(greeting, money(f.snapshot().totalValueCad()), pnl, f.health(), f.overnightNews(), recLine,
 						eventLine, heldLine);
 	}
 

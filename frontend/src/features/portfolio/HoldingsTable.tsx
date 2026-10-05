@@ -75,7 +75,9 @@ export function HoldingsTable() {
     let active = true;
     getPortfolioValue().then((s) => active && setSnap(s)).catch(() => {});
     refetchCash();
-    const handle = subscribeToTopic<PortfolioSnapshot>("/topic/portfolio", (s) => setSnap(s));
+    // Personal destination (Phase 2, multi-user): the backend pushes only THIS signed-in person's own
+    // snapshot here, never a shared topic — see SessionPrincipalHandshakeHandler on the backend.
+    const handle = subscribeToTopic<PortfolioSnapshot>("/user/queue/portfolio", (s) => setSnap(s));
     return () => {
       active = false;
       handle.disconnect();

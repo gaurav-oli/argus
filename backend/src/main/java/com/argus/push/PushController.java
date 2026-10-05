@@ -1,5 +1,7 @@
 package com.argus.push;
 
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,9 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class PushController {
 
 	private final PushService push;
+	private final CurrentUserService currentUser;
 
-	public PushController(PushService push) {
+	public PushController(PushService push, CurrentUserService currentUser) {
 		this.push = push;
+		this.currentUser = currentUser;
 	}
 
 	/** The VAPID public key the frontend passes as {@code applicationServerKey}. */
@@ -31,12 +35,13 @@ public class PushController {
 	}
 
 	@PostMapping("/subscribe")
-	public void subscribe(@RequestBody SubscriptionBody body) {
+	public void subscribe(@RequestBody SubscriptionBody body, HttpServletRequest request) {
 		if (body == null || body.endpoint() == null || body.endpoint().isBlank()
 				|| body.keys() == null || body.keys().p256dh() == null || body.keys().auth() == null) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endpoint and keys are required");
 		}
-		push.subscribe(body.endpoint(), body.keys().p256dh(), body.keys().auth());
+		Long userId = currentUser.require(request).getId();
+		push.subscribe(body.endpoint(), body.keys().p256dh(), body.keys().auth(), userId);
 	}
 
 	/**

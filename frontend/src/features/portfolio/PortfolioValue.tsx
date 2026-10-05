@@ -12,10 +12,11 @@ const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 /**
- * Live portfolio value (Story 3.4, FR-2). Fetches the initial snapshot, then subscribes to
- * `/topic/portfolio` for sub-second updates as Finnhub price ticks arrive. Total value + total P&L
- * animate smoothly (AnimatedNumber); an after-hours indicator shows when prices are out-of-session.
- * Values are null until the first tick for a holding, in which case we show a waiting state.
+ * Live portfolio value (Story 3.4, FR-2). Fetches the initial snapshot, then subscribes to this
+ * signed-in person's own `/user/queue/portfolio` (Phase 2, multi-user — never a shared topic) for
+ * sub-second updates as Finnhub price ticks arrive. Total value + total P&L animate smoothly
+ * (AnimatedNumber); an after-hours indicator shows when prices are out-of-session. Values are null
+ * until the first tick for a holding, in which case we show a waiting state.
  */
 export function PortfolioValue() {
   const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
@@ -27,7 +28,7 @@ export function PortfolioValue() {
       .catch(() => {
         /* initial fetch may fail offline; live ticks will populate it */
       });
-    const handle = subscribeToTopic<PortfolioSnapshot>("/topic/portfolio", (s) => setSnap(s));
+    const handle = subscribeToTopic<PortfolioSnapshot>("/user/queue/portfolio", (s) => setSnap(s));
     return () => {
       active = false;
       handle.disconnect();

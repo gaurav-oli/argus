@@ -1,5 +1,8 @@
 package com.argus.portfolio;
 
+import com.argus.security.AppUser;
+import com.argus.security.AppUserRepository;
+import com.argus.security.CurrentUserContext;
 import com.argus.technical.PriceCandle;
 import com.argus.technical.PriceCandleRepository;
 import java.math.BigDecimal;
@@ -51,13 +54,15 @@ public class HealthScoreService {
 	private final PositionRepository positions;
 	private final HealthScoreRepository scores;
 	private final PriceCandleRepository candles;
+	private final AppUserRepository users;
 	private final ObjectMapper json = JsonMapper.builder().build();
 
 	public HealthScoreService(PositionRepository positions, HealthScoreRepository scores,
-			PriceCandleRepository candles) {
+			PriceCandleRepository candles, AppUserRepository users) {
 		this.positions = positions;
 		this.scores = scores;
 		this.candles = candles;
+		this.users = users;
 	}
 
 	/** Compute the current score + explained deductions. Empty portfolio → 100 (nothing at risk). */
@@ -269,13 +274,16 @@ public class HealthScoreService {
 				.toList();
 	}
 
-	/** Daily recompute (06:00 ET — after overnight agent runs land in later epics). */
+	/** Daily recompute (06:00 ET — after overnight agent runs land in later epics), for every person in
+	 * turn. One person's capture failing never stops the others'. */
 	@Scheduled(cron = "0 0 6 * * *", zone = "America/New_York")
 	public void scheduledCapture() {
-		try {
-			capture();
-		} catch (RuntimeException ex) {
-			log.warn("Scheduled health-score capture failed: {}", ex.getMessage());
+		for (AppUser user : users.findAll()) {
+			try {
+				CurrentUserContext.runAs(user.getId(), this::capture);
+			} catch (RuntimeException ex) {
+				log.warn("Scheduled health-score capture failed for user {}: {}", user.getId(), ex.getMessage());
+			}
 		}
 	}
 

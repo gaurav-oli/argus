@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.TenantId;
 
 /**
  * Owner identity for a brokerage account (Portfolio-tab detail), keyed by (institution, account
@@ -23,6 +24,10 @@ public class AccountMeta {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	private String institution;
 
@@ -56,6 +61,10 @@ public class AccountMeta {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public String getInstitution() {

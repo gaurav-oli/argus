@@ -10,6 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.argus.TestcontainersConfiguration;
 import com.argus.marketdata.FxRateClient;
+import com.argus.security.AppUser;
+import com.argus.security.CurrentUserContext;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -60,6 +63,12 @@ class PortfolioHistoryIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	@MockitoBean
 	FxRateClient fxRateClient;
 
@@ -79,21 +88,20 @@ class PortfolioHistoryIntegrationTest {
 		when(fxRateClient.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} (Phase 2: every portfolio row needs one). */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test
 	void valueHistoryFiltersToTheRangeAscending() throws Exception {
 		Cookie session = login();
-		pointsRepo.save(new PortfolioValuePoint(TODAY.minusDays(100), new BigDecimal("50.00")));
-		pointsRepo.save(new PortfolioValuePoint(TODAY.minusDays(10), new BigDecimal("90.00")));
-		pointsRepo.save(new PortfolioValuePoint(TODAY, new BigDecimal("100.00")));
+		// Direct repo writes, not through a request — must be done as the SAME signed-in user as `session`.
+		CurrentUserContext.runAs(sessions.userId(session.getValue()).orElseThrow(), () -> {
+			pointsRepo.save(new PortfolioValuePoint(TODAY.minusDays(100), new BigDecimal("50.00")));
+			pointsRepo.save(new PortfolioValuePoint(TODAY.minusDays(10), new BigDecimal("90.00")));
+			pointsRepo.save(new PortfolioValuePoint(TODAY, new BigDecimal("100.00")));
+		});
 
 		mockMvc.perform(get("/api/portfolio/value-history").param("range", "1M").cookie(session))
 				.andExpect(status().isOk())
@@ -104,19 +112,27 @@ class PortfolioHistoryIntegrationTest {
 
 	@Test
 	void captureIsIdempotentPerDay() {
-		// Seed one priced holding so the snapshot has a non-zero CAD value worth capturing.
-		Position p = positions.save(new Position("T", null, new BigDecimal("10"), new BigDecimal("100"), "USD",
-				LocalDate.of(2023, 1, 15), false, "manual"));
-		lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("100"), "USD",
-				LocalDate.of(2023, 1, 15), new BigDecimal("1.35"), false));
-		acbService.recompute(p);
-		live.onPriceTick("T", new BigDecimal("50"), java.time.Instant.now());
+		// No MockMvc/session here — a real AppUser + CurrentUserContext stands in for one, since every
+		// write below is @TenantId-scoped (Phase 2) and nothing else would set it in this path.
+		Long userId = appUsers.save(new AppUser("test-sub-" + java.util.UUID.randomUUID(),
+				"test-" + java.util.UUID.randomUUID() + "@example.com", "Test User", null, false)).getId();
 
-		history.capture();
-		history.capture(); // same day → updates, not a second row
+		CurrentUserContext.runAs(userId, () -> {
+			// Seed one priced holding so the snapshot has a non-zero CAD value worth capturing.
+			Position p = positions.save(new Position("T", null, new BigDecimal("10"), new BigDecimal("100"), "USD",
+					LocalDate.of(2023, 1, 15), false, "manual"));
+			lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("100"), "USD",
+					LocalDate.of(2023, 1, 15), new BigDecimal("1.35"), false));
+			acbService.recompute(p);
+			live.onPriceTick("T", new BigDecimal("50"), java.time.Instant.now());
 
-		assertEquals(1, pointsRepo.count());
-		assertEquals(TODAY, pointsRepo.findAll().get(0).getCapturedOn());
+			history.capture();
+			history.capture(); // same day → updates, not a second row
+
+			// Reading back is tenant-scoped too — must happen as the same user, still inside runAs.
+			assertEquals(1, pointsRepo.count());
+			assertEquals(TODAY, pointsRepo.findAll().get(0).getCapturedOn());
+		});
 	}
 
 	@Test

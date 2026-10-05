@@ -1,7 +1,6 @@
 package com.argus.internet;
 
 import com.argus.internet.InternetSource.HeldCompany;
-import com.argus.portfolio.Position;
 import com.argus.portfolio.PositionRepository;
 import java.util.List;
 import java.util.Map;
@@ -56,9 +55,12 @@ public class InternetIngestionService {
 	}
 
 	void ingestOnce() {
+		// Every ticker anyone holds, across ALL users (Phase 2) — this runs with no signed-in user on
+		// the thread, so the normal @TenantId-scoped finder would see nothing; tickers and company
+		// names are both public facts anyway (see PositionRepository.allTickerCompanyPairsAcrossAllUsers).
 		// One HeldCompany per ticker, keeping a non-blank company name when any lot has one.
-		Map<String, String> nameByTicker = positions.findAllByOrderByTickerAsc().stream()
-				.collect(Collectors.toMap(Position::getTicker,
+		Map<String, String> nameByTicker = positions.allTickerCompanyPairsAcrossAllUsers().stream()
+				.collect(Collectors.toMap(PositionRepository.TickerCompany::getTicker,
 						p -> p.getCompanyName() == null ? "" : p.getCompanyName(), (a, b) -> a.isBlank() ? b : a));
 		List<HeldCompany> held = nameByTicker.entrySet().stream()
 				.map(e -> new HeldCompany(e.getKey(), e.getValue())).toList();

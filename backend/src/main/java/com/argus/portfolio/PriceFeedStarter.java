@@ -60,7 +60,10 @@ public class PriceFeedStarter {
 		}
 	}
 
+	/** Every ticker anyone holds, across ALL users (Phase 2) — the feed's own socket thread has no
+	 * signed-in user on it, so the normal @TenantId-scoped finder would see nothing; streaming a live
+	 * PRICE for a ticker is not financial data about any one person, unlike the position itself. */
 	private Collection<String> heldTickers() {
-		return positions.findAllByOrderByTickerAsc().stream().map(Position::getTicker).distinct().toList();
+		return positions.allTickersAcrossAllUsers();
 	}
 }

@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.argus.TestcontainersConfiguration;
+import com.argus.security.CurrentUserContext;
+import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -38,6 +40,12 @@ class HealthScoreHistoryIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	private static final LocalDate TODAY = LocalDate.now(ZoneId.of("America/Toronto"));
 
 	@BeforeEach
@@ -50,21 +58,20 @@ class HealthScoreHistoryIntegrationTest {
 		}
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} (Phase 2: every portfolio row needs one). */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	@Test
 	void historyReturnsTheWindowedSeriesAscending() throws Exception {
 		Cookie session = login();
-		scores.save(new HealthScore(TODAY.minusDays(40), 60, "[]")); // outside the 30d window
-		scores.save(new HealthScore(TODAY.minusDays(5), 70, "[]"));
-		scores.save(new HealthScore(TODAY, 80, "[]"));
+		// Direct repo writes, not through a request — must be done as the SAME signed-in user as `session`.
+		CurrentUserContext.runAs(sessions.userId(session.getValue()).orElseThrow(), () -> {
+			scores.save(new HealthScore(TODAY.minusDays(40), 60, "[]")); // outside the 30d window
+			scores.save(new HealthScore(TODAY.minusDays(5), 70, "[]"));
+			scores.save(new HealthScore(TODAY, 80, "[]"));
+		});
 
 		mockMvc.perform(get("/api/portfolio/health-score/history").param("days", "30").cookie(session))
 				.andExpect(status().isOk())

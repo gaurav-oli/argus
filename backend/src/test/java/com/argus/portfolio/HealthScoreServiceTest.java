@@ -19,8 +19,8 @@ class HealthScoreServiceTest {
 
 	private final PositionRepository positions = mock(PositionRepository.class);
 	private final PriceCandleRepository candles = mock(PriceCandleRepository.class);
-	private final HealthScoreService service =
-			new HealthScoreService(positions, mock(HealthScoreRepository.class), candles);
+	private final HealthScoreService service = new HealthScoreService(positions, mock(HealthScoreRepository.class),
+			candles, mock(com.argus.security.AppUserRepository.class));
 
 	private static Position pos(String ticker, String cadAcb, boolean needsReview, boolean fxEstimated) {
 		Position p = new Position(ticker, null, BigDecimal.ONE, BigDecimal.ONE, "USD", null, needsReview, "manual");

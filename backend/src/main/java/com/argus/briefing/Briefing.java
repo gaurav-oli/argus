@@ -7,11 +7,16 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.TenantId;
 
 /**
  * A generated Morning Briefing (Epic 8, FR-16): a short {@code headline} (also used as the push
  * message) and a longer {@code body} narrative. One row per generation; the UI and the morning push
  * read the most recent by {@code generatedAt}.
+ *
+ * <p>{@code userId} (Phase 2, multi-user): each person gets their own briefing, generated from their
+ * own portfolio — {@code @TenantId} keeps one person's generated text (which can describe their real
+ * dollar values in plain English) from ever being readable by anyone else.
  */
 @Entity
 @Table(name = "briefings")
@@ -20,6 +25,10 @@ public class Briefing {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false)
 	private String headline;
@@ -46,6 +55,10 @@ public class Briefing {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public String getHeadline() {

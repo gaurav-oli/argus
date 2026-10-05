@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.argus.TestcontainersConfiguration;
 import com.argus.marketdata.FxRateClient;
 import com.argus.marketdata.FxRateRepository;
+import com.argus.security.TestUserSessions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
@@ -63,6 +64,12 @@ class PortfolioValueIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	@MockitoBean
 	FxRateClient fxRateClient;
 
@@ -86,13 +93,9 @@ class PortfolioValueIntegrationTest {
 		when(fxRateClient.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} (Phase 2: every portfolio row needs one). */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	private void importHolding(Cookie session, String line) throws Exception {

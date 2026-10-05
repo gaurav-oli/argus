@@ -1,5 +1,8 @@
 package com.argus.portfolio;
 
+import com.argus.security.AppUser;
+import com.argus.security.AppUserRepository;
+import com.argus.security.CurrentUserContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -15,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
  * per day (idempotent upsert keyed by date); a scheduled daily job records the current live total,
  * and {@link #history} returns the points in a selected window. History accrues over time — it's
  * naturally sparse until the daily capture has run for a while.
+ *
+ * <p>Phase 2 (multi-user): {@link #capture()} always captures the {@link CurrentUserContext}'s own
+ * portfolio ({@code @TenantId}-scoped); the scheduled job loops over every {@link AppUser} so each
+ * person gets their own daily point, from their own holdings.
  */
 @Service
 public class PortfolioHistoryService {
@@ -24,10 +31,13 @@ public class PortfolioHistoryService {
 
 	private final PortfolioValuePointRepository points;
 	private final LivePortfolioService live;
+	private final AppUserRepository users;
 
-	public PortfolioHistoryService(PortfolioValuePointRepository points, LivePortfolioService live) {
+	public PortfolioHistoryService(PortfolioValuePointRepository points, LivePortfolioService live,
+			AppUserRepository users) {
 		this.points = points;
 		this.live = live;
+		this.users = users;
 	}
 
 	/** Upsert today's total portfolio CAD value. Idempotent: a second call the same day updates it. */
@@ -56,13 +66,16 @@ public class PortfolioHistoryService {
 		return rows.stream().map(p -> new ValuePoint(p.getCapturedOn(), p.getTotalValueCad())).toList();
 	}
 
-	/** Daily end-of-session capture (16:30 ET). Never throws out of the scheduler. */
+	/** Daily end-of-session capture (16:30 ET), for every person in turn. One person's capture failing
+	 * (e.g. no priced holdings yet) never stops the others'. */
 	@Scheduled(cron = "0 30 16 * * *", zone = "America/New_York")
 	public void scheduledCapture() {
-		try {
-			capture();
-		} catch (RuntimeException ex) {
-			log.warn("Scheduled portfolio-value capture failed: {}", ex.getMessage());
+		for (AppUser user : users.findAll()) {
+			try {
+				CurrentUserContext.runAs(user.getId(), this::capture);
+			} catch (RuntimeException ex) {
+				log.warn("Scheduled portfolio-value capture failed for user {}: {}", user.getId(), ex.getMessage());
+			}
 		}
 	}
 }

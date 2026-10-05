@@ -9,8 +9,11 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.TenantId;
 
-/** One daily total-portfolio-value point in CAD (Story 3.6, FR-4). One row per {@code capturedOn}. */
+/** One daily total-portfolio-value point in CAD (Story 3.6, FR-4). One row per {@code capturedOn}
+ * PER PERSON (Phase 2, multi-user) — the uniqueness is now the composite {@code (user_id, captured_on)}
+ * DB constraint, not this column alone. */
 @Entity
 @Table(name = "portfolio_value_history")
 public class PortfolioValuePoint {
@@ -19,7 +22,11 @@ public class PortfolioValuePoint {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(name = "captured_on", nullable = false, unique = true)
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
+
+	@Column(name = "captured_on", nullable = false)
 	private LocalDate capturedOn;
 
 	@Column(name = "total_value_cad", nullable = false)
@@ -43,6 +50,10 @@ public class PortfolioValuePoint {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public LocalDate getCapturedOn() {

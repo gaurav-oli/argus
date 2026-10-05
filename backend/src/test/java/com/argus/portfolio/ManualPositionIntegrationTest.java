@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.argus.TestcontainersConfiguration;
 import com.argus.marketdata.FxRateClient;
+import com.argus.security.TestUserSessions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
@@ -55,6 +56,12 @@ class ManualPositionIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	@MockitoBean
 	FxRateClient fxRateClient;
 
@@ -74,13 +81,13 @@ class ManualPositionIntegrationTest {
 		when(fxRateClient.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} (Phase 2: every portfolio row needs one). */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
+	}
+
+	private Long userIdOf(Cookie session) {
+		return sessions.userId(session.getValue()).orElseThrow();
 	}
 
 	private long addAapl(Cookie session) throws Exception {
@@ -120,14 +127,19 @@ class ManualPositionIntegrationTest {
 	@Test
 	void editingDataOnAMultiLotPositionIsRejected() throws Exception {
 		Cookie session = login();
-		// Build a 2-lot position directly (the import/manual path makes single-lot positions).
-		Position p = positions.save(new Position("MULTI", null, null, null, "USD",
-				LocalDate.of(2023, 1, 15), false, "manual"));
-		lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("1000"), "USD",
-				LocalDate.of(2023, 1, 15), new BigDecimal("1.3"), false));
-		lots.save(new PositionLot(p.getId(), new BigDecimal("20"), new BigDecimal("3000"), "USD",
-				LocalDate.of(2023, 6, 15), new BigDecimal("1.4"), false));
-		acbService.recompute(p);
+		// Build a 2-lot position directly (the import/manual path makes single-lot positions) — as the
+		// SAME signed-in user as `session`, since this bypasses the request/filter that would otherwise
+		// set it (Phase 2: these rows are @TenantId-scoped to whoever is "signed in" at insert time).
+		Position p = com.argus.security.CurrentUserContext.callAs(userIdOf(session), () -> {
+			Position saved = positions.save(new Position("MULTI", null, null, null, "USD",
+					LocalDate.of(2023, 1, 15), false, "manual"));
+			lots.save(new PositionLot(saved.getId(), new BigDecimal("10"), new BigDecimal("1000"), "USD",
+					LocalDate.of(2023, 1, 15), new BigDecimal("1.3"), false));
+			lots.save(new PositionLot(saved.getId(), new BigDecimal("20"), new BigDecimal("3000"), "USD",
+					LocalDate.of(2023, 6, 15), new BigDecimal("1.4"), false));
+			acbService.recompute(saved); // also a @TenantId-scoped write — must happen in this same context
+			return saved;
+		});
 
 		mockMvc.perform(put("/api/portfolio/positions/{id}", p.getId()).cookie(session)
 						.contentType(MediaType.APPLICATION_JSON).content("{\"shares\":5}"))

@@ -9,12 +9,17 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.TenantId;
 
 /**
  * A single portfolio holding (Story 3.1, FR-1). Cost basis is stored in its original trade
  * currency as {@link BigDecimal} (never float); the CAD ACB at purchase-time FX is added in
  * Story 3.2. {@code needsReview} marks a holding whose import left a field unparsed (FR-1: such
  * fields are flagged for manual entry, never silently dropped).
+ *
+ * <p>{@code userId} (Phase 2, multi-user) is a Hibernate {@code @TenantId}: it is stamped
+ * automatically on insert and every query is automatically restricted to it — see
+ * {@code PortfolioTenantResolver}. No repository or service method needs to pass a user id itself.
  */
 @Entity
 @Table(name = "positions")
@@ -23,6 +28,10 @@ public class Position {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false)
 	private String ticker;
@@ -133,6 +142,10 @@ public class Position {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public BigDecimal getCadAcb() {

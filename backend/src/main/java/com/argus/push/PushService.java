@@ -45,13 +45,15 @@ public class PushService {
 		return subscriptions.count();
 	}
 
-	/** Register (or refresh, if the endpoint already exists) a device's subscription. */
+	/** Register (or refresh, if the endpoint already exists) a device's subscription, for {@code userId}
+	 * (the signed-in person registering it — null for a caller with no session, which should no longer
+	 * happen now that {@code /api/push/subscribe} requires one, but this stays tolerant either way). */
 	@Transactional
-	public void subscribe(String endpoint, String p256dh, String auth) {
+	public void subscribe(String endpoint, String p256dh, String auth, Long userId) {
 		subscriptions.findByEndpoint(endpoint).ifPresentOrElse(existing -> {
-			existing.refresh(p256dh, auth);
+			existing.refresh(p256dh, auth, userId);
 			subscriptions.save(existing);
-		}, () -> subscriptions.save(new PushSubscription(endpoint, p256dh, auth)));
+		}, () -> subscriptions.save(new PushSubscription(endpoint, p256dh, auth, userId)));
 	}
 
 	/** Drop a device's subscription (e.g. the browser revoked permission). */
@@ -94,6 +96,28 @@ public class PushService {
 		}
 		if (sent > 0) {
 			log.info("Web push '{}' delivered to {} device(s)", title, sent);
+		}
+		return sent;
+	}
+
+	/**
+	 * Send a notification to only ONE person's own registered device(s) — for personal content like
+	 * their morning Briefing, which must never show up on a friend's phone (unlike {@link #sendToAll},
+	 * which is for shared content like breaking market news). Same pruning/no-op behavior as sendToAll.
+	 */
+	@Transactional
+	public int sendToUser(Long userId, String title, String body, String url) {
+		if (!props.isConfigured() || userId == null) {
+			return 0;
+		}
+		String payload = payload(title, body, url, false);
+		int sent = 0;
+		for (PushSubscription sub : subscriptions.findByUserId(userId)) {
+			switch (sender.send(sub, payload)) {
+				case SENT -> sent++;
+				case EXPIRED -> subscriptions.delete(sub);
+				case FAILED -> { /* keep it; retry on the next notification */ }
+			}
 		}
 		return sent;
 	}

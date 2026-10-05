@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.TenantId;
 import org.hibernate.type.SqlTypes;
 
 /**
@@ -27,6 +28,10 @@ public class PortfolioImport {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false)
 	private String filename;
@@ -101,6 +106,10 @@ public class PortfolioImport {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public String getFilename() {

@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.TenantId;
 
 /**
  * One purchase lot of a {@link Position} (Story 3.2, FR-1b). A position's cost basis is the
@@ -23,6 +24,10 @@ public class PositionLot {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(name = "position_id", nullable = false)
 	private Long positionId;
@@ -101,6 +106,10 @@ public class PositionLot {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public Long getPositionId() {

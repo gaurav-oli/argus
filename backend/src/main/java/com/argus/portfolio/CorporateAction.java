@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import org.hibernate.annotations.TenantId;
 
 /**
  * A corporate action recorded against a holding (Story 3.3, FR-1c). Unambiguous actions are
@@ -27,6 +28,10 @@ public class CorporateAction {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
+
+	@TenantId
+	@Column(name = "user_id", nullable = false, updatable = false)
+	private Long userId;
 
 	@Column(nullable = false)
 	private String ticker;
@@ -91,6 +96,10 @@ public class CorporateAction {
 
 	public Long getId() {
 		return id;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 
 	public String getTicker() {

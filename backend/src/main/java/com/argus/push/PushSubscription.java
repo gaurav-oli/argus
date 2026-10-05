@@ -12,6 +12,11 @@ import java.time.Instant;
  * A browser Web Push subscription (Epic 8, FR-17). One row per device, keyed by its push-service
  * {@code endpoint}; {@code p256dh} + {@code auth} are the client keys used to encrypt payloads
  * (RFC 8291). Re-subscribing the same endpoint refreshes its keys via {@link #refresh}.
+ *
+ * <p>{@code userId} (Phase 2, multi-user) is which signed-in person registered this device — not a
+ * Hibernate {@code @TenantId} like the portfolio entities, since the one thing that reads across
+ * everyone's devices ({@code sendToAll}, shared market alerts) is meant to, by design. It is what
+ * lets {@code sendToUser} target one person's own briefing push without touching anyone else's phone.
  */
 @Entity
 @Table(name = "push_subscriptions")
@@ -30,6 +35,10 @@ public class PushSubscription {
 	@Column(nullable = false)
 	private String auth;
 
+	/** Null for a subscription registered before multi-user (pre-Phase-2) and never re-subscribed. */
+	@Column(name = "user_id")
+	private Long userId;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -40,16 +49,19 @@ public class PushSubscription {
 		// JPA
 	}
 
-	public PushSubscription(String endpoint, String p256dh, String auth) {
+	public PushSubscription(String endpoint, String p256dh, String auth, Long userId) {
 		this.endpoint = endpoint;
 		this.p256dh = p256dh;
 		this.auth = auth;
+		this.userId = userId;
 	}
 
-	/** Update the client keys for an existing device (re-subscribe). */
-	public void refresh(String p256dh, String auth) {
+	/** Update the client keys for an existing device (re-subscribe) — also retargets {@code userId},
+	 * since the same browser/device can later be used to sign in as someone else. */
+	public void refresh(String p256dh, String auth, Long userId) {
 		this.p256dh = p256dh;
 		this.auth = auth;
+		this.userId = userId;
 		this.updatedAt = Instant.now();
 	}
 
@@ -67,5 +79,9 @@ public class PushSubscription {
 
 	public String getAuth() {
 		return auth;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 }

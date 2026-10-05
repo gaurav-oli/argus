@@ -44,17 +44,34 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 		}
 
 		if (isAllowlisted(request) || isAuthenticated(request)) {
-			touchActivity(request);
-			chain.doFilter(request, response);
+			Long userId = currentUserId(request);
+			CurrentUserContext.set(userId);
+			try {
+				touchActivity(userId);
+				chain.doFilter(request, response);
+			} finally {
+				CurrentUserContext.clear();
+			}
 			return;
 		}
 		writeUnauthorized(request, response);
 	}
 
-	/** Best-effort usage-stats signal (admin's user-stats view) — never blocks the request. */
-	private void touchActivity(HttpServletRequest request) {
+	/** The signed-in user for this request, or null (no session, or a pre-Google-login session). */
+	private Long currentUserId(HttpServletRequest request) {
 		try {
-			sessions.userId(SessionCookie.read(request)).ifPresent(activity::touch);
+			return sessions.userId(SessionCookie.read(request)).orElse(null);
+		} catch (RuntimeException ex) {
+			return null;
+		}
+	}
+
+	/** Best-effort usage-stats signal (admin's user-stats view) — never blocks the request. */
+	private void touchActivity(Long userId) {
+		try {
+			if (userId != null) {
+				activity.touch(userId);
+			}
 		} catch (RuntimeException ex) {
 			// swallow — see UserActivityService's own fail-open contract
 		}

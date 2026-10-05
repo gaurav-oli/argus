@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.argus.TestcontainersConfiguration;
 import com.argus.marketdata.FxRateClient;
 import com.argus.marketdata.FxRateRepository;
+import com.argus.security.CurrentUserContext;
+import com.argus.security.TestUserSessions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
@@ -63,6 +65,12 @@ class CorporateActionIntegrationTest {
 	@Autowired
 	com.argus.security.AppCredentialRepository pinCredentials;
 
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
+
+	@Autowired
+	com.argus.security.SessionStore sessions;
+
 	@MockitoBean
 	FxRateClient fxRateClient;
 
@@ -84,13 +92,9 @@ class CorporateActionIntegrationTest {
 		when(fxRateClient.usdCadOn(any())).thenReturn(Optional.of(new BigDecimal("1.35")));
 	}
 
-	private Cookie login() throws Exception {
-		mockMvc.perform(post("/api/auth/pin").contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isCreated());
-		return mockMvc.perform(post("/api/auth/login")
-						.contentType(MediaType.APPLICATION_JSON).content("{\"pin\":\"1234\"}"))
-				.andExpect(status().isOk())
-				.andReturn().getResponse().getCookie("ARGUS_SESSION");
+	/** A real signed-in {@link com.argus.security.AppUser} (Phase 2: every portfolio row needs one). */
+	private Cookie login() {
+		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
 	/** Import one holding through the PDF flow and confirm it, so a real position+lot exists. */
@@ -221,22 +225,25 @@ class CorporateActionIntegrationTest {
 
 	// ---- Code-review follow-ups ----
 
-	/** Build a multi-lot position directly (the import path makes single-lot positions). */
-	private Position twoLotPosition(String ticker) {
-		Position p = positions.save(new Position(ticker, null, null, null, "USD",
-				java.time.LocalDate.of(2023, 1, 15), false, "manual"));
-		lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("1000.00"), "USD",
-				java.time.LocalDate.of(2023, 1, 15), new BigDecimal("1.30"), false));
-		lots.save(new PositionLot(p.getId(), new BigDecimal("20"), new BigDecimal("3000.00"), "USD",
-				java.time.LocalDate.of(2023, 6, 15), new BigDecimal("1.40"), false));
-		acbService.recompute(p); // shares 30, costBasis 4000.00, cadAcb 1000*1.30 + 3000*1.40 = 5500
-		return p;
+	/** Build a multi-lot position directly (the import path makes single-lot positions), owned by the
+	 * same signed-in user as {@code session} (Phase 2: this bypasses the request, so nothing else sets it). */
+	private Position twoLotPosition(Cookie session, String ticker) {
+		return CurrentUserContext.callAs(sessions.userId(session.getValue()).orElseThrow(), () -> {
+			Position p = positions.save(new Position(ticker, null, null, null, "USD",
+					java.time.LocalDate.of(2023, 1, 15), false, "manual"));
+			lots.save(new PositionLot(p.getId(), new BigDecimal("10"), new BigDecimal("1000.00"), "USD",
+					java.time.LocalDate.of(2023, 1, 15), new BigDecimal("1.30"), false));
+			lots.save(new PositionLot(p.getId(), new BigDecimal("20"), new BigDecimal("3000.00"), "USD",
+					java.time.LocalDate.of(2023, 6, 15), new BigDecimal("1.40"), false));
+			acbService.recompute(p); // shares 30, costBasis 4000.00, cadAcb 1000*1.30 + 3000*1.40 = 5500
+			return p;
+		});
 	}
 
 	@Test
 	void splitScalesAllLotsAndPreservesTotalCostAcrossLots() throws Exception {
 		Cookie session = login();
-		twoLotPosition("MULTI");
+		twoLotPosition(session, "MULTI");
 
 		recordAction(session, "{\"ticker\":\"MULTI\",\"type\":\"split\",\"ratio\":2}")
 				.andExpect(status().isCreated())
@@ -252,8 +259,8 @@ class CorporateActionIntegrationTest {
 	@Test
 	void multipleHoldingsWithSameTickerStayPending() throws Exception {
 		Cookie session = login();
-		twoLotPosition("DUP");  // two positions, same ticker, created directly
-		twoLotPosition("DUP");
+		twoLotPosition(session, "DUP");  // two positions, same ticker, created directly
+		twoLotPosition(session, "DUP");
 
 		recordAction(session, "{\"ticker\":\"DUP\",\"type\":\"split\",\"ratio\":2}")
 				.andExpect(status().isCreated())

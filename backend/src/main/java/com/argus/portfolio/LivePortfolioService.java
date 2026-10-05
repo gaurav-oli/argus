@@ -3,6 +3,9 @@ package com.argus.portfolio;
 import com.argus.common.LivePushService;
 import com.argus.marketdata.FxRateService;
 import com.argus.marketdata.MarketClock;
+import com.argus.security.AppUser;
+import com.argus.security.AppUserRepository;
+import com.argus.security.CurrentUserContext;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -19,15 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
  * Real-time portfolio valuation (Stories 3.4/3.5, FR-2/FR-3). Holds the latest price (and previous
  * close) per ticker in memory; each tick recomputes a {@link PortfolioSnapshot} — per-position
  * market value, day P&L (vs previous close), total P&L (%), CAD equivalents, and portfolio weight —
- * and pushes it to {@code /topic/portfolio}. CAD uses a recent Bank-of-Canada USD/CAD; cost comes
- * from the Story-3.2 caches. Transient (never persisted) and unit-testable via {@link #onPriceTick}
- * + {@link #recordPreviousClose} (no socket).
+ * and pushes it to each signed-in person's own {@code /user/queue/portfolio} — never a shared topic,
+ * since the snapshot is that one person's real holdings (Phase 2, multi-user). CAD uses a recent
+ * Bank-of-Canada USD/CAD; cost comes from the Story-3.2 caches. Transient (never persisted) and
+ * unit-testable via {@link #onPriceTick} + {@link #recordPreviousClose} (no socket).
  */
 @Service
 public class LivePortfolioService {
 
 	private static final ZoneId TORONTO = ZoneId.of("America/Toronto");
-	private static final String TOPIC = "/topic/portfolio";
+	private static final String QUEUE = "/queue/portfolio";
 	private static final BigDecimal HUNDRED = new BigDecimal("100");
 
 	private final PositionRepository positions;
@@ -36,18 +40,21 @@ public class LivePortfolioService {
 	private final LivePushService livePush;
 	private final CashService cash;
 	private final AccountMetaRepository accountMeta;
+	private final AppUserRepository users;
 
 	private final Map<String, PricePoint> prices = new ConcurrentHashMap<>();
 	private final Map<String, BigDecimal> previousCloses = new ConcurrentHashMap<>();
 
 	public LivePortfolioService(PositionRepository positions, FxRateService fx, MarketClock marketClock,
-			LivePushService livePush, CashService cash, AccountMetaRepository accountMeta) {
+			LivePushService livePush, CashService cash, AccountMetaRepository accountMeta,
+			AppUserRepository users) {
 		this.positions = positions;
 		this.fx = fx;
 		this.marketClock = marketClock;
 		this.livePush = livePush;
 		this.cash = cash;
 		this.accountMeta = accountMeta;
+		this.users = users;
 	}
 
 	/**
@@ -60,9 +67,12 @@ public class LivePortfolioService {
 	}
 
 	/**
-	 * Record a price tick in an explicit currency and push a fresh snapshot. The price's currency
-	 * (USD from Finnhub, CAD from the TSX feed) — NOT the position's cost-basis currency — drives the
-	 * CAD conversion, so a US stock held in a CAD account is still converted at the USD/CAD rate.
+	 * Record a price tick in an explicit currency and push a fresh snapshot to EVERY signed-in person
+	 * (Phase 2: the price itself is shared market data, but each person's resulting valuation is their
+	 * own, so each gets their own personal push, computed under their own tenant context). The price's
+	 * currency (USD from Finnhub, CAD from the TSX feed) — NOT the position's cost-basis currency —
+	 * drives the CAD conversion, so a US stock held in a CAD account is still converted at the USD/CAD
+	 * rate. This runs on the price feed's own thread, with no signed-in user on it otherwise.
 	 */
 	@Transactional(readOnly = true)
 	public void onPriceTick(String ticker, BigDecimal price, Instant when, String currency) {
@@ -72,12 +82,17 @@ public class LivePortfolioService {
 		String ccy = currency == null ? "USD" : currency.trim().toUpperCase();
 		prices.put(ticker.trim().toUpperCase(),
 				new PricePoint(price, when, !marketClock.isRegularHours(when), ccy));
-		livePush.publish(TOPIC, currentSnapshot());
+		for (AppUser user : users.findAll()) {
+			CurrentUserContext.runAs(user.getId(),
+					() -> livePush.publishToUser(user.getId(), QUEUE, currentSnapshot()));
+		}
 	}
 
-	/** Re-broadcast the current snapshot (Story 3.7 — after a manual change, for immediate UI update). */
+	/** Re-push the current snapshot to the ACTING person only (Story 3.7 — after their own manual
+	 * change, for immediate UI update) — always called from their own request, so their context is
+	 * already set; no need to loop everyone else. */
 	public void pushCurrent() {
-		livePush.publish(TOPIC, currentSnapshot());
+		livePush.publishToUser(CurrentUserContext.get(), QUEUE, currentSnapshot());
 	}
 
 	/** Latest known price for a ticker, if the feed has delivered one (e.g. for the paper-investor book). */
@@ -101,11 +116,12 @@ public class LivePortfolioService {
 		return java.util.Optional.ofNullable(pp == null ? null : pp.currency());
 	}
 
-	/** Held tickers with no live price yet — candidates for a supplemental (e.g. TSX) price source. */
+	/** Held tickers with no live price yet — candidates for a supplemental (e.g. TSX) price source.
+	 * Runs from a scheduled poll with no signed-in user on the thread, so this deliberately reads
+	 * across ALL users' tickers (Phase 2) — same escape hatch as {@link PriceFeedStarter}. */
 	@Transactional(readOnly = true)
 	public java.util.Set<String> unpricedHeldTickers() {
-		return positions.findAllByOrderByTickerAsc().stream()
-				.map(Position::getTicker)
+		return positions.allTickersAcrossAllUsers().stream()
 				.filter(t -> t != null && !prices.containsKey(t.trim().toUpperCase()))
 				.collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
 	}
