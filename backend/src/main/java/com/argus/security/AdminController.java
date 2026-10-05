@@ -26,13 +26,15 @@ public class AdminController {
 	private final AppUserRepository users;
 	private final UserActivityService activity;
 	private final InvitedEmailRepository invites;
+	private final InviteEmailService inviteEmail;
 
 	public AdminController(CurrentUserService currentUser, AppUserRepository users, UserActivityService activity,
-			InvitedEmailRepository invites) {
+			InvitedEmailRepository invites, InviteEmailService inviteEmail) {
 		this.currentUser = currentUser;
 		this.users = users;
 		this.activity = activity;
 		this.invites = invites;
+		this.inviteEmail = inviteEmail;
 	}
 
 	@GetMapping("/users")
@@ -45,27 +47,56 @@ public class AdminController {
 	@GetMapping("/invites")
 	public List<InviteView> invites(HttpServletRequest request) {
 		currentUser.requireAdmin(request);
-		return invites.findAllByOrderByInvitedAtAsc().stream()
-				.map(i -> new InviteView(i.getEmail(), i.getInvitedAt(), users.findByEmailIgnoreCase(i.getEmail()).isPresent()))
-				.toList();
+		return invites.findAllByOrderByInvitedAtAsc().stream().map(this::viewFor).toList();
 	}
 
 	/** Allow a new email to sign in with Google. Idempotent — inviting an already-invited email is a no-op. */
 	@PostMapping("/invites")
 	public InviteView invite(@RequestBody InviteRequest body, HttpServletRequest request) {
 		AppUser admin = currentUser.requireAdmin(request);
-		if (body == null || body.email() == null || body.email().isBlank()) {
+		String email = requireEmail(body == null ? null : body.email());
+		InvitedEmail saved = invites.findById(email).orElseGet(() -> invites.save(new InvitedEmail(email, admin.getEmail())));
+		return viewFor(saved);
+	}
+
+	/** Actually email the invite (Resend) — the link carries this person's own tracking token, so a
+	 * later visit to it (before they've even signed in) shows up as "opened". 503 if Resend isn't
+	 * configured or the send itself fails, so the admin UI can show that clearly, not silently. */
+	@PostMapping("/invites/send")
+	public InviteView sendInvite(@RequestBody InviteRequest body, HttpServletRequest request) {
+		AppUser admin = currentUser.requireAdmin(request);
+		String email = requireEmail(body == null ? null : body.email());
+		InvitedEmail invited = invites.findById(email).orElseGet(() -> invites.save(new InvitedEmail(email, admin.getEmail())));
+		String token = invited.ensureToken();
+		invites.save(invited); // persist the token before the network call, so a failed send still has one
+		try {
+			inviteEmail.send(email, token, admin.getName());
+		}
+		catch (InviteEmailException ex) {
+			throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), ex);
+		}
+		invited.markEmailSent();
+		return viewFor(invites.save(invited));
+	}
+
+	private static String requireEmail(String raw) {
+		if (raw == null || raw.isBlank()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is required");
 		}
-		String email = InvitedEmail.normalize(body.email());
-		InvitedEmail saved = invites.findById(email).orElseGet(() -> invites.save(new InvitedEmail(email, admin.getEmail())));
-		return new InviteView(saved.getEmail(), saved.getInvitedAt(), users.findByEmailIgnoreCase(email).isPresent());
+		return InvitedEmail.normalize(raw);
+	}
+
+	private InviteView viewFor(InvitedEmail i) {
+		return new InviteView(i.getEmail(), i.getInvitedAt(), users.findByEmailIgnoreCase(i.getEmail()).isPresent(),
+				i.getEmailSentAt(), i.getOpenedAt());
 	}
 
 	public record InviteRequest(String email) {
 	}
 
-	public record InviteView(String email, Instant invitedAt, boolean joined) {
+	/** {@code emailSentAt}/{@code openedAt} are null until the admin sends it / the person visits the
+	 * link — {@code joined} (from {@code app_user}) is the one that actually matters. */
+	public record InviteView(String email, Instant invitedAt, boolean joined, Instant emailSentAt, Instant openedAt) {
 	}
 
 	private UserStatsView viewFor(AppUser u) {

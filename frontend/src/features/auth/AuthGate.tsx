@@ -1,6 +1,12 @@
 "use client";
 
-import { type AuthStatus, getAuthStatus, getInvestorProfile, setUnauthorizedHandler } from "@/lib/apiClient";
+import {
+  type AuthStatus,
+  getAuthStatus,
+  getInvestorProfile,
+  markInviteOpened,
+  setUnauthorizedHandler,
+} from "@/lib/apiClient";
 import { useEffect, useState } from "react";
 import { GoogleSignInScreen, type SignInReason } from "./GoogleSignInScreen";
 import { OnboardingQuestions } from "./OnboardingQuestions";
@@ -17,6 +23,13 @@ function readSignInReason(): SignInReason {
   if (typeof window === "undefined") return null;
   const v = new URLSearchParams(window.location.search).get("auth");
   return v === "failed" || v === "not_invited" ? v : null;
+}
+
+/** An admin-sent invite link carries `?invite=<token>` — read once on mount, same as the sign-in
+ * reason above, so this never forces dynamic rendering just to notice a query param. */
+function readInviteToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("invite");
 }
 
 /**
@@ -43,6 +56,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Record an invite-link open as early as possible — independent of auth state, since the whole
+  // point is to catch it even if the person never actually signs in.
+  useEffect(() => {
+    const token = readInviteToken();
+    if (token) void markInviteOpened(token);
   }, []);
 
   // Once signed in, check (once) whether this person still needs the first-login questions.

@@ -149,16 +149,19 @@ services:
       # Browser origins allowed to call the API (CORS). On the Mini = the tailnet host, since
       # tailscale serve makes same-origin POSTs look cross-origin to the backend (Story 2.1).
       ARGUS_WEB_ALLOWED_ORIGINS: ${ARGUS_WEB_ALLOWED_ORIGINS:-http://localhost:3000}
-      # WebAuthn/passkey RP (Story 2.2). On the Mini these are the tailnet host (RP ID = the host,
-      # origin = https://<host>). Defaults suit local dev.
-      ARGUS_SECURITY_WEBAUTHN_RP_ID: ${ARGUS_SECURITY_WEBAUTHN_RP_ID:-localhost}
-      ARGUS_SECURITY_WEBAUTHN_ORIGINS: ${ARGUS_SECURITY_WEBAUTHN_ORIGINS:-http://localhost:3000}
-      # Google Sign-In (multi-user, replacing PIN/WebAuthn as the login). Empty client id/secret =
-      # the login endpoint 503s rather than failing confusingly mid-flow.
+      # Google Sign-In (multi-user — the only login flow; PIN/WebAuthn were removed). Empty client
+      # id/secret = the login endpoint 503s rather than failing confusingly mid-flow.
       ARGUS_GOOGLE_OAUTH_CLIENT_ID: ${ARGUS_GOOGLE_OAUTH_CLIENT_ID:-}
       ARGUS_GOOGLE_OAUTH_CLIENT_SECRET: ${ARGUS_GOOGLE_OAUTH_CLIENT_SECRET:-}
       ARGUS_GOOGLE_OAUTH_REDIRECT_URI: ${ARGUS_GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/api/login/oauth2/code/google}
       ARGUS_ADMIN_EMAIL: ${ARGUS_ADMIN_EMAIL:-}
+      # Resend (admin-sent friend invites, with open/join tracking). Empty API key = the send
+      # endpoint fails clearly rather than silently no-op-ing.
+      ARGUS_RESEND_API_KEY: ${ARGUS_RESEND_API_KEY:-}
+      ARGUS_RESEND_FROM_EMAIL: ${ARGUS_RESEND_FROM_EMAIL:-onboarding@resend.dev}
+      # The public URL invite emails link to (and that the browser actually loads) — the Tailscale
+      # Funnel host in production, the local Next dev server otherwise.
+      ARGUS_APP_URL: ${ARGUS_APP_URL:-http://localhost:3000}
       # Backup status + on-demand "Back Up Now" (Stories 10.2 + BackupTriggerService): the container
       # path of the backup mount below. The SCHEDULED dumps still run on the HOST via launchd
       # (scripts/install-backup-schedule.sh); this is only for status derivation + the on-demand path.

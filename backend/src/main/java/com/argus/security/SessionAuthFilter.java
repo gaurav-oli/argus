@@ -98,7 +98,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 				// Google Sign-In (multi-user): the redirect-to-Google start and Google's own
 				// callback both happen before any session cookie exists.
 				|| (HttpMethod.GET.equals(method) && "/api/auth/google/login".equals(path))
-				|| (HttpMethod.GET.equals(method) && "/api/login/oauth2/code/google".equals(path));
+				|| (HttpMethod.GET.equals(method) && "/api/login/oauth2/code/google".equals(path))
+				// Invite-link open tracking fires before the person has signed in at all.
+				|| (HttpMethod.POST.equals(method) && "/api/invite/open".equals(path));
 	}
 
 	/** Strip a single trailing slash (but keep root "/") so proxy normalization can't 401 a match. */

@@ -147,11 +147,14 @@ export interface AdminUserStats {
 export const getAdminUserStats = (): Promise<AdminUserStats[]> =>
   apiGet<AdminUserStats[]>("/api/admin/users");
 
-/** Mirrors the backend `AdminController.InviteView`. */
+/** Mirrors the backend `AdminController.InviteView`. `emailSentAt`/`openedAt` are null until the
+ * admin actually sends the email / the person visits the link; `joined` is the one that matters. */
 export interface AdminInvite {
   email: string;
   invitedAt: string;
   joined: boolean;
+  emailSentAt: string | null;
+  openedAt: string | null;
 }
 
 export const getAdminInvites = (): Promise<AdminInvite[]> =>
@@ -160,6 +163,23 @@ export const getAdminInvites = (): Promise<AdminInvite[]> =>
 /** Allow a new email to sign in with Google. Idempotent — inviting an already-invited email is fine. */
 export const inviteFriend = (email: string): Promise<AdminInvite> =>
   apiPost<AdminInvite>("/api/admin/invites", { email });
+
+/** Actually email the invite (Resend) — throws (ApiError, 503) if sending isn't configured or fails. */
+export const sendInviteEmail = (email: string): Promise<AdminInvite> =>
+  apiPost<AdminInvite>("/api/admin/invites/send", { email });
+
+/** Best-effort: tell the backend an invite link was opened, before the person has even signed in.
+ * Never throws into the caller — a failed beacon shouldn't block showing the sign-in screen. */
+export async function markInviteOpened(token: string): Promise<void> {
+  try {
+    await fetch(`${BASE_URL}/api/invite/open?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // best-effort — see above
+  }
+}
 
 export const logout = (): Promise<void> => apiPost("/api/auth/logout");
 

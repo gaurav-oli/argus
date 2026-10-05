@@ -4,7 +4,7 @@ import { MotionCard } from "@/components/ui/MotionCard";
 import {
   getAdminInvites,
   getAdminUserStats,
-  inviteFriend,
+  sendInviteEmail,
   type AdminInvite,
   type AdminUserStats,
 } from "@/lib/apiClient";
@@ -42,8 +42,8 @@ export function AdminUserStats({ index }: { index: number }) {
   const [rows, setRows] = useState<AdminUserStats[] | null | undefined>(undefined);
   const [invites, setInvites] = useState<AdminInvite[]>([]);
   const [newEmail, setNewEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [sendingFor, setSendingFor] = useState<string | null>(null);
+  const [errorFor, setErrorFor] = useState<Record<string, string>>({});
 
   const refetchInvites = useCallback(() => {
     getAdminInvites()
@@ -66,21 +66,24 @@ export function AdminUserStats({ index }: { index: number }) {
     };
   }, [refetchInvites]);
 
-  const onInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = newEmail.trim();
-    if (!email) return;
-    setInviting(true);
-    setInviteError(null);
+  const send = async (email: string) => {
+    setSendingFor(email);
+    setErrorFor((prev) => ({ ...prev, [email]: "" }));
     try {
-      await inviteFriend(email);
+      await sendInviteEmail(email);
       setNewEmail("");
       refetchInvites();
     } catch {
-      setInviteError("Couldn't add that invite — check the email and try again.");
+      setErrorFor((prev) => ({ ...prev, [email]: "Couldn't send — check the email and try again." }));
     } finally {
-      setInviting(false);
+      setSendingFor(null);
     }
+  };
+
+  const onInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = newEmail.trim();
+    if (email) void send(email);
   };
 
   if (!rows || rows.length === 0) {
@@ -152,6 +155,7 @@ export function AdminUserStats({ index }: { index: number }) {
 
       <div className="mt-5 border-t border-border/60 pt-4">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Invite a friend</h3>
+        <p className="mt-1 text-[11px] text-text-secondary">Sends a real email with their own sign-in link.</p>
         <form onSubmit={onInvite} className="mt-2 flex items-center gap-2">
           <input
             type="email"
@@ -163,27 +167,66 @@ export function AdminUserStats({ index }: { index: number }) {
           />
           <button
             type="submit"
-            disabled={inviting || !newEmail.trim()}
+            disabled={sendingFor !== null || !newEmail.trim()}
             className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {inviting ? "Adding…" : "Add"}
+            {sendingFor === newEmail.trim() ? "Sending…" : "Send invite"}
           </button>
         </form>
-        {inviteError && <p className="mt-1.5 text-[11px] text-losses">{inviteError}</p>}
 
         {invites.length > 0 && (
-          <ul className="mt-3 space-y-1">
+          <ul className="mt-3 space-y-2">
             {invites.map((i) => (
-              <li key={i.email} className="flex items-center justify-between text-xs text-text-secondary">
-                <span>{i.email}</span>
-                <span className={i.joined ? "text-accent" : "text-text-secondary/70"}>
-                  {i.joined ? "joined" : "invited — not yet signed in"}
-                </span>
+              <li key={i.email} className="flex flex-col gap-1 rounded-lg bg-[var(--hover-wash)] px-3 py-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-text-primary">{i.email}</span>
+                  <InviteStatus invite={i} />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-text-secondary">
+                    {i.emailSentAt
+                      ? `Sent ${relTime(i.emailSentAt)}${i.openedAt ? ` · opened ${relTime(i.openedAt)}` : ""}`
+                      : "Not sent yet"}
+                  </span>
+                  {!i.joined && (
+                    <button
+                      type="button"
+                      onClick={() => void send(i.email)}
+                      disabled={sendingFor === i.email}
+                      className="shrink-0 text-[11px] font-medium text-accent transition hover:opacity-80 disabled:opacity-50"
+                    >
+                      {sendingFor === i.email ? "Sending…" : i.emailSentAt ? "Resend" : "Send"}
+                    </button>
+                  )}
+                </div>
+                {errorFor[i.email] && <p className="text-[11px] text-losses">{errorFor[i.email]}</p>}
               </li>
             ))}
           </ul>
         )}
       </div>
     </MotionCard>
+  );
+}
+
+/** joined (signed in) beats opened (clicked the link) beats sent (emailed) beats invited-only. */
+function InviteStatus({ invite }: { invite: AdminInvite }) {
+  if (invite.joined) {
+    return <span className="rounded bg-gains/15 px-1.5 py-0.5 text-[10px] font-semibold text-gains">Joined</span>;
+  }
+  if (invite.openedAt) {
+    return <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">Opened</span>;
+  }
+  if (invite.emailSentAt) {
+    return (
+      <span className="rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">
+        Sent, not opened
+      </span>
+    );
+  }
+  return (
+    <span className="rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">
+      Not sent
+    </span>
   );
 }
