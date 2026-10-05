@@ -57,6 +57,25 @@ spring:
     model:
       chat: ollama
 
+  # Gmail SMTP — the admin-sent friend invite email (InviteEmailService). Blank username/password
+  # are a valid (if useless) default: JavaMailSenderImpl builds fine with no credentials, so the app
+  # still starts with none configured; InviteEmailService itself checks and fails clearly when asked
+  # to actually send with nothing set, same "never silently no-op" convention as every other
+  # key-gated integration here.
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${ARGUS_GMAIL_ADDRESS:}
+    password: ${ARGUS_GMAIL_APP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+
 # Agent 1 news ingestion (Story 4.1, FR-8). Cadence-gated: ≤5 min in regular hours, ≤15 min off-hours.
 # Finnhub is key-gated (argus.finnhub.api-key); GDELT + RSS are free/keyless and on by default.
 argus:

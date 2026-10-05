@@ -1,40 +1,39 @@
 package com.argus.security;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Sends the "you're invited to Argus" email via Resend's REST API (hand-rolled HTTP call, same style
- * as {@link GoogleOAuthService} — Resend's whole API is one POST, not worth a client library for).
- * The link in the email carries the invite's own token ({@link InvitedEmail#ensureToken()}), so
+ * Sends the "you're invited to Argus" email via the admin's own Gmail account (SMTP + an App
+ * Password — no domain to own or verify). Resend's unverified sandbox sender was tried first but
+ * turned out to only deliver to the Resend account's own address, useless for inviting anyone else;
+ * a real Gmail account sending real mail has no such restriction.
+ *
+ * <p>The link in the email carries the invite's own token ({@link InvitedEmail#ensureToken()}), so
  * {@code InviteTrackingController} can tell this specific person's open apart from anyone else's.
  */
 @Service
 public class InviteEmailService {
 
-	private static final URI EMAILS_ENDPOINT = URI.create("https://api.resend.com/emails");
-
-	private final ResendProperties props;
+	private final JavaMailSender mailSender;
+	private final String fromAddress;
 	private final String appUrl;
-	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-	private final ObjectMapper json = JsonMapper.builder().build();
 
-	public InviteEmailService(ResendProperties props, @Value("${argus.app-url:http://localhost:3000}") String appUrl) {
-		this.props = props;
+	public InviteEmailService(JavaMailSender mailSender, @Value("${spring.mail.username:}") String fromAddress,
+			@Value("${argus.app-url:http://localhost:3000}") String appUrl) {
+		this.mailSender = mailSender;
+		this.fromAddress = fromAddress;
 		// Trim any trailing slash so the built link never ends up with "//" before the query string.
 		this.appUrl = appUrl.endsWith("/") ? appUrl.substring(0, appUrl.length() - 1) : appUrl;
+	}
+
+	public boolean configured() {
+		return !fromAddress.isBlank();
 	}
 
 	/** The unique link this person's own invite email points to. Public so the admin UI can show/copy
@@ -43,47 +42,28 @@ public class InviteEmailService {
 		return appUrl + "/?invite=" + token;
 	}
 
-	/** Send the invite email. Throws {@link InviteEmailException} if Resend isn't configured or the
-	 * call fails — the caller (an admin-triggered action) should surface that clearly, not swallow it. */
+	/** Send the invite email. Throws {@link InviteEmailException} if Gmail isn't configured or the
+	 * send itself fails — the caller (an admin-triggered action) should surface that clearly, not
+	 * swallow it. */
 	public void send(String toEmail, String token, String invitedByName) {
-		if (!props.configured()) {
-			throw new InviteEmailException("Email sending isn't set up (no Resend API key configured)");
+		if (!configured()) {
+			throw new InviteEmailException("Email sending isn't set up (no Gmail address/app password configured)");
 		}
 		String link = inviteLink(token);
-		String payload = json.writeValueAsString(Map.of(
-				"from", "Argus <" + props.fromEmail() + ">",
-				"to", List.of(toEmail),
-				"subject", invitedByName + " invited you to Argus",
-				"html", html(link, invitedByName)));
 		try {
-			HttpRequest req = HttpRequest.newBuilder(EMAILS_ENDPOINT)
-					.timeout(Duration.ofSeconds(15))
-					.header("Authorization", "Bearer " + props.apiKey())
-					.header("Content-Type", "application/json")
-					.POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-					.build();
-			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
-			if (res.statusCode() / 100 != 2) {
-				throw new InviteEmailException("Resend rejected the email (HTTP " + res.statusCode() + "): "
-						+ errorMessage(res.body()));
-			}
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+			helper.setFrom(fromAddress, "Argus");
+			helper.setTo(toEmail);
+			helper.setSubject(invitedByName + " invited you to Argus");
+			helper.setText(html(link, invitedByName), true);
+			mailSender.send(message);
 		}
-		catch (InterruptedException ex) {
-			Thread.currentThread().interrupt();
-			throw new InviteEmailException("Sending the invite email was interrupted", ex);
+		catch (MailException ex) {
+			throw new InviteEmailException("Gmail rejected the email: " + ex.getMostSpecificCause().getMessage(), ex);
 		}
-		catch (IOException ex) {
-			throw new InviteEmailException("Could not reach Resend: " + ex.getMessage(), ex);
-		}
-	}
-
-	private String errorMessage(String body) {
-		try {
-			JsonNode node = json.readTree(body);
-			return node.path("message").asString(body);
-		}
-		catch (RuntimeException ex) {
-			return body;
+		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
+			throw new InviteEmailException("Could not build the invite email: " + ex.getMessage(), ex);
 		}
 	}
 

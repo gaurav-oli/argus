@@ -11,8 +11,7 @@ import org.springframework.context.annotation.Configuration;
  * ({@link SessionStore} is component-scanned.)
  */
 @Configuration
-@EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class, AdminProperties.class,
-		ResendProperties.class})
+@EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class, AdminProperties.class})
 public class SecurityConfig {
 
 	@Bean

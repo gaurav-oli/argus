@@ -155,10 +155,11 @@ services:
       ARGUS_GOOGLE_OAUTH_CLIENT_SECRET: ${ARGUS_GOOGLE_OAUTH_CLIENT_SECRET:-}
       ARGUS_GOOGLE_OAUTH_REDIRECT_URI: ${ARGUS_GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:3000/api/login/oauth2/code/google}
       ARGUS_ADMIN_EMAIL: ${ARGUS_ADMIN_EMAIL:-}
-      # Resend (admin-sent friend invites, with open/join tracking). Empty API key = the send
-      # endpoint fails clearly rather than silently no-op-ing.
-      ARGUS_RESEND_API_KEY: ${ARGUS_RESEND_API_KEY:-}
-      ARGUS_RESEND_FROM_EMAIL: ${ARGUS_RESEND_FROM_EMAIL:-onboarding@resend.dev}
+      # Gmail SMTP (admin-sent friend invites, with open/join tracking) — the admin's own account +
+      # an App Password, no domain to verify. Empty = the send endpoint fails clearly rather than
+      # silently no-op-ing.
+      ARGUS_GMAIL_ADDRESS: ${ARGUS_GMAIL_ADDRESS:-}
+      ARGUS_GMAIL_APP_PASSWORD: ${ARGUS_GMAIL_APP_PASSWORD:-}
       # The public URL invite emails link to (and that the browser actually loads) — the Tailscale
       # Funnel host in production, the local Next dev server otherwise.
       ARGUS_APP_URL: ${ARGUS_APP_URL:-http://localhost:3000}
