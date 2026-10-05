@@ -73,8 +73,15 @@ spring:
           auth: true
           starttls:
             enable: true
-          connectiontimeout: 10000
-          timeout: 10000
+          # 10s was too tight from inside the Mac Mini's Docker container specifically (confirmed
+          # live, 2026-10-05): the TCP connect to smtp.gmail.com consistently took ~10-14s from the
+          # container's network path — likely an IPv6 attempt timing out before falling back to
+          # IPv4 — while the same connect from the host itself was instant. A real admin-invite send
+          # failed with "Read timed out" at exactly 10.0s, twice in a row, with correct credentials
+          # and no Gmail-side rejection. 25s gives comfortable headroom above the observed latency.
+          connectiontimeout: 25000
+          timeout: 25000
+          writetimeout: 25000
 
 # Agent 1 news ingestion (Story 4.1, FR-8). Cadence-gated: ≤5 min in regular hours, ≤15 min off-hours.
 # Finnhub is key-gated (argus.finnhub.api-key); GDELT + RSS are free/keyless and on by default.
