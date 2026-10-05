@@ -284,7 +284,16 @@ export interface Position {
   source: string;
 }
 
-/** Upload a brokerage statement PDF; returns the parsed preview (nothing is persisted yet). */
+/** Mirrors the backend `ImportAccepted` record — an automatic (`mode=auto`) upload queued on the
+ *  background runner; the actual result arrives later as a push notification + email, not here. */
+export interface ImportAccepted {
+  status: string;
+  message: string;
+}
+
+/** Upload a brokerage statement PDF; returns the parsed preview (nothing is persisted yet). Only for
+ *  the explicit {@code mode: "heuristic" | "llm"} synchronous paths — see {@link uploadStatementAuto}
+ *  for the default automatic (local-Gemma, self-verifying) path the Import Statement screen uses. */
 export async function uploadStatement(
   file: File,
   opts?: { mode?: "heuristic" | "llm"; institution?: string },
@@ -306,9 +315,35 @@ export async function uploadStatement(
   return (await res.json()) as ImportPreview;
 }
 
+/**
+ * Upload a statement PDF for AUTOMATIC background processing: tries local Gemma with a
+ * self-verification loop (falling back to Claude only as a last resort), then either applies it to
+ * the portfolio directly or leaves it staged for review — never fails silently. Returns immediately
+ * with just an acknowledgement; the outcome arrives later as a push notification and an email.
+ */
+export async function uploadStatementAuto(file: File, institution?: string): Promise<ImportAccepted> {
+  const form = new FormData();
+  form.append("file", file);
+  const params = new URLSearchParams({ mode: "auto" });
+  if (institution) params.set("institution", institution);
+  const res = await fetch(`${BASE_URL}/api/portfolio/imports?${params.toString()}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+    body: form,
+  });
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as ImportAccepted;
+}
+
 /** Commit a staged import's holdings into the portfolio. */
 export const confirmImport = (importId: number): Promise<Position[]> =>
   apiPost<Position[]>(`/api/portfolio/imports/${importId}/confirm`);
+
+/** Statements the automatic path staged but wasn't confident enough to auto-apply — still awaiting
+ *  a manual look, so an uncertain import is never just lost after its "please review" notification. */
+export const listPendingImports = (): Promise<ImportPreview[]> =>
+  apiGet<ImportPreview[]>("/api/portfolio/imports/pending");
 
 export const listPositions = (): Promise<Position[]> =>
   apiGet<Position[]>("/api/portfolio/positions");

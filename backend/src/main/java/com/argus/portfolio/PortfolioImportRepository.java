@@ -1,6 +1,7 @@
 package com.argus.portfolio;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -18,4 +19,8 @@ public interface PortfolioImportRepository extends JpaRepository<PortfolioImport
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select p from PortfolioImport p where p.id = :id")
 	Optional<PortfolioImport> findByIdForUpdate(@Param("id") Long id);
+
+	/** Imports still awaiting a manual look — the automatic path (Adaptive parser) stages here
+	 * instead of auto-confirming whenever it couldn't reach full confidence. */
+	List<PortfolioImport> findByStatusOrderByCreatedAtDesc(String status);
 }

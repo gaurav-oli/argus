@@ -1,39 +1,26 @@
 package com.argus.security;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
+import com.argus.email.EmailSendException;
+import com.argus.email.EmailSender;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 /**
- * Sends the "you're invited to Argus" email via the admin's own Gmail account (SMTP + an App
- * Password — no domain to own or verify). Resend's unverified sandbox sender was tried first but
- * turned out to only deliver to the Resend account's own address, useless for inviting anyone else;
- * a real Gmail account sending real mail has no such restriction.
- *
- * <p>The link in the email carries the invite's own token ({@link InvitedEmail#ensureToken()}), so
- * {@code InviteTrackingController} can tell this specific person's open apart from anyone else's.
+ * Builds and sends the "you're invited to Argus" email, over {@link EmailSender} (the admin's own
+ * Gmail account). The link in the email carries the invite's own token
+ * ({@link InvitedEmail#ensureToken()}), so {@code InviteTrackingController} can tell this specific
+ * person's open apart from anyone else's.
  */
 @Service
 public class InviteEmailService {
 
-	private final JavaMailSender mailSender;
-	private final String fromAddress;
+	private final EmailSender sender;
 	private final String appUrl;
 
-	public InviteEmailService(JavaMailSender mailSender, @Value("${spring.mail.username:}") String fromAddress,
-			@Value("${argus.app-url:http://localhost:3000}") String appUrl) {
-		this.mailSender = mailSender;
-		this.fromAddress = fromAddress;
+	public InviteEmailService(EmailSender sender, @Value("${argus.app-url:http://localhost:3000}") String appUrl) {
+		this.sender = sender;
 		// Trim any trailing slash so the built link never ends up with "//" before the query string.
 		this.appUrl = appUrl.endsWith("/") ? appUrl.substring(0, appUrl.length() - 1) : appUrl;
-	}
-
-	public boolean configured() {
-		return !fromAddress.isBlank();
 	}
 
 	/** The unique link this person's own invite email points to. Public so the admin UI can show/copy
@@ -46,24 +33,12 @@ public class InviteEmailService {
 	 * send itself fails — the caller (an admin-triggered action) should surface that clearly, not
 	 * swallow it. */
 	public void send(String toEmail, String token, String invitedByName) {
-		if (!configured()) {
-			throw new InviteEmailException("Email sending isn't set up (no Gmail address/app password configured)");
-		}
 		String link = inviteLink(token);
 		try {
-			MimeMessage message = mailSender.createMimeMessage();
-			MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
-			helper.setFrom(fromAddress, "Argus");
-			helper.setTo(toEmail);
-			helper.setSubject(invitedByName + " invited you to Argus");
-			helper.setText(html(link, invitedByName), true);
-			mailSender.send(message);
+			sender.send(toEmail, invitedByName + " invited you to Argus", html(link, invitedByName));
 		}
-		catch (MailException ex) {
-			throw new InviteEmailException("Gmail rejected the email: " + ex.getMostSpecificCause().getMessage(), ex);
-		}
-		catch (MessagingException | java.io.UnsupportedEncodingException ex) {
-			throw new InviteEmailException("Could not build the invite email: " + ex.getMessage(), ex);
+		catch (EmailSendException ex) {
+			throw new InviteEmailException(ex.getMessage(), ex);
 		}
 	}
 

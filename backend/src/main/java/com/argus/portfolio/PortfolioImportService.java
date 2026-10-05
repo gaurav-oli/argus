@@ -84,7 +84,9 @@ public class PortfolioImportService {
 		return stage(filename, llmParser.parse(pdfBytes), institution);
 	}
 
-	private ImportPreview stage(String filename, StatementParser.ParseResult result, String institution) {
+	/** Package-visible so {@link StatementImportRunner} can stage a result from the adaptive parser
+	 * the exact same way any other parse is staged — one path, regardless of source. */
+	ImportPreview stage(String filename, StatementParser.ParseResult result, String institution) {
 		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
 		batch.setInstitution(institution);
 		batch.setRawCash(json.writeValueAsString(result.cash()));
@@ -92,6 +94,16 @@ public class PortfolioImportService {
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
 				saved.getMessage(), result.holdings());
+	}
+
+	/** Imports the automatic path staged but couldn't confidently auto-apply — awaiting a manual look
+	 * (newest first), surfaced on the portfolio page so an uncertain statement is never just lost. */
+	@Transactional(readOnly = true)
+	public List<ImportPreview> listPending() {
+		return imports.findByStatusOrderByCreatedAtDesc(PortfolioImport.PENDING).stream()
+				.map(batch -> new ImportPreview(batch.getId(), batch.getFilename(), batch.getStatus(),
+						batch.getMessage(), read(batch.getRawHoldings())))
+				.toList();
 	}
 
 	/**

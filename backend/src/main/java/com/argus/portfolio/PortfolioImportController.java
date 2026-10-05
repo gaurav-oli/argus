@@ -2,6 +2,7 @@ package com.argus.portfolio;
 
 import com.argus.common.BadRequestException;
 import com.argus.common.PayloadTooLargeException;
+import com.argus.security.CurrentUserContext;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -10,6 +11,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,7 +19,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -31,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class PortfolioImportController {
 
 	private final PortfolioImportService service;
+	private final StatementImportRunner runner;
 
 	/**
 	 * Controller-level byte ceiling, enforced in addition to the servlet multipart limit so the
@@ -39,15 +41,23 @@ public class PortfolioImportController {
 	 */
 	private final long maxFileBytes;
 
-	public PortfolioImportController(PortfolioImportService service,
+	public PortfolioImportController(PortfolioImportService service, StatementImportRunner runner,
 			@Value("${argus.portfolio.import.max-file-bytes:15728640}") long maxFileBytes) {
 		this.service = service;
+		this.runner = runner;
 		this.maxFileBytes = maxFileBytes;
 	}
 
+	/**
+	 * Upload a statement PDF. {@code mode=auto} (what the Import Statement screen now sends) queues it
+	 * on {@link StatementImportRunner}: tries local Gemma with a self-verification loop (falling back
+	 * to Haiku only as a last resort), and either auto-applies it to the portfolio or leaves it staged
+	 * for review — either way the uploader is told what happened by push notification and email, since
+	 * the parse can take a while. The default stays {@code heuristic} (fast, synchronous, immediate
+	 * preview) for backward compatibility; {@code mode=llm} is the same shape but AI-assisted.
+	 */
 	@PostMapping(path = "/imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	@ResponseStatus(HttpStatus.CREATED)
-	public ImportPreview upload(@RequestParam("file") MultipartFile file,
+	public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
 			@RequestParam(name = "mode", defaultValue = "heuristic") String mode,
 			@RequestParam(name = "institution", required = false) String institution) {
 		if (file == null || file.isEmpty()) {
@@ -62,14 +72,28 @@ public class PortfolioImportController {
 		}
 		String name = originalName(file);
 		byte[] bytes = readBytes(file);
-		// "llm" routes to the AI-assisted parser (robust to real multi-account bank statements).
-		return "llm".equalsIgnoreCase(mode) ? service.stageImportLlm(name, bytes, institution)
+		if ("auto".equalsIgnoreCase(mode)) {
+			runner.submit(CurrentUserContext.get(), name, bytes, institution);
+			return ResponseEntity.accepted().body(new ImportAccepted("processing",
+					"We're reading \"" + name + "\" now — you'll get a notification (and an email) once it's done."));
+		}
+		// "llm" routes to the AI-assisted parser (robust to real multi-account bank statements); kept as
+		// an explicit, synchronous, manual-preview option alongside the default automatic path above.
+		ImportPreview preview = "llm".equalsIgnoreCase(mode) ? service.stageImportLlm(name, bytes, institution)
 				: service.stageImport(name, bytes);
+		return ResponseEntity.status(HttpStatus.CREATED).body(preview);
 	}
 
 	@PostMapping("/imports/{id}/confirm")
 	public List<PositionView> confirm(@PathVariable long id) {
 		return service.confirmImport(id);
+	}
+
+	/** Imports the automatic ({@code mode=auto}) path staged but wasn't confident enough to auto-apply
+	 * — still awaiting a manual look, so one never silently disappears after its notification email. */
+	@GetMapping("/imports/pending")
+	public List<ImportPreview> pendingImports() {
+		return service.listPending();
 	}
 
 	@GetMapping("/positions")

@@ -2,39 +2,54 @@ package com.argus.security;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import com.argus.email.EmailSendException;
+import com.argus.email.EmailSender;
 import org.junit.jupiter.api.Test;
-import org.springframework.mail.javamail.JavaMailSender;
 
-/** The pure parts: link building and the "not configured" guard. The real Gmail SMTP send is
- * verified live post-deploy (same convention as GoogleOAuthService's token exchange). */
+/** The invite email's own concerns (the link, wrapping a send failure) — the actual SMTP mechanics
+ * are {@link EmailSender}'s job, covered there. */
 class InviteEmailServiceTest {
 
-	private final JavaMailSender mailSender = mock(JavaMailSender.class);
+	private final EmailSender sender = mock(EmailSender.class);
 
 	@Test
 	void buildsTheInviteLinkUnderTheConfiguredAppUrl() {
-		InviteEmailService service =
-				new InviteEmailService(mailSender, "admin@gmail.com", "https://sh-dow.taila43287.ts.net");
+		InviteEmailService service = new InviteEmailService(sender, "https://sh-dow.taila43287.ts.net");
 
 		assertEquals("https://sh-dow.taila43287.ts.net/?invite=abc123", service.inviteLink("abc123"));
 	}
 
 	@Test
 	void aTrailingSlashOnTheAppUrlDoesNotDoubleUp() {
-		InviteEmailService service =
-				new InviteEmailService(mailSender, "admin@gmail.com", "https://sh-dow.taila43287.ts.net/");
+		InviteEmailService service = new InviteEmailService(sender, "https://sh-dow.taila43287.ts.net/");
 
 		assertEquals("https://sh-dow.taila43287.ts.net/?invite=abc123", service.inviteLink("abc123"));
 	}
 
 	@Test
-	void sendingWithNoGmailAddressConfiguredFailsClearlyRatherThanSilentlyNoOpping() {
-		InviteEmailService service = new InviteEmailService(mailSender, "", "https://sh-dow.taila43287.ts.net");
+	void aFailedSendIsWrappedAsAnInviteEmailException() {
+		InviteEmailService service = new InviteEmailService(sender, "https://sh-dow.taila43287.ts.net");
+		doThrow(new EmailSendException("Gmail rejected the email")).when(sender).send(any(), any(), any());
 
 		InviteEmailException ex = assertThrows(InviteEmailException.class,
 				() -> service.send("friend@gmail.com", "tok", "Admin"));
-		assertEquals("Email sending isn't set up (no Gmail address/app password configured)", ex.getMessage());
+		assertEquals("Gmail rejected the email", ex.getMessage());
+	}
+
+	@Test
+	void sendingCallsTheSenderWithTheRightRecipientSubjectAndLink() {
+		InviteEmailService service = new InviteEmailService(sender, "https://sh-dow.taila43287.ts.net");
+
+		service.send("friend@gmail.com", "tok123", "Admin");
+
+		verify(sender).send(org.mockito.ArgumentMatchers.eq("friend@gmail.com"),
+				org.mockito.ArgumentMatchers.eq("Admin invited you to Argus"),
+				org.mockito.ArgumentMatchers.argThat(
+						html -> html != null && html.contains("https://sh-dow.taila43287.ts.net/?invite=tok123")));
 	}
 }
