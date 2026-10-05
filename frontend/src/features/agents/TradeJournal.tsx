@@ -14,12 +14,14 @@ import {
 } from "@/lib/apiClient";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { cn } from "@/lib/utils";
+import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
 
 /**
  * Trade Journal (Story 11.1, F22): the 100 most recent Taken/Declined recommendation decisions,
  * with its frozen FR-15 rationale snapshot and — once a matching paper leg closes — how Agent 5's call
  * actually played out. Read-only; sits next to the aggregate Regret analysis card it complements with
- * per-decision detail.
+ * per-decision detail. Shown as a filterable, sortable, paged table so the full history stays
+ * reachable without one long scroll.
  */
 export function TradeJournal() {
   const [entries, setEntries] = useState<JournalEntryView[] | null>(null);
@@ -47,13 +49,131 @@ export function TradeJournal() {
       ) : entries.length === 0 ? (
         <Empty>Nothing decided yet — entries appear as soon as the Investor persona acts on a recommendation.</Empty>
       ) : (
-        <ul className="flex max-h-[32rem] flex-col divide-y divide-border/60 overflow-y-auto">
-          {entries.map((e) => (
-            <JournalRow key={e.decisionId} entry={e} logoUrl={logos[e.ticker]} />
-          ))}
-        </ul>
+        <JournalTable entries={entries} logos={logos} />
       )}
     </MotionCard>
+  );
+}
+
+type DecisionFilter = "all" | "TAKEN" | "DECLINED";
+type WhoFilter = "all" | "AGENT" | "USER";
+type OutcomeFilter = "all" | "WIN" | "LOSS" | "PENDING";
+type JournalKey = "ticker" | "date" | "outcome";
+
+/** Rows per page in the journal. */
+const PAGE = 12;
+
+/**
+ * The journal as a filterable, sortable, paged table: decision / who decided / outcome filters, a
+ * ticker search, and the same lazily-loaded detail (odds, reasoning, entry, signals, persona takes)
+ * opening under any row. Nothing from the old list is dropped — it is just a page at a time.
+ */
+function JournalTable({ entries, logos }: { entries: JournalEntryView[]; logos: Record<string, string> }) {
+  const [decision, setDecision] = useState<DecisionFilter>("all");
+  const [who, setWho] = useState<WhoFilter>("all");
+  const [outcome, setOutcome] = useState<OutcomeFilter>("all");
+  const [query, setQuery] = useState("");
+  const [sort, onSort] = useSort<JournalKey>({ key: "date", dir: "desc" });
+
+  const count = (pred: (e: JournalEntryView) => boolean) => entries.filter(pred).length;
+  const rows = useMemo(() => {
+    const q = query.trim().toUpperCase();
+    const get = {
+      ticker: (e: JournalEntryView) => e.ticker,
+      date: (e: JournalEntryView) => e.decidedAt,
+      outcome: (e: JournalEntryView) => e.outcomeReturnPct,
+    }[sort.key];
+    return entries
+      .filter((e) => decision === "all" || e.decision === decision)
+      .filter((e) => who === "all" || e.source === who)
+      .filter((e) => outcome === "all" || e.outcome === outcome)
+      .filter((e) => q === "" || e.ticker.toUpperCase().includes(q))
+      .sort(compareBy(get, sort.dir));
+  }, [entries, decision, who, outcome, query, sort]);
+  const paged = usePaged(rows, PAGE);
+
+  const wins = count((e) => e.outcome === "WIN");
+  const losses = count((e) => e.outcome === "LOSS");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="font-mono text-xs text-text-secondary">
+        {entries.length} decisions · {count((e) => e.decision === "TAKEN")} taken · {count((e) => e.decision === "DECLINED")} declined ·{" "}
+        <span className="text-gains">{wins} won</span> · <span className="text-losses">{losses} lost</span> · {count((e) => e.outcome === "PENDING")} pending
+      </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <FilterChips
+          label="Decision"
+          value={decision}
+          onChange={setDecision}
+          options={[
+            { value: "all", label: "All" },
+            { value: "TAKEN", label: "Taken", count: count((e) => e.decision === "TAKEN") },
+            { value: "DECLINED", label: "Declined", count: count((e) => e.decision === "DECLINED") },
+          ]}
+        />
+        <FilterChips
+          label="Decided by"
+          value={who}
+          onChange={setWho}
+          options={[
+            { value: "all", label: "Anyone" },
+            { value: "AGENT", label: "Investor", count: count((e) => e.source === "AGENT") },
+            { value: "USER", label: "You", count: count((e) => e.source === "USER") },
+          ]}
+        />
+        <FilterChips
+          label="Outcome"
+          value={outcome}
+          onChange={setOutcome}
+          options={[
+            { value: "all", label: "Any result" },
+            { value: "WIN", label: "Win", count: wins },
+            { value: "LOSS", label: "Loss", count: losses },
+            { value: "PENDING", label: "Pending", count: count((e) => e.outcome === "PENDING") },
+          ]}
+        />
+        <label className="ml-auto flex items-center gap-1.5 font-mono text-[11px] text-text-secondary">
+          <span aria-hidden className="text-accent">&gt;</span>
+          <span className="sr-only">Search by ticker</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ticker"
+            maxLength={12}
+            className="w-24 border border-[var(--glass-border)] bg-transparent px-2 py-1 text-text-primary outline-none focus:border-accent"
+          />
+        </label>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[34rem] font-mono text-xs tabular-nums">
+          <thead className="border-b border-[var(--hairline)] text-left text-[10px]">
+            <tr>
+              <SortHeader label="Ticker" k="ticker" sort={sort} onSort={onSort} />
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">Call</th>
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">Decision</th>
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">By</th>
+              <SortHeader label="Date" k="date" sort={sort} onSort={onSort} />
+              <SortHeader label="Outcome" k="outcome" sort={sort} onSort={onSort} className="text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {paged.rows.map((e) => (
+              <JournalRow key={e.decisionId} entry={e} logoUrl={logos[e.ticker]} />
+            ))}
+            {paged.rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-4 text-center text-text-secondary">
+                  No decisions match these filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Pager p={paged} />
+    </div>
   );
 }
 
@@ -74,54 +194,53 @@ function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: stri
   }
 
   return (
-    <li className="py-3">
-      <button onClick={toggle} className="flex w-full items-center justify-between gap-3 text-left">
-        <div className="flex items-center gap-2">
-          <CompanyIcon ticker={entry.ticker} logoUrl={logoUrl} title={entry.ticker} size={20} />
-          <span className="text-sm font-semibold text-text-primary">{entry.ticker}</span>
-          <span
-            className={cn(
-              "text-xs font-medium",
-              entry.direction === "BULLISH" ? "text-gains" : "text-losses",
-            )}
-          >
-            {entry.direction === "BULLISH" ? "▲" : "▼"}
+    <>
+      <tr className={cn("cursor-pointer border-b border-[var(--hairline)]/60 hover:bg-[var(--hover-wash)]", open && "bg-[var(--hover-wash)]")} onClick={toggle}>
+        <td className="py-1.5">
+          <span className="flex items-center gap-2">
+            <CompanyIcon ticker={entry.ticker} logoUrl={logoUrl} title={entry.ticker} size={16} />
+            <button type="button" aria-expanded={open} className="font-semibold text-text-primary hover:text-accent">
+              {entry.ticker}
+              <span aria-hidden className="ml-1 text-text-secondary">{open ? "▾" : "▸"}</span>
+            </button>
           </span>
+        </td>
+        <td className={cn("py-1.5", entry.direction === "BULLISH" ? "text-gains" : "text-losses")}>
+          {entry.direction === "BULLISH" ? "▲ bull" : "▼ bear"}
+        </td>
+        <td className="py-1.5">
           <span
             className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              "px-1.5 py-0.5 text-[10px] font-medium",
               entry.decision === "TAKEN" ? "bg-gains/15 text-gains" : "bg-border/60 text-text-secondary",
             )}
           >
             {entry.decision === "TAKEN" ? "Taken" : "Declined"}
           </span>
+        </td>
+        <td className="py-1.5">
           <SourceBadge source={entry.source} />
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] text-text-secondary">
-            {new Date(entry.decidedAt).toLocaleDateString()}
-          </span>
+        </td>
+        <td className="py-1.5 text-[11px] text-text-secondary">{new Date(entry.decidedAt).toLocaleDateString()}</td>
+        <td className="py-1.5 text-right">
           <OutcomeBadge outcome={entry.outcome} returnPct={entry.outcomeReturnPct} />
-        </div>
-      </button>
-
+        </td>
+      </tr>
       {open && (
-        <div className="mt-3 border-t border-border/60 pt-3">
-          {loadingDetail || detail === null ? (
-            <Skeleton className="h-24" />
-          ) : (
-            <JournalDetail detail={detail} />
-          )}
-        </div>
+        <tr className="border-b border-[var(--hairline)]/60 bg-[var(--hover-wash)]">
+          <td colSpan={6} className="term-line-in px-2 py-3 font-sans">
+            {loadingDetail || detail === null ? <Skeleton className="h-24" /> : <JournalDetail detail={detail} />}
+          </td>
+        </tr>
       )}
-    </li>
+    </>
   );
 }
 
 function JournalDetail({ detail }: { detail: JournalDetailView }) {
   const bull = detail.bullProbability != null ? Math.round(detail.bullProbability * 100) : null;
   return (
-    <div className="flex flex-col gap-3 text-xs">
+    <div className="grid grid-cols-1 gap-3 text-xs lg:grid-cols-2">
       {(bull != null || detail.confidence != null) && (
         <p className="text-text-secondary">
           At decision time: {bull != null && <>{bull}% bullish</>}
@@ -179,7 +298,7 @@ function JournalDetail({ detail }: { detail: JournalDetailView }) {
         </div>
       )}
 
-      <p className="text-[10px] text-text-secondary/80">
+      <p className="text-[10px] text-text-secondary/80 lg:col-span-2">
         {detail.outcome === "PENDING"
           ? "Outcome pending — no closed paper leg for this recommendation yet."
           : "Outcome is the Investor's paper-trade return vs SPY for this recommendation, the same figure Regret analysis uses."}

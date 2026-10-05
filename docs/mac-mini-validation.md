@@ -389,6 +389,22 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] Tapping a card flips it to the cream brief; "↻ back" flips it back.
   - [ ] On Macro's brief, **Review Now** still runs and shows its result.
   - [ ] Phone width: 2 cards per row, and nothing scrolls sideways.
+  - [ ] Status sits inside each card (no rotated stamp). Long codenames (FUNDAMENTALS,
+        RECOMMENDER) fit without clipping on both the laptop and the 49" monitor.
+- [ ] **Analyst & Investor tables:**
+  - [ ] **Investor record:** the ▲▼ strip of recent results. Open book and closed trades sit side
+        by side on wide screens.
+    - [ ] Clicking column headers sorts (▲/▼ shows).
+    - [ ] Closed-trade filters (Won / Lost / Stopped / Flipped) show correct counts.
+    - [ ] Clicking a lost trade opens the Analyst's post-mortem.
+    - [ ] The new Price column shows for open positions.
+    - [ ] Pages of 8 work.
+  - [ ] **Trade Journal:**
+    - [ ] The summary line counts match.
+    - [ ] Decision / Investor-vs-You / Outcome filters and the ticker search combine correctly.
+    - [ ] Sorting by Date and Outcome works.
+    - [ ] Pages of 12 work.
+    - [ ] Clicking a row still loads the full reasoning, signals and persona takes.
 - [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
 - [ ] **Logo (L1):**
   - [ ] The sidebar and mobile top bar show the ring-of-eyes mark with ARGUS. The ring's eyes blink in

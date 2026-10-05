@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Sensitive } from "@/features/privacy/Sensitive";
-import { getPaperTrades, type PaperTradeScoreboard } from "@/lib/apiClient";
+import {
+  getPaperTrades,
+  type ClosedTradeView,
+  type OpenPositionView,
+  type PaperTradeScoreboard,
+} from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
+import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { absTime } from "@/lib/time";
 
@@ -14,7 +21,9 @@ import { absTime } from "@/lib/time";
  * The Investor persona's autonomous scoreboard (FR-11 follow-up). Instead of asking you to log which
  * calls you took, Agent 5's Investor opens a fixed-notional paper trade on every recommendation and
  * marks it to market at the horizon. This shows the resulting book — win rate, realized return, and
- * the Analyst's post-mortems on losing calls — all built with no input from you.
+ * the Analyst's post-mortems on losing calls — all built with no input from you. The open book and
+ * the closed trades are sortable, paged tables side by side (closed trades filterable, post-mortems
+ * opening per row), so a long history never pushes the rest of the page down.
  */
 export function PaperInvestorScoreboard() {
   const [board, setBoard] = useState<PaperTradeScoreboard | null>(null);
@@ -85,131 +94,271 @@ export function PaperInvestorScoreboard() {
         />
       </div>
 
-      {board.openByTicker.length > 0 && <OpenBook board={board} logos={logos} />}
+      {!noneClosed && <Streak trades={board.recent} />}
 
-      {noneClosed ? (
-        <p className="rounded-lg border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-4 text-center text-xs text-text-secondary">
-          {board.openTrades > 0
-            ? `${board.openTrades} position${board.openTrades === 1 ? "" : "s"} open and being held — the first results land here as they reach their 30-day horizon.`
-            : "No trades yet — the Investor opens one on each new recommendation."}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2 border-t border-[var(--hairline)] pt-3">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">
-            Recently closed
+      <div className="grid grid-cols-1 gap-4 border-t border-[var(--hairline)] pt-3 xl:grid-cols-2">
+        {board.openByTicker.length > 0 ? (
+          <OpenBook board={board} logos={logos} />
+        ) : (
+          <p className="text-xs text-text-secondary">No open positions right now.</p>
+        )}
+        {noneClosed ? (
+          <p className="border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-4 text-center text-xs text-text-secondary">
+            {board.openTrades > 0
+              ? `${board.openTrades} position${board.openTrades === 1 ? "" : "s"} open and being held — the first results land here as they reach their 30-day horizon.`
+              : "No trades yet — the Investor opens one on each new recommendation."}
           </p>
-          <ul className="flex flex-col gap-2.5">
-            {board.recent.map((t, i) => (
-              <li key={i} className="flex flex-col gap-1">
-                <div className="flex items-center gap-3 text-sm">
-                  <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={18} />
-                  <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{t.ticker}</span>
-                  <span
-                    className="w-16 shrink-0 text-[11px] font-semibold uppercase"
-                    style={{ color: t.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
-                  >
-                    {t.direction === "BEARISH" ? "short" : "long"}
-                  </span>
-                  <span
-                    className="w-16 shrink-0 font-mono tabular-nums"
-                    style={{ color: t.won ? "var(--color-gains)" : "var(--color-losses)" }}
-                  >
-                    {t.returnPct === null ? "—" : `${signed(t.returnPct)}%`}
-                  </span>
-                  <span
-                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                    style={{
-                      backgroundColor: t.won ? "color-mix(in srgb, var(--color-gains) 15%, transparent)" : "color-mix(in srgb, var(--color-losses) 15%, transparent)",
-                      color: t.won ? "var(--color-gains)" : "var(--color-losses)",
-                    }}
-                  >
-                    {t.won ? "WON" : "LOST"}
-                  </span>
-                  {t.exitReason === "STOP" && (
-                    <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning" title="Agent 10's chart-based protective stop was hit before the horizon">
-                      stopped out
-                    </span>
-                  )}
-                  {t.exitReason === "THESIS_FLIP" && (
-                    <span className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning" title="Agent 11 re-analysed the stock and turned against the position">
-                      Agent 11 flipped
-                    </span>
-                  )}
-                  <span className="ml-auto shrink-0 font-mono text-[10px] text-text-secondary">
-                    {absTime(t.closedAt)}
-                  </span>
-                </div>
-                {t.review && (
-                  <p className="pl-14 text-[11px] italic leading-snug text-text-secondary">
-                    Analyst: {t.review}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        ) : (
+          <ClosedBook trades={board.recent} logos={logos} />
+        )}
+      </div>
     </MotionCard>
   );
 }
 
+type OpenKey = "ticker" | "notional" | "unrealized";
+
 function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record<string, string> }) {
   const u = board.openUnrealizedPct;
+  const [sort, onSort] = useSort<OpenKey>({ key: "unrealized", dir: "desc" });
+  const rows = useMemo(() => {
+    const get = {
+      ticker: (p: OpenPositionView) => p.ticker,
+      notional: (p: OpenPositionView) => p.notional,
+      unrealized: (p: OpenPositionView) => p.unrealizedPct,
+    }[sort.key];
+    return [...board.openByTicker].sort(compareBy(get, sort.dir));
+  }, [board.openByTicker, sort]);
+  const paged = usePaged(rows, PAGE);
+
   return (
-    <div className="flex flex-col gap-2 border-t border-[var(--hairline)] pt-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">
-          Open book · held until horizon
-        </p>
+    <div className="min-w-0">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">Open book · held until horizon</p>
         <p className="font-mono text-xs tabular-nums text-text-secondary">
           {board.openTrades} pos · <Sensitive className="text-xs">${fmt(board.openDeployed, 0)}</Sensitive> in
           {u != null && (
-            <span
-              className="ml-2 font-semibold"
-              style={{ color: u > 0 ? "var(--color-gains)" : u < 0 ? "var(--color-losses)" : undefined }}
-            >
+            <span className="ml-2 font-semibold" style={{ color: tone(u) }}>
               {signed(u)}% unreal.
             </span>
           )}
         </p>
       </div>
-      <ul className="flex max-h-60 flex-col gap-1.5 overflow-y-auto pr-1">
-        {board.openByTicker.map((p) => (
-          <li key={p.ticker} className="flex items-center gap-3 text-sm">
-            <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={18} />
-            <span className="w-14 shrink-0 font-mono font-semibold text-text-primary">{p.ticker}</span>
-            <span
-              className="w-14 shrink-0 text-[11px] font-semibold uppercase"
-              style={{ color: p.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}
-            >
-              {p.direction === "BEARISH" ? "short" : "long"}
-            </span>
-            <Sensitive className="w-24 shrink-0 font-mono text-[11px]">
-              <span className="w-24 shrink-0 font-mono text-[11px] text-text-secondary">
-                {p.positions}× · ${fmt(p.notional, 0)}
-              </span>
-            </Sensitive>
-            <span
-              className="ml-auto shrink-0 font-mono tabular-nums"
-              style={{
-                color:
-                  p.unrealizedPct == null
-                    ? undefined
-                    : p.unrealizedPct > 0
-                      ? "var(--color-gains)"
-                      : p.unrealizedPct < 0
-                        ? "var(--color-losses)"
-                        : undefined,
-              }}
-            >
-              {p.unrealizedPct == null ? "—" : `${signed(p.unrealizedPct)}%`}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[22rem] font-mono text-xs tabular-nums">
+          <thead className="border-b border-[var(--hairline)] text-left text-[10px]">
+            <tr>
+              <SortHeader label="Ticker" k="ticker" sort={sort} onSort={onSort} />
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">Side</th>
+              <SortHeader label="Size" k="notional" sort={sort} onSort={onSort} />
+              <th scope="col" className="py-1.5 text-right font-normal uppercase tracking-wider text-text-secondary">Price</th>
+              <SortHeader label="Unreal." k="unrealized" sort={sort} onSort={onSort} className="text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {paged.rows.map((p) => (
+              <tr key={p.ticker} className="border-b border-[var(--hairline)]/60 hover:bg-[var(--hover-wash)]">
+                <td className="py-1.5">
+                  <span className="flex items-center gap-2">
+                    <CompanyIcon ticker={p.ticker} logoUrl={logos[p.ticker]} title={p.ticker} size={16} />
+                    <span className="font-semibold text-text-primary">{p.ticker}</span>
+                  </span>
+                </td>
+                <td className="py-1.5 uppercase" style={{ color: p.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}>
+                  {p.direction === "BEARISH" ? "short" : "long"}
+                </td>
+                <td className="py-1.5 text-text-secondary">
+                  <Sensitive className="text-xs">
+                    <span>
+                      {p.positions}× · ${fmt(p.notional, 0)}
+                    </span>
+                  </Sensitive>
+                </td>
+                <td className="py-1.5 text-right text-text-secondary">{p.currentPrice == null ? "—" : fmt(p.currentPrice, 2)}</td>
+                <td className="py-1.5 text-right font-semibold" style={{ color: tone(p.unrealizedPct) }}>
+                  {p.unrealizedPct == null ? "—" : `${signed(p.unrealizedPct)}%`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager p={paged} />
     </div>
   );
 }
+
+type ClosedFilter = "all" | "won" | "lost" | "stop" | "flip";
+type ClosedKey = "ticker" | "return" | "closed";
+
+/** Recently closed trades: filterable, sortable, paged; the Analyst's post-mortem opens per row. */
+function ClosedBook({ trades, logos }: { trades: ClosedTradeView[]; logos: Record<string, string> }) {
+  const [filter, setFilter] = useState<ClosedFilter>("all");
+  const [sort, onSort] = useSort<ClosedKey>({ key: "closed", dir: "desc" });
+  const [open, setOpen] = useState<number | null>(null);
+
+  const counts = {
+    all: trades.length,
+    won: trades.filter((t) => t.won).length,
+    lost: trades.filter((t) => !t.won).length,
+    stop: trades.filter((t) => t.exitReason === "STOP").length,
+    flip: trades.filter((t) => t.exitReason === "THESIS_FLIP").length,
+  };
+  const rows = useMemo(() => {
+    const keep = {
+      all: () => true,
+      won: (t: ClosedTradeView) => t.won,
+      lost: (t: ClosedTradeView) => !t.won,
+      stop: (t: ClosedTradeView) => t.exitReason === "STOP",
+      flip: (t: ClosedTradeView) => t.exitReason === "THESIS_FLIP",
+    }[filter];
+    const get = {
+      ticker: (t: ClosedTradeView) => t.ticker,
+      return: (t: ClosedTradeView) => t.returnPct,
+      closed: (t: ClosedTradeView) => t.closedAt,
+    }[sort.key];
+    // Keep each trade's original index as a stable identity for the expander.
+    return trades
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => keep(t))
+      .sort((a, b) => compareBy((x: { t: ClosedTradeView }) => get(x.t), sort.dir)(a, b));
+  }, [trades, filter, sort]);
+  const paged = usePaged(rows, PAGE);
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">Recently closed</p>
+        <FilterChips
+          label="Filter closed trades"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: "All", count: counts.all },
+            { value: "won", label: "Won", count: counts.won },
+            { value: "lost", label: "Lost", count: counts.lost },
+            { value: "stop", label: "Stopped", count: counts.stop },
+            { value: "flip", label: "Flipped", count: counts.flip },
+          ]}
+        />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[24rem] font-mono text-xs tabular-nums">
+          <thead className="border-b border-[var(--hairline)] text-left text-[10px]">
+            <tr>
+              <SortHeader label="Ticker" k="ticker" sort={sort} onSort={onSort} />
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">Side</th>
+              <SortHeader label="Return" k="return" sort={sort} onSort={onSort} />
+              <th scope="col" className="py-1.5 font-normal uppercase tracking-wider text-text-secondary">Result</th>
+              <SortHeader label="Closed" k="closed" sort={sort} onSort={onSort} className="text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {paged.rows.map(({ t, i }) => {
+              const expanded = open === i;
+              return (
+                <Fragment key={i}>
+                  <tr
+                    className={cn("border-b border-[var(--hairline)]/60 hover:bg-[var(--hover-wash)]", t.review && "cursor-pointer")}
+                    onClick={t.review ? () => setOpen(expanded ? null : i) : undefined}
+                  >
+                    <td className="py-1.5">
+                      <span className="flex items-center gap-2">
+                        <CompanyIcon ticker={t.ticker} logoUrl={logos[t.ticker]} title={t.ticker} size={16} />
+                        {t.review ? (
+                          <button type="button" aria-expanded={expanded} className="font-semibold text-text-primary hover:text-accent">
+                            {t.ticker}
+                            <span aria-hidden className="ml-1 text-text-secondary">{expanded ? "▾" : "▸"}</span>
+                          </button>
+                        ) : (
+                          <span className="font-semibold text-text-primary">{t.ticker}</span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-1.5 uppercase" style={{ color: t.direction === "BEARISH" ? "var(--color-losses)" : "var(--color-gains)" }}>
+                      {t.direction === "BEARISH" ? "short" : "long"}
+                    </td>
+                    <td className="py-1.5 font-semibold" style={{ color: t.won ? "var(--color-gains)" : "var(--color-losses)" }}>
+                      {t.returnPct === null ? "—" : `${signed(t.returnPct)}%`}
+                    </td>
+                    <td className="py-1.5">
+                      <span className="flex flex-wrap items-center gap-1">
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: `color-mix(in srgb, ${t.won ? "var(--color-gains)" : "var(--color-losses)"} 15%, transparent)`,
+                            color: t.won ? "var(--color-gains)" : "var(--color-losses)",
+                          }}
+                        >
+                          {t.won ? "WON" : "LOST"}
+                        </span>
+                        {t.exitReason === "STOP" && (
+                          <span className="bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning" title="Agent 10's chart-based protective stop was hit before the horizon">
+                            stopped out
+                          </span>
+                        )}
+                        {t.exitReason === "THESIS_FLIP" && (
+                          <span className="bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning" title="Agent 11 re-analysed the stock and turned against the position">
+                            Agent 11 flipped
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right text-[10px] text-text-secondary">{absTime(t.closedAt)}</td>
+                  </tr>
+                  {expanded && t.review && (
+                    <tr className="border-b border-[var(--hairline)]/60 bg-[var(--hover-wash)]">
+                      <td colSpan={5} className="term-line-in px-2 py-2 text-[11px] italic leading-snug text-text-secondary">
+                        Analyst: {t.review}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+            {paged.rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-4 text-center text-text-secondary">
+                  No trades match this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Pager p={paged} />
+    </div>
+  );
+}
+
+/** The last closed trades as a ▲▼ strip, newest on the right: the record at a glance. */
+function Streak({ trades }: { trades: ClosedTradeView[] }) {
+  const ordered = [...trades].sort((a, b) => a.closedAt.localeCompare(b.closedAt)).slice(-30);
+  const wins = ordered.filter((t) => t.won).length;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
+      <span className="text-[10px] uppercase tracking-wider text-text-secondary">Last {ordered.length}</span>
+      <span role="img" aria-label={`${wins} won, ${ordered.length - wins} lost, oldest first`} className="tracking-[0.15em]">
+        {ordered.map((t, i) => (
+          <span key={i} aria-hidden style={{ color: t.won ? "var(--color-gains)" : "var(--color-losses)" }}>
+            {t.won ? "▲" : "▼"}
+          </span>
+        ))}
+      </span>
+      <span className="text-text-secondary">
+        {wins}–{ordered.length - wins}
+      </span>
+    </div>
+  );
+}
+
+function tone(n: number | null): string | undefined {
+  if (n == null || n === 0) return undefined;
+  return n > 0 ? "var(--color-gains)" : "var(--color-losses)";
+}
+
+/** Rows per page in the book tables. */
+const PAGE = 8;
 
 function Tile({
   label,
