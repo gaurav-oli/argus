@@ -13,14 +13,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                     returned to the client
  * @param redirectUri  must exactly match an "Authorized redirect URI" registered on that client —
  *                     {@code https://<tailnet-host>/api/login/oauth2/code/google} on the Mini
- * @param adminEmail   the one email promoted to {@code admin=true} the first time it signs in
  */
 @ConfigurationProperties("argus.google-oauth")
 public record GoogleOAuthProperties(
 		@DefaultValue("") String clientId,
 		@DefaultValue("") String clientSecret,
-		@DefaultValue("http://localhost:3000/api/login/oauth2/code/google") String redirectUri,
-		@DefaultValue("") String adminEmail) {
+		@DefaultValue("http://localhost:3000/api/login/oauth2/code/google") String redirectUri) {
 
 	public boolean configured() {
 		return !clientId.isBlank() && !clientSecret.isBlank();

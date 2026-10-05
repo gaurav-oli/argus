@@ -28,12 +28,14 @@ class GoogleAuthControllerTest {
 	private final SessionStore sessions = mock(SessionStore.class);
 	private final SecurityProperties securityProperties = new SecurityProperties(java.time.Duration.ofMinutes(15), true);
 
+	private static final AdminProperties ADMIN = new AdminProperties("admin@example.com");
+
 	private GoogleAuthController controller(GoogleOAuthProperties props) {
-		return new GoogleAuthController(google, props, invited, users, sessions, securityProperties);
+		return new GoogleAuthController(google, props, ADMIN, invited, users, sessions, securityProperties);
 	}
 
 	private static final GoogleOAuthProperties CONFIGURED =
-			new GoogleOAuthProperties("client-id", "secret", "https://example.ts.net/api/login/oauth2/code/google", "admin@example.com");
+			new GoogleOAuthProperties("client-id", "secret", "https://example.ts.net/api/login/oauth2/code/google");
 
 	private static HttpServletRequest requestWithStateCookie(String value) {
 		HttpServletRequest req = mock(HttpServletRequest.class);
@@ -44,7 +46,7 @@ class GoogleAuthControllerTest {
 
 	@Test
 	void loginIsUnavailableWhenNoClientIsConfigured() {
-		ResponseEntity<Void> res = controller(new GoogleOAuthProperties("", "", "http://x", "")).login();
+		ResponseEntity<Void> res = controller(new GoogleOAuthProperties("", "", "http://x")).login();
 
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, res.getStatusCode());
 	}

@@ -25,7 +25,7 @@ class GoogleOAuthServiceTest {
 	private static final String CLIENT_ID = "test-client-id.apps.googleusercontent.com";
 
 	private final GoogleOAuthProperties props = new GoogleOAuthProperties(
-			CLIENT_ID, "test-secret", "https://example.ts.net/api/login/oauth2/code/google", "");
+			CLIENT_ID, "test-secret", "https://example.ts.net/api/login/oauth2/code/google");
 	private final GoogleOAuthService service = new GoogleOAuthService(props);
 
 	private static RsaJsonWebKey newKey() throws Exception {

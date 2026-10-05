@@ -35,15 +35,18 @@ public class GoogleAuthController {
 
 	private final GoogleOAuthService google;
 	private final GoogleOAuthProperties props;
+	private final AdminProperties admin;
 	private final InvitedEmailRepository invited;
 	private final AppUserRepository users;
 	private final SessionStore sessions;
 	private final SecurityProperties securityProperties;
 
-	public GoogleAuthController(GoogleOAuthService google, GoogleOAuthProperties props, InvitedEmailRepository invited,
-			AppUserRepository users, SessionStore sessions, SecurityProperties securityProperties) {
+	public GoogleAuthController(GoogleOAuthService google, GoogleOAuthProperties props, AdminProperties admin,
+			InvitedEmailRepository invited, AppUserRepository users, SessionStore sessions,
+			SecurityProperties securityProperties) {
 		this.google = google;
 		this.props = props;
+		this.admin = admin;
 		this.invited = invited;
 		this.users = users;
 		this.sessions = sessions;
@@ -121,8 +124,8 @@ public class GoogleAuthController {
 			if (invited.findById(email).isEmpty()) {
 				return null;
 			}
-			boolean admin = !props.adminEmail().isBlank() && props.adminEmail().equalsIgnoreCase(email);
-			user = new AppUser(identity.sub(), email, identity.name(), identity.pictureUrl(), admin);
+			boolean isAdmin = !admin.email().isBlank() && admin.email().equalsIgnoreCase(email);
+			user = new AppUser(identity.sub(), email, identity.name(), identity.pictureUrl(), isAdmin);
 		}
 		user.recordLogin();
 		return users.save(user);

@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
  * ({@link SessionStore} and {@link PinHasher} are component-scanned.)
  */
 @Configuration
-@EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class})
+@EnableConfigurationProperties({SecurityProperties.class, GoogleOAuthProperties.class, AdminProperties.class})
 public class SecurityConfig {
 
 	@Bean
