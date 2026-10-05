@@ -2,7 +2,7 @@ import { AlertCards } from "@/components/dashboard/AlertCards";
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { BriefingCard } from "@/components/dashboard/BriefingCard";
 import { DegradedBanner } from "@/components/dashboard/DegradedBanner";
-import { HomeHeader } from "@/components/dashboard/HomeHeader";
+import { HomeGreeting } from "@/components/dashboard/HomeGreeting";
 import { MarketNews } from "@/components/dashboard/MarketNews";
 import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
@@ -23,11 +23,7 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-6xl">
       <DegradedBanner />
-      <HomeHeader
-        eyebrow="Overview"
-        title="Good morning, Gaurav"
-        subtitle="Here's how your book is doing today."
-      />
+      <HomeGreeting />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
         {/* Pinned morning briefing (Epic 8 — real data) */}
