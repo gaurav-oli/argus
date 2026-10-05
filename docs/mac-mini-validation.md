@@ -380,6 +380,15 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] Tapping an agent dims the others; tapping it again restores them.
   - [ ] Phone width: the streams stack, the core and calls box sit underneath, and nothing scrolls
         sideways.
+- [ ] **Agents → dossiers** (below the pipeline):
+  - [ ] Three cabinets (Sources / Market / Analysis) in the pipeline's colours. Each header's
+        "N active · N off grid" count matches its cards.
+  - [ ] Bars load segment by segment. Working agents shed rising 0/1 bits. A stalled agent shows an
+        **OFF GRID** stamp and red bits falling off its FRESH bar.
+  - [ ] Each stamp agrees with that agent's row in the pipeline.
+  - [ ] Tapping a card flips it to the cream brief; "↻ back" flips it back.
+  - [ ] On Macro's brief, **Review Now** still runs and shows its result.
+  - [ ] Phone width: 2 cards per row, and nothing scrolls sideways.
 - [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
 - [ ] **Logo (L1):**
   - [ ] The sidebar and mobile top bar show the ring-of-eyes mark with ARGUS. The ring's eyes blink in

@@ -93,3 +93,58 @@ describe("compactAge", () => {
     assert.equal(compactAge(2880), "2d");
   });
 });
+
+describe("dossiers", async () => {
+  const { dossierStats, stampFor, reportsTo } = await import("./pipelineFlow.ts");
+  const w = (over) => classifyWire(agent(over), NOW);
+
+  it("stamps follow the pipeline's wire states", () => {
+    assert.equal(stampFor(w({})), "ACTIVE");
+    assert.equal(stampFor(w({ lastActivity: ago(800), intervalMinutes: 360, staleAfterMinutes: 4320 })), "ACTIVE");
+    assert.equal(stampFor(w({ lastActivity: ago(74), intervalMinutes: 10, staleAfterMinutes: 60 })), "OFF GRID");
+    assert.equal(stampFor(w({ intervalMinutes: null, staleAfterMinutes: null, lastActivity: null, schedule: "continuous" })), "ON WATCH");
+    assert.equal(stampFor(w({ intervalMinutes: null, staleAfterMinutes: null, schedule: "on demand" })), "ON CALL");
+    assert.equal(stampFor(w({ lastActivity: null })), "NO DATA");
+  });
+
+  it("a fresh, frequent, high-volume agent fills its bars and sheds bit dust", () => {
+    const a = agent({ captured: 18240 });
+    const s = dossierStats(a, classifyWire(a, NOW));
+    assert.ok(s.volume > 0.85 && s.volume <= 1);
+    assert.equal(s.tempo, 1);
+    assert.ok(s.fresh > 0.9);
+    assert.equal(s.live, true);
+    assert.equal(s.decaying, false);
+  });
+
+  it("a stalled agent keeps a sliver of FRESH that decays instead of dust", () => {
+    const a = agent({ captured: 9812, lastActivity: ago(74), intervalMinutes: 10, staleAfterMinutes: 60 });
+    const s = dossierStats(a, classifyWire(a, NOW));
+    assert.equal(s.fresh, 0.08);
+    assert.equal(s.live, false);
+    assert.equal(s.decaying, true);
+  });
+
+  it("freshness drains linearly toward the stale limit", () => {
+    const a = agent({ captured: 10, lastActivity: ago(1080), intervalMinutes: 1440, staleAfterMinutes: 4320 });
+    assert.ok(Math.abs(dossierStats(a, classifyWire(a, NOW)).fresh - 0.75) < 1e-9);
+  });
+
+  it("an on-demand agent has no tempo or freshness and stays still", () => {
+    const a = agent({ captured: 37, intervalMinutes: null, staleAfterMinutes: null, schedule: "on demand" });
+    const s = dossierStats(a, classifyWire(a, NOW));
+    assert.equal(s.tempo, 0);
+    assert.equal(s.fresh, 0);
+    assert.equal(s.live, false);
+  });
+
+  it("zero captures is an empty volume bar, not NaN", () => {
+    const a = agent({ captured: 0 });
+    assert.equal(dossierStats(a, classifyWire(a, NOW)).volume, 0);
+  });
+
+  it("knows who each agent reports to", () => {
+    assert.deepEqual(reportsTo("recommender"), ["You"]);
+    assert.deepEqual(reportsTo("unknown"), []);
+  });
+});

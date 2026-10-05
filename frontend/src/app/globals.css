@@ -546,6 +546,77 @@ body {
   animation: pv-stuck 0.9s step-end infinite;
 }
 
+/* ---- Agent dossiers (AgentDossiers) ---- */
+.dz-card {
+  perspective: 900px;
+  animation: term-boot-wipe 0.5s steps(10) both;
+}
+@keyframes term-boot-wipe {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.dz-inner {
+  position: relative;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.dz-inner.dz-turned { transform: rotateY(180deg); }
+.dz-inner.dz-still { transition: none; }
+.dz-face {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.dz-back { transform: rotateY(180deg); }
+@keyframes dz-stamp {
+  0% { transform: scale(2.4) rotate(-14deg); opacity: 0; }
+  60% { transform: scale(0.92) rotate(-14deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-14deg); opacity: 1; }
+}
+.dz-stamp { transform: rotate(-14deg); animation: dz-stamp 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.dz-stamp.dz-still { animation: none; }
+@keyframes dz-cell-on {
+  from { opacity: 0; transform: scaleY(0.2); }
+  to { opacity: 1; transform: none; }
+}
+.dz-cell-on { animation: dz-cell-on 0.18s ease-out both; }
+@keyframes dz-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(320%); }
+}
+.dz-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: dz-shimmer 2.2s ease-in-out infinite;
+}
+/* Bit stardust: 0/1 glyphs rising off a working agent's bar, or crumbling off a stalled one's. */
+.dz-bit {
+  position: absolute;
+  top: -3px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 8px;
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 0 4px currentColor;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+@keyframes dz-bit-rise {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(var(--dx), -22px); opacity: 0; }
+}
+@keyframes dz-bit-fall {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 0.9; }
+  100% { transform: translate(var(--dx), 16px); opacity: 0; }
+}
+.dz-bit-rise { animation-name: dz-bit-rise; }
+.dz-bit-fall { animation-name: dz-bit-fall; }
+
 /* Respect the OS "reduce motion" setting — kills the skeleton pulse, theme
  * cross-fade, and all transitions/animations for motion-sensitive users. */
 @media (prefers-reduced-motion: reduce) {

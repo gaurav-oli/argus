@@ -5,11 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getRecommendations, type RecommendationCard } from "@/lib/apiClient";
 import {
   STREAMS,
+  STREAM_TONE,
   classifyWire,
   convergePath,
   streamOf,
   wireLabel,
-  type Stream,
   type Wire,
 } from "@/lib/pipelineFlow";
 import { cn } from "@/lib/utils";
@@ -27,11 +27,7 @@ export type PipelineAgent = {
 };
 
 /** Particle colour per stream, so you can see which kind of signal is landing in the core. */
-const TONE: Record<Stream, string> = {
-  sources: "var(--color-accent)",
-  market: "var(--color-warning)",
-  analysis: "var(--color-gains)",
-};
+const TONE = STREAM_TONE;
 
 const ACTION_TONE: Record<string, string> = {
   STRONG_BUY: "text-gains",

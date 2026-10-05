@@ -120,3 +120,90 @@ export function convergePath(fromY: number, toY: number, width: number): string 
   const mid = width / 2;
   return `M0 ${fromY.toFixed(1)} C${mid} ${fromY.toFixed(1)} ${mid} ${toY.toFixed(1)} ${width} ${toY.toFixed(1)}`;
 }
+
+/** Particle / accent colour per stream — shared by the pipeline and the dossiers below it. */
+export const STREAM_TONE: Record<Stream, string> = {
+  sources: "var(--color-accent)",
+  market: "var(--color-warning)",
+  analysis: "var(--color-gains)",
+};
+
+/** Who each agent's output goes to (the dossier's "reports to" line). */
+const REPORTS_TO: Record<string, string[]> = {
+  news: ["Macro", "Recommender", "Deep Analyst"],
+  macro: ["Recommender"],
+  social: ["Recommender"],
+  internet: ["Recommender"],
+  filings: ["Recommender", "Filings Reader"],
+  calendar: ["Recommender"],
+  technical: ["Deep Analyst", "Recommender"],
+  fundamentals: ["Deep Analyst"],
+  "filings-reader": ["Deep Analyst"],
+  strategies: ["Deep Analyst"],
+  deep: ["Recommender"],
+  research: ["You"],
+  learner: ["Recommender", "Deep Analyst"],
+  recommender: ["You"],
+  cost: ["Every model call"],
+};
+
+export function reportsTo(agentId: string): string[] {
+  return REPORTS_TO[agentId] ?? [];
+}
+
+/** The rubber stamp on a dossier's front. */
+export type Stamp = "ACTIVE" | "ON WATCH" | "ON CALL" | "OFF GRID" | "NO DATA" | "PLANNED";
+
+export function stampFor(w: Wire): Stamp {
+  switch (w.state) {
+    case "busy":
+    case "between":
+      return "ACTIVE";
+    case "continuous":
+      return "ON WATCH";
+    case "oncall":
+      return "ON CALL";
+    case "stalled":
+      return "OFF GRID";
+    case "nodata":
+      return "NO DATA";
+    case "planned":
+      return "PLANNED";
+  }
+}
+
+export interface DossierStats {
+  /** Output so far, log-scaled so 40 and 40,000 are both readable: 0–1. */
+  volume: number;
+  /** How often it runs, log-scaled from daily-ish to every 5 min: 0–1. */
+  tempo: number;
+  /** How much of its allowed quiet time is left before it would stall: 0–1. */
+  fresh: number;
+  /** Bars shed rising "bit dust" (a working agent). */
+  live: boolean;
+  /** The freshness bar's bits crumble downward instead (a stalled agent). */
+  decaying: boolean;
+}
+
+/** Above this many captures the volume bar is simply full. */
+const VOLUME_CEILING = 50_000;
+/** Runs per day that fill the tempo bar (every 5 minutes). */
+const TEMPO_CEILING = 288;
+
+export function dossierStats(a: WireInput & { captured: number }, w: Wire): DossierStats {
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  const volume = clamp(Math.log10(1 + Math.max(0, a.captured)) / Math.log10(1 + VOLUME_CEILING));
+  const tempo =
+    w.state === "continuous"
+      ? 1
+      : a.intervalMinutes == null || a.intervalMinutes <= 0
+        ? 0
+        : clamp(Math.log10(1 + 1440 / a.intervalMinutes) / Math.log10(1 + TEMPO_CEILING));
+  let fresh: number;
+  if (w.state === "stalled") fresh = 0.08; // a sliver, so the red decay has something to crumble from
+  else if (w.state === "continuous") fresh = 1;
+  else if (a.staleAfterMinutes == null || w.ageMinutes == null) fresh = 0;
+  else fresh = clamp(1 - w.ageMinutes / a.staleAfterMinutes);
+  const live = w.state === "busy" || w.state === "between" || w.state === "continuous";
+  return { volume, tempo, fresh, live, decaying: w.state === "stalled" };
+}

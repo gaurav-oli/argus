@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentActivity, type PipelineAgent } from "@/components/dashboard/AgentActivity";
+import { AgentDossiers } from "@/features/agents/AgentDossiers";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -94,12 +95,8 @@ export function AgentFleet() {
         <AgentActivity agents={pipeline} />
       </MotionCard>
 
-      {/* Agent detail cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {agents.map((a, i) => (
-          <AgentCard key={a.id} agent={a} index={i + 1} />
-        ))}
-      </div>
+      {/* What each agent is doing — dossiers filed by stream (same buckets as the pipeline) */}
+      <AgentDossiers agents={agents} back={{ macro: <MacroKeywordReviewButton /> }} />
     </div>
   );
 }
@@ -198,94 +195,9 @@ function StatTile({
   );
 }
 
-function AgentCard({ agent, index }: { agent: AgentStatus; index: number }) {
-  const active = agent.status === "ACTIVE";
-  const planned = agent.status === "PLANNED";
-  const partial = agent.status === "PARTIAL";
-  const num = agent.code.replace(/[^0-9]/g, "");
-
-  return (
-    <MotionCard index={index} interactive={!planned} className={cn("flex flex-col gap-4", planned && "opacity-60")}>
-      {/* status accent line */}
-      <span
-        className={cn(
-          "absolute inset-x-0 top-0 h-px",
-          active ? "bg-gradient-to-r from-transparent via-accent/60 to-transparent" : "bg-[var(--hairline)]",
-        )}
-      />
-
-      <div className="flex items-start gap-3">
-        {/* monogram */}
-        <div
-          className={cn(
-            "relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border",
-            active ? "border-accent/30 bg-accent/[0.07]" : "border-border bg-[var(--hover-wash)]",
-          )}
-        >
-          {active && (
-            <span className="absolute inset-0 rounded-xl ring-1 ring-accent/40">
-              <span className="absolute inset-0 animate-ping rounded-xl bg-accent/5" />
-            </span>
-          )}
-          <span className={cn("font-mono text-base font-bold", active ? "text-accent" : "text-text-secondary")}>
-            {num || agent.name.slice(0, 2).toUpperCase()}
-          </span>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-text-secondary">{agent.code}</span>
-            <StatusPill status={agent.status} />
-          </div>
-          <h3 className="mt-0.5 truncate font-display text-base font-semibold text-text-primary">{agent.name}</h3>
-        </div>
-      </div>
-
-      <p className="text-sm leading-relaxed text-text-secondary">{agent.description}</p>
-
-      {/* metrics */}
-      {planned ? (
-        <div className="flex items-center justify-between border-t border-[var(--hairline)] pt-3.5 text-xs text-text-secondary">
-          <span>Not yet built — on the roadmap.</span>
-          <Chip>{agent.phase ?? "Planned"}</Chip>
-        </div>
-      ) : (
-        <div className="flex items-end justify-between border-t border-[var(--hairline)] pt-3.5">
-          <div>
-            {partial ? (
-              <p className="font-display text-lg font-semibold text-text-primary">{agent.note ?? "Subsystem"}</p>
-            ) : (
-              <>
-                <p className="flex items-baseline gap-1.5">
-                  <AnimatedNumber
-                    value={agent.captured}
-                    format={(n) => Math.round(n).toLocaleString("en-CA")}
-                    className="font-display text-2xl font-bold tabular-nums text-text-primary"
-                  />
-                  <span className="text-xs text-text-secondary">{agent.captureLabel}</span>
-                </p>
-                <p className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">
-                  <ClockIcon />
-                  <span>
-                    last run <span className="text-text-primary">{relTime(agent.lastActivity)}</span>
-                  </span>
-                </p>
-              </>
-            )}
-          </div>
-          <Chip>{partial ? agent.phase ?? "MVP" : agent.schedule}</Chip>
-        </div>
-      )}
-
-      {!partial && !planned && agent.note && <NoteLine note={agent.note} />}
-      {agent.id === "macro" && <MacroKeywordReviewButton />}
-    </MotionCard>
-  );
-}
-
 /**
  * Manual trigger for Agent 8's weekly keyword-learning review (MacroKeywordLearningService) — rather
- * than waiting for the Sunday cron. Shows the resulting reason inline: what it considered, and
+ * than waiting for the Sunday cron. Lives on the cream back of Agent 8's dossier, hence the ink colours. Shows the resulting reason inline: what it considered, and
  * whether anything was actually learned.
  */
 function MacroKeywordReviewButton() {
@@ -307,84 +219,33 @@ function MacroKeywordReviewButton() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-[var(--hairline)] pt-3.5">
+    <div className="mt-2 flex flex-col gap-1">
       <button
         type="button"
         onClick={onReview}
         disabled={busy}
-        className="self-start rounded-lg bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+        className="self-start border border-[#23221d] px-2 py-0.5 font-mono text-[10px] font-bold text-[#23221d] transition-colors hover:bg-[#23221d] hover:text-[#efe8d4] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? "Reviewing…" : "Review Now"}
       </button>
       {result && (
-        <p className="text-[11px] leading-relaxed text-text-secondary">
+        <p className="text-[10px] leading-snug text-[#5c5a50]">
           {result.adopted.length > 0 && (
-            <span className="mr-1 font-semibold text-gains">
+            <span className="mr-1 font-semibold text-[#2f6b3a]">
               +{result.adopted.length} keyword{result.adopted.length === 1 ? "" : "s"} learned:
             </span>
           )}
           {result.reason}
         </p>
       )}
-      {failed && <p className="text-[11px] text-losses">Couldn&apos;t run the review — try again in a moment.</p>}
+      {failed && <p className="text-[10px] text-[#b42318]">Couldn&apos;t run the review — try again in a moment.</p>}
     </div>
   );
 }
 
-function StatusPill({ status }: { status: AgentStatus["status"] }) {
-  const map = {
-    ACTIVE: { label: "Active", cls: "bg-gains/10 text-gains", dot: "bg-gains" },
-    IDLE: { label: "Idle", cls: "bg-border/40 text-text-secondary", dot: "bg-text-secondary/60" },
-    PARTIAL: { label: "Subsystem", cls: "bg-warning/10 text-warning", dot: "bg-warning" },
-    PLANNED: { label: "Planned", cls: "bg-border/40 text-text-secondary", dot: "bg-text-secondary/40" },
-  } as const;
-  const s = map[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-        s.cls,
-      )}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />
-      {s.label}
-    </span>
-  );
-}
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-md border border-[var(--hairline)] bg-[var(--hover-wash)] px-2 py-1 font-mono text-[10px] text-text-secondary">
-      {children}
-    </span>
-  );
-}
 
-function NoteLine({ note }: { note: string }) {
-  const caution = /\bneeds?\b|\bno\b|\bwithout\b/i.test(note);
-  return (
-    <p
-      className={cn(
-        "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px]",
-        caution
-          ? "border-warning/20 bg-warning/[0.06] text-warning"
-          : "border-[var(--hairline)] bg-[var(--hover-wash)] text-text-secondary",
-      )}
-    >
-      <span className={cn("h-1 w-1 shrink-0 rounded-full", caution ? "bg-warning" : "bg-accent")} />
-      {note}
-    </p>
-  );
-}
 
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function FleetSkeleton() {
   return (
