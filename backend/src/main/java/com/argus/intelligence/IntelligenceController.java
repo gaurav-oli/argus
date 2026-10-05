@@ -1,9 +1,13 @@
 package com.argus.intelligence;
 
+import com.argus.security.CurrentUserContext;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,16 +30,21 @@ public class IntelligenceController {
 	private final SourceCredibilityRepository sources;
 	private final StrangerAlertRepository strangers;
 	private final BreakingAlertRepository breaking;
+	private final BreakingAlertReadRepository breakingReads;
 	private final MacroKeywordLearningService macroKeywordLearning;
+	private final long breakingRetentionDays;
 
 	public IntelligenceController(NewsArticleRepository articles, SourceCredibilityRepository sources,
 			StrangerAlertRepository strangers, BreakingAlertRepository breaking,
-			MacroKeywordLearningService macroKeywordLearning) {
+			BreakingAlertReadRepository breakingReads, MacroKeywordLearningService macroKeywordLearning,
+			@Value("${argus.breaking-alerts.retention-days:3}") long breakingRetentionDays) {
 		this.articles = articles;
 		this.sources = sources;
 		this.strangers = strangers;
 		this.breaking = breaking;
+		this.breakingReads = breakingReads;
 		this.macroKeywordLearning = macroKeywordLearning;
+		this.breakingRetentionDays = breakingRetentionDays;
 	}
 
 	@GetMapping("/news")
@@ -53,27 +62,32 @@ public class IntelligenceController {
 		return strangers.findAllByOrderByRiskScoreDesc().stream().map(StrangerItem::from).toList();
 	}
 
-	/** Ready-to-read breaking alerts (summarized, non-duplicate, unread) for the carousel, plus how
-	 * many are still being curated. */
+	/** Ready-to-read breaking alerts (summarized, non-duplicate, within the retention window, and not
+	 * yet dismissed by THIS signed-in person) for the carousel, plus how many are still being
+	 * curated. Each person has their own "Done Reading" state over the same shared alerts. */
 	@GetMapping("/breaking")
 	@Transactional(readOnly = true)
 	public BreakingQueue breaking() {
-		List<BreakingItem> ready = breaking.findBySummaryIsNotNullAndDuplicateFalseAndReadFalseOrderByCreatedAtDesc()
-				.stream()
+		Instant cutoff = Instant.now().minus(Duration.ofDays(breakingRetentionDays));
+		Set<Long> readByMe = Set.copyOf(breakingReads.findAlertIdsByUserId(CurrentUserContext.get()));
+		List<BreakingItem> ready = breaking
+				.findBySummaryIsNotNullAndDuplicateFalseAndCreatedAtAfterOrderByCreatedAtDesc(cutoff).stream()
+				.filter(a -> !readByMe.contains(a.getId()))
 				.map(BreakingItem::from)
 				.toList();
 		return new BreakingQueue(ready, (int) breaking.countBySummaryIsNullAndDuplicateFalse());
 	}
 
-	/** "Done Reading" — soft dismiss (the audit trail keeps the row). Tolerates an id that's already
-	 * gone, for parity with the news carousel's done endpoint. */
+	/** "Done Reading" — dismiss for THIS person only (the shared alert, and everyone else's view of
+	 * it, are untouched). Tolerates an id that's already gone or already dismissed by this person,
+	 * for parity with the news carousel's done endpoint. */
 	@PostMapping("/breaking/{id}/done")
 	@Transactional
 	public ResponseEntity<BreakingQueue> breakingDone(@PathVariable Long id) {
-		breaking.findById(id).ifPresent(a -> {
-			a.markRead();
-			breaking.save(a);
-		});
+		Long userId = CurrentUserContext.get();
+		if (breaking.existsById(id) && !breakingReads.existsByAlertIdAndUserId(id, userId)) {
+			breakingReads.save(new BreakingAlertRead(id, userId));
+		}
 		return ResponseEntity.ok(breaking());
 	}
 

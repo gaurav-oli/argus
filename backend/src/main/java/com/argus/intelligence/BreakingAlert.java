@@ -9,12 +9,17 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * A high-impact news alert that was pushed to the user's devices (immediate market-moving news).
- * Also the permanent in-app audit trail of what fired — {@code read} is a soft "Done Reading" flag,
- * never a delete, unlike the ephemeral {@link NewsCard} queue. {@code summary} is filled in later by
+ * A high-impact news alert that was pushed to every signed-in person's devices (immediate
+ * market-moving news, shared content — not any one person's financial data). Also the in-app audit
+ * trail of what fired, kept for {@code argus.breaking-alerts.retention-days} before being pruned
+ * (see {@link BreakingAlertCurationService#cleanupStale}). {@code summary} is filled in later by
  * {@link BreakingAlertCurationService}, which also flags {@code duplicate} when Gemma judges a later
  * alert to be about the same underlying story as one already summarized — a duplicate is never shown
  * in the carousel but the row (and its push/audit record) is kept.
+ *
+ * <p>"Done Reading" is deliberately NOT a field here — see {@link BreakingAlertRead} — because a
+ * single flag on this shared row would dismiss the alert for every person at once, not just the one
+ * who read it (Phase 2, multi-user).
  */
 @Entity
 @Table(name = "breaking_alert")
@@ -62,10 +67,6 @@ public class BreakingAlert {
 	@Column(nullable = false)
 	private boolean duplicate = false;
 
-	/** "Done Reading" — soft dismiss so the audit trail survives; the carousel excludes read cards. */
-	@Column(nullable = false)
-	private boolean read = false;
-
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
@@ -95,10 +96,6 @@ public class BreakingAlert {
 	void markDuplicate() {
 		this.duplicate = true;
 		this.generatedAt = Instant.now();
-	}
-
-	void markRead() {
-		this.read = true;
 	}
 
 	public Long getId() {
@@ -147,10 +144,6 @@ public class BreakingAlert {
 
 	public boolean isDuplicate() {
 		return duplicate;
-	}
-
-	public boolean isRead() {
-		return read;
 	}
 
 	public Instant getCreatedAt() {

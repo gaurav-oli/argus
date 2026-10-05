@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.argus.TestcontainersConfiguration;
 import com.argus.security.TestUserSessions;
 import jakarta.servlet.http.Cookie;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -49,16 +51,23 @@ class IntelligenceControllerIntegrationTest {
 	BreakingAlertRepository breaking;
 
 	@Autowired
+	BreakingAlertReadRepository breakingReads;
+
+	@Autowired
 	com.argus.security.AppUserRepository appUsers;
 
 	@Autowired
 	com.argus.security.SessionStore sessions;
+
+	@Autowired
+	JdbcTemplate jdbc;
 
 	@BeforeEach
 	void clean() {
 		strangers.deleteAll();
 		articles.deleteAll();
 		sources.deleteAll();
+		breakingReads.deleteAll();
 		breaking.deleteAll();
 	}
 
@@ -112,7 +121,7 @@ class IntelligenceControllerIntegrationTest {
 	}
 
 	@Test
-	void breakingQueueOnlyShowsReadyNonDuplicateUnreadAlerts() throws Exception {
+	void breakingQueueOnlyShowsReadyNonDuplicateAlertsWithinTheRetentionWindow() throws Exception {
 		Cookie session = login();
 
 		BreakingAlert ready = breaking.save(new BreakingAlert("Fed cuts rates", "http://x",
@@ -128,22 +137,25 @@ class IntelligenceControllerIntegrationTest {
 		duplicate.markDuplicate();
 		breaking.save(duplicate);
 
-		BreakingAlert alreadyRead = breaking.save(new BreakingAlert("Already read", "http://x",
-				new String[0], "Breaking: war", 0.7, "BEARISH", null));
-		alreadyRead.summarize("Text.\n\nKEY TERMS:\nNone", false);
-		alreadyRead.markRead();
-		breaking.save(alreadyRead);
+		// A real one, but from 10 days ago — outside the (default 3-day) retention window. One real
+		// account saw 700+ of these pile up with no cutoff at all.
+		BreakingAlert stale = breaking.save(new BreakingAlert("Old news", "http://x", new String[0],
+				"Breaking: war", 0.7, "BEARISH", null));
+		stale.summarize("Text.\n\nKEY TERMS:\nNone", false);
+		breaking.save(stale);
+		jdbc.update("update breaking_alert set created_at = ? where id = ?",
+				java.sql.Timestamp.from(Instant.now().minus(Duration.ofDays(10))), stale.getId());
 
 		mockMvc.perform(get("/api/intelligence/breaking").cookie(session))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.alerts.length()").value(1))
 				.andExpect(jsonPath("$.alerts[0].headline").value("Fed cuts rates"))
 				.andExpect(jsonPath("$.alerts[0].summary").value(ready.getSummary()))
-				.andExpect(jsonPath("$.pending").value(1)); // "Still curating" only — duplicate/read are excluded
+				.andExpect(jsonPath("$.pending").value(1)); // "Still curating" only — duplicate/stale are excluded
 	}
 
 	@Test
-	void doneMarksAnAlertReadAndTolerantOfAMissingId() throws Exception {
+	void doneMarksAnAlertReadAndTolerantOfAMissingOrAlreadyReadId() throws Exception {
 		Cookie session = login();
 		BreakingAlert alert = breaking.save(new BreakingAlert("Read me", "http://x", new String[0],
 				"Breaking: war", 0.7, "BEARISH", null));
@@ -154,8 +166,42 @@ class IntelligenceControllerIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.alerts.length()").value(0));
 
+		// Calling done again on the SAME alert (e.g. a double-tap) must not error or double-insert.
+		mockMvc.perform(post("/api/intelligence/breaking/" + alert.getId() + "/done").cookie(session))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.alerts.length()").value(0));
+
 		// A since-deleted/unknown id must not 500 (a stale carousel could act on one).
 		mockMvc.perform(post("/api/intelligence/breaking/999999/done").cookie(session))
 				.andExpect(status().isOk());
+	}
+
+	@Test
+	void doneReadingDismissesOnlyForTheUserWhoDismissedIt() throws Exception {
+		Cookie userA = login();
+		Cookie userB = login();
+
+		BreakingAlert alert = breaking.save(new BreakingAlert("Shared market news", "http://x",
+				new String[] {"SPY"}, "Breaking: fed", 0.8, "BULLISH", null));
+		alert.summarize("Text.\n\nKEY TERMS:\nNone", false);
+		breaking.save(alert);
+
+		// Both start out seeing it — it's shared market-wide content, not either person's own data.
+		mockMvc.perform(get("/api/intelligence/breaking").cookie(userA))
+				.andExpect(jsonPath("$.alerts.length()").value(1));
+		mockMvc.perform(get("/api/intelligence/breaking").cookie(userB))
+				.andExpect(jsonPath("$.alerts.length()").value(1));
+
+		// User A marks it done.
+		mockMvc.perform(post("/api/intelligence/breaking/" + alert.getId() + "/done").cookie(userA))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.alerts.length()").value(0));
+
+		// The bug: this used to be a single global flag, so A's dismissal hid it for B too.
+		mockMvc.perform(get("/api/intelligence/breaking").cookie(userA))
+				.andExpect(jsonPath("$.alerts.length()").value(0));
+		mockMvc.perform(get("/api/intelligence/breaking").cookie(userB))
+				.andExpect(jsonPath("$.alerts.length()").value(1))
+				.andExpect(jsonPath("$.alerts[0].headline").value("Shared market news"));
 	}
 }

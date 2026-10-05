@@ -1,5 +1,6 @@
 package com.argus.intelligence;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,12 +9,14 @@ import static org.mockito.Mockito.when;
 
 import com.argus.TestcontainersConfiguration;
 import com.argus.model.ModelGateway;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -36,6 +39,12 @@ class BreakingAlertCurationServiceTest {
 
 	@Autowired
 	BreakingAlertCurationService curation;
+
+	@Autowired
+	JdbcTemplate jdbc;
+
+	@Autowired
+	com.argus.security.AppUserRepository appUsers;
 
 	@MockitoBean
 	ModelGateway gateway;
@@ -122,5 +131,35 @@ class BreakingAlertCurationServiceTest {
 		curation.generateNextPending();
 
 		assertTrue(alerts.findById(alert.getId()).orElseThrow().getSummary().contains("Summary."));
+	}
+
+	@Test
+	void cleanupStalePrunesOnlyAlertsOlderThanTheRetentionWindow() {
+		BreakingAlert fresh = pending("Fresh alert");
+		BreakingAlert stale = pending("Old alert");
+		jdbc.update("update breaking_alert set created_at = ? where id = ?",
+				java.sql.Timestamp.from(Instant.now().minus(Duration.ofDays(10))), stale.getId());
+
+		curation.cleanupStale();
+
+		assertTrue(alerts.findById(fresh.getId()).isPresent(), "within the retention window — kept");
+		assertTrue(alerts.findById(stale.getId()).isEmpty(), "older than the retention window — pruned");
+	}
+
+	@Test
+	void cleanupStaleCascadesThePerUserReadRecordsOfAPrunedAlert() {
+		var user = appUsers.save(new com.argus.security.AppUser("sub-" + java.util.UUID.randomUUID(),
+				"reader-" + java.util.UUID.randomUUID() + "@example.com", "Reader", null, false));
+		BreakingAlert stale = pending("Old alert");
+		jdbc.update("update breaking_alert set created_at = ? where id = ?",
+				java.sql.Timestamp.from(Instant.now().minus(Duration.ofDays(10))), stale.getId());
+		jdbc.update("insert into breaking_alert_read (alert_id, user_id) values (?, ?)",
+				stale.getId(), user.getId());
+
+		curation.cleanupStale();
+
+		Long orphaned = jdbc.queryForObject(
+				"select count(*) from breaking_alert_read where alert_id = ?", Long.class, stale.getId());
+		assertEquals(0L, orphaned, "the pruned alert's per-user read record must go with it");
 	}
 }

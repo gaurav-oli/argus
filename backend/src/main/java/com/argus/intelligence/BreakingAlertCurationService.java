@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Turns a raw {@link BreakingAlert} (headline + metadata, recorded the instant it fires) into
@@ -32,14 +33,17 @@ public class BreakingAlertCurationService {
 	private final NewsArticleRepository articles;
 	private final ModelGateway gateway;
 	private final long lookbackHours;
+	private final long retentionDays;
 
 	public BreakingAlertCurationService(BreakingAlertRepository alerts, NewsArticleRepository articles,
 			ModelGateway gateway,
-			@Value("${argus.breaking-alerts.lookback-hours:24}") long lookbackHours) {
+			@Value("${argus.breaking-alerts.lookback-hours:24}") long lookbackHours,
+			@Value("${argus.breaking-alerts.retention-days:3}") long retentionDays) {
 		this.alerts = alerts;
 		this.articles = articles;
 		this.gateway = gateway;
 		this.lookbackHours = lookbackHours;
+		this.retentionDays = retentionDays;
 	}
 
 	@Scheduled(fixedDelayString = "${argus.breaking-alerts.generate-interval-ms:20000}",
@@ -50,6 +54,27 @@ public class BreakingAlertCurationService {
 		}
 		catch (RuntimeException ex) {
 			log.warn("Breaking-alert curation failed: {}", ex.getMessage());
+		}
+	}
+
+	/**
+	 * Retention: a breaking alert is useful as an immediate "what just happened" read, not as a
+	 * growing permanent archive — left unbounded, the carousel's backing table only ever grows (one
+	 * real account saw 700+ rows accumulate). Once a day, prune anything older than {@code
+	 * argus.breaking-alerts.retention-days} (default 3); each person's own "Done Reading" record for
+	 * a pruned alert goes with it automatically (FK cascade).
+	 */
+	@Scheduled(cron = "${argus.breaking-alerts.cleanup-cron:0 30 3 * * *}", zone = "America/Toronto")
+	@Transactional
+	public void cleanupStale() {
+		try {
+			int deleted = alerts.deleteByCreatedAtBefore(Instant.now().minus(Duration.ofDays(retentionDays)));
+			if (deleted > 0) {
+				log.info("Breaking-alert retention: pruned {} alert(s) older than {} day(s)", deleted, retentionDays);
+			}
+		}
+		catch (RuntimeException ex) {
+			log.warn("Breaking-alert retention cleanup failed: {}", ex.getMessage());
 		}
 	}
 
