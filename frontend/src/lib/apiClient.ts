@@ -171,6 +171,20 @@ export interface AdminUserStats {
 export const getAdminUserStats = (): Promise<AdminUserStats[]> =>
   apiGet<AdminUserStats[]>("/api/admin/users");
 
+/** Mirrors the backend `AdminController.InviteView`. */
+export interface AdminInvite {
+  email: string;
+  invitedAt: string;
+  joined: boolean;
+}
+
+export const getAdminInvites = (): Promise<AdminInvite[]> =>
+  apiGet<AdminInvite[]>("/api/admin/invites");
+
+/** Allow a new email to sign in with Google. Idempotent — inviting an already-invited email is fine. */
+export const inviteFriend = (email: string): Promise<AdminInvite> =>
+  apiPost<AdminInvite>("/api/admin/invites", { email });
+
 export const logout = (): Promise<void> => apiPost("/api/auth/logout");
 
 // ---- Settings (Story 2.3) ----

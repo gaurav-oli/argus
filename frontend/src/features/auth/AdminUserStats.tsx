@@ -1,8 +1,14 @@
 "use client";
 
 import { MotionCard } from "@/components/ui/MotionCard";
-import { getAdminUserStats, type AdminUserStats } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
+import {
+  getAdminInvites,
+  getAdminUserStats,
+  inviteFriend,
+  type AdminInvite,
+  type AdminUserStats,
+} from "@/lib/apiClient";
+import { useCallback, useEffect, useState } from "react";
 
 /** Relative "time ago", or "never". */
 function relTime(iso: string | null): string {
@@ -34,6 +40,16 @@ function minutes(total: number): string {
  */
 export function AdminUserStats({ index }: { index: number }) {
   const [rows, setRows] = useState<AdminUserStats[] | null | undefined>(undefined);
+  const [invites, setInvites] = useState<AdminInvite[]>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const refetchInvites = useCallback(() => {
+    getAdminInvites()
+      .then(setInvites)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -44,10 +60,28 @@ export function AdminUserStats({ index }: { index: number }) {
         // (network blip) also just hides it rather than showing a scary error in a settings page.
         if (active) setRows(null);
       });
+    refetchInvites();
     return () => {
       active = false;
     };
-  }, []);
+  }, [refetchInvites]);
+
+  const onInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = newEmail.trim();
+    if (!email) return;
+    setInviting(true);
+    setInviteError(null);
+    try {
+      await inviteFriend(email);
+      setNewEmail("");
+      refetchInvites();
+    } catch {
+      setInviteError("Couldn't add that invite — check the email and try again.");
+    } finally {
+      setInviting(false);
+    }
+  };
 
   if (!rows || rows.length === 0) {
     return null;
@@ -114,6 +148,41 @@ export function AdminUserStats({ index }: { index: number }) {
         &quot;Time on platform&quot; is the span between each day&apos;s first and last activity — a rough proxy, not a claim of
         continuous attention.
       </p>
+      </div>
+
+      <div className="mt-5 border-t border-border/60 pt-4">
+        <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Invite a friend</h3>
+        <form onSubmit={onInvite} className="mt-2 flex items-center gap-2">
+          <input
+            type="email"
+            required
+            placeholder="friend@gmail.com"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            className="flex-1 rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent/60"
+          />
+          <button
+            type="submit"
+            disabled={inviting || !newEmail.trim()}
+            className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {inviting ? "Adding…" : "Add"}
+          </button>
+        </form>
+        {inviteError && <p className="mt-1.5 text-[11px] text-losses">{inviteError}</p>}
+
+        {invites.length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {invites.map((i) => (
+              <li key={i.email} className="flex items-center justify-between text-xs text-text-secondary">
+                <span>{i.email}</span>
+                <span className={i.joined ? "text-accent" : "text-text-secondary/70"}>
+                  {i.joined ? "joined" : "invited — not yet signed in"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </MotionCard>
   );
