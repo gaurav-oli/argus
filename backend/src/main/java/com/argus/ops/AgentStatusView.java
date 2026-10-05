@@ -18,8 +18,12 @@ import java.time.Instant;
  * @param schedule     human cadence
  * @param note         optional dependency/spend hint, or {@code null}
  * @param phase        roadmap phase for not-yet-built agents (e.g. {@code "Phase 2"}), or {@code null}
+ * @param intervalMinutes   nominal run cadence in minutes ({@link AgentCadence}), or {@code null} for an
+ *                          agent with no fixed cadence (on demand / continuous)
+ * @param staleAfterMinutes how long a gap can get before the agent counts as stalled, or {@code null}
+ *                          when it is never considered stalled
  */
 public record AgentStatusView(String id, String code, String name, String description,
 		String status, long captured, String captureLabel, Instant lastActivity, String schedule,
-		String note, String phase) {
+		String note, String phase, Integer intervalMinutes, Integer staleAfterMinutes) {
 }

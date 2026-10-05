@@ -368,6 +368,18 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] a ticker with under a month of candles shows the "not enough price history" line instead
 - [ ] **Agents:** the `tail -f` agent log lists real recent runs, and new runs animate in within
       about 15s.
+- [ ] **Agents → pipeline** (1 recency + 2 streams + 3 reactive core):
+  - [ ] Agents are grouped into Sources / Market / Analysis, and **all three** curved connectors run
+        into the Argus core, not just the middle one.
+  - [ ] Busy agents (News, Macro) stream fast and dense. Agents between runs show one slow particle.
+  - [ ] An agent past its stale threshold shows a red dashed wire with a blinking stuck particle and
+        "stalled Xm". Check it matches the Ops freshness card, since both use `AgentCadence`.
+  - [ ] Agent 9 says "on call", Agent 6 says "always on", and neither is ever red.
+  - [ ] The core ripples. There is no progress ring.
+  - [ ] "Your calls" shows the real count, and its top 3 calls light up in turn every 4s.
+  - [ ] Tapping an agent dims the others; tapping it again restores them.
+  - [ ] Phone width: the streams stack, the core and calls box sit underneath, and nothing scrolls
+        sideways.
 - [ ] **Every page:** no leftover gold/serif editorial styling. Charts read in amber/green/red.
 - [ ] **iPhone:** the bottom nav uses an inverted amber block for the active tab, and nothing scrolls
       sideways at phone width.

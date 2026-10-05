@@ -42,6 +42,7 @@ edited. `.font-serif-editorial` and `.font-display` both map to VT323.
 | Sign-in | A boot log (`> probing 15 agents [ OK ]` …) then a `login:` prompt with Sign in with Google |
 | Intelligence → ticker detail | **Forecast spread**: the call's model odds as a big VT323 %, a bull/bear block bar, and an ASCII return histogram (`▁▃▆█▆▃▁`) for the call's own horizon. The side the call bets on is lit; stop `S`, entry `│` and target `T` sit on a rail underneath. Columns grow upward on open (`ForecastSpread`, math in `lib/forecastSpread.ts`) |
 | Agents | A live **`tail -f` agent log**: each agent's last run as a log line, with new lines animating in (`AgentLogTail`) |
+| Agents → pipeline | Same wires, particles and core as before, but the motion now carries information. **Recency**: wire density and speed come from each agent's real cadence and last run, and a stalled agent's wire breaks. **Streams**: Sources / Market / Analysis curve into the core, which feeds "Your calls". **Reactive core**: particles are coloured by stream, the core ripples, and it highlights each live call in turn. Cadence and stale thresholds come from the backend's `AgentCadence`, which is shared with the freshness alert (`AgentActivity`, `lib/pipelineFlow.ts`) |
 
 Every animation is disabled under `prefers-reduced-motion`. `TypedText` gives screen readers the
 full string immediately.

@@ -57,8 +57,11 @@ export function AgentFleet() {
     id: a.id,
     name: a.name,
     code: a.code,
-    active: a.status === "ACTIVE",
-    metric: compact(a.captured),
+    status: a.status,
+    lastActivity: a.lastActivity,
+    intervalMinutes: a.intervalMinutes ?? null,
+    staleAfterMinutes: a.staleAfterMinutes ?? null,
+    schedule: a.schedule,
   }));
 
   return (

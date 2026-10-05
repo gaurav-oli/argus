@@ -870,6 +870,10 @@ export interface AgentStatus {
   note: string | null;
   /** Roadmap phase for not-yet-built agents (e.g. "Phase 2"), or null. */
   phase: string | null;
+  /** Nominal run cadence in minutes, or null for an agent with no fixed cadence (on demand / continuous). */
+  intervalMinutes: number | null;
+  /** How long a gap can get before the agent counts as stalled, or null when it never does. */
+  staleAfterMinutes: number | null;
 }
 
 export const getAgentStatus = (): Promise<AgentStatus[]> =>

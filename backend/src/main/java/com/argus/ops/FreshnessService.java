@@ -40,18 +40,19 @@ public class FreshnessService {
 	public FreshnessView snapshot() {
 		Instant now = Instant.now();
 		// Threshold = expected cadence + a generous buffer, so a single skipped cycle isn't "stale".
+		// The values live in AgentCadence, shared with the Agents-page pipeline.
 		// Filings and calendar are event-driven, not a constant drip — real Form 4 filings and new
 		// FOMC/earnings dates genuinely go 2-4 real days between anything NEW some stretches (confirmed
 		// against this instance's own ingest history, 2026-10), so their buffer is a multi-day one, not
 		// an hours one, or a perfectly healthy quiet period reads as "stuck" every single week.
 		List<SourceFreshness> sources = List.of(
-				freshness("news", "News (Agent 1)", news::latestIngestedAt, Duration.ofMinutes(30), now),
-				freshness("social", "Social (Agent 2)", social::latestIngestedAt, Duration.ofHours(1), now),
-				freshness("internet", "Internet (Agent 3)", web::latestIngestedAt, Duration.ofHours(12), now),
-				freshness("filings", "SEC filings (Agent 4)", sec::latestIngestedAt, Duration.ofHours(72), now),
+				freshness("news", "News (Agent 1)", news::latestIngestedAt, AgentCadence.NEWS.staleAfter(), now),
+				freshness("social", "Social (Agent 2)", social::latestIngestedAt, AgentCadence.SOCIAL.staleAfter(), now),
+				freshness("internet", "Internet (Agent 3)", web::latestIngestedAt, AgentCadence.INTERNET.staleAfter(), now),
+				freshness("filings", "SEC filings (Agent 4)", sec::latestIngestedAt, AgentCadence.FILINGS.staleAfter(), now),
 				freshness("recommender", "Recommendations (Agent 5)", recommendations::latestCreatedAt,
-						Duration.ofHours(12), now),
-				freshness("calendar", "Calendar (Agent 7)", calendar::latestIngestedAt, Duration.ofHours(72), now));
+						AgentCadence.RECOMMENDER.staleAfter(), now),
+				freshness("calendar", "Calendar (Agent 7)", calendar::latestIngestedAt, AgentCadence.CALENDAR.staleAfter(), now));
 		boolean anyStale = sources.stream().anyMatch(SourceFreshness::stale);
 		return new FreshnessView(sources, anyStale);
 	}

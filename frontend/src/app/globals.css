@@ -497,6 +497,34 @@ body {
   animation: term-line-in 0.3s ease-out both;
 }
 
+/* ---- Agent pipeline (AgentActivity) ---- */
+@keyframes pv-flow {
+  0% { left: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.pv-flow {
+  animation-name: pv-flow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+/* The core "throws" signal: concentric pulses as particles land. */
+@keyframes pv-ripple {
+  0% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.pv-ripple {
+  animation: pv-ripple 1.4s ease-out infinite;
+}
+@keyframes pv-stuck {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
+.pv-stuck {
+  animation: pv-stuck 0.9s step-end infinite;
+}
+
 /* Respect the OS "reduce motion" setting — kills the skeleton pulse, theme
  * cross-fade, and all transitions/animations for motion-sensitive users. */
 @media (prefers-reduced-motion: reduce) {

@@ -29,6 +29,7 @@ import com.argus.social.SocialPostRepository;
 import com.argus.technical.PriceCandleRepository;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -225,8 +226,11 @@ public class AgentStatusService {
 
 	private static AgentStatusView active(String id, String code, String name, String description,
 			long captured, String captureLabel, Instant lastActivity, String schedule, String note) {
+		Optional<AgentCadence> cadence = AgentCadence.forAgent(id);
 		return new AgentStatusView(id, code, name, description, captured > 0 ? "ACTIVE" : "IDLE", captured,
-				captureLabel, lastActivity, schedule, note, null);
+				captureLabel, lastActivity, schedule, note, null,
+				cadence.map(c -> (int) c.interval().toMinutes()).orElse(null),
+				cadence.map(c -> (int) c.staleAfter().toMinutes()).orElse(null));
 	}
 
 	/** Agent 8's keyword list is DB-backed and self-updating (MacroKeywordLearningService) — surface that. */
@@ -253,10 +257,10 @@ public class AgentStatusService {
 		return new AgentStatusView("cost", "Agent 6", "Cost Governor",
 				"Tracks paid-API (Haiku) spend against the monthly budget; warns at 70/80%, and at 95% "
 						+ "auto-switches escalations to the local model.",
-				"ACTIVE", b.paidCalls(), "paid calls", null, "continuous", note, null);
+				"ACTIVE", b.paidCalls(), "paid calls", null, "continuous", note, null, null, null);
 	}
 
 	private static AgentStatusView planned(String id, String code, String name, String description, String phase) {
-		return new AgentStatusView(id, code, name, description, "PLANNED", 0, "", null, "—", null, phase);
+		return new AgentStatusView(id, code, name, description, "PLANNED", 0, "", null, "—", null, phase, null, null);
 	}
 }
