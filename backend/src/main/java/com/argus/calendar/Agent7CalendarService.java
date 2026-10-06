@@ -2,6 +2,8 @@ package com.argus.calendar;
 
 import com.argus.calendar.CalendarSource.RawEvent;
 import com.argus.intelligence.KnownUniverse;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -9,6 +11,9 @@ import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +36,12 @@ public class Agent7CalendarService {
 	private final KnownUniverse universe;
 	private final Optional<CompanyLogoService> companyLogos;
 
+	/** Set false in tests so no run fires against the shared test database at context start. */
+	@Value("${argus.boot-catch-up.enabled:true}")
+	private boolean catchUpOnBoot = true;
+
+	private static final Duration CATCH_UP_AFTER = Duration.ofHours(24);
+
 	public Agent7CalendarService(List<CalendarSource> sources, CalendarEventRepository events,
 			KnownUniverse universe, Optional<CompanyLogoService> companyLogos) {
 		this.sources = sources;
@@ -47,6 +58,30 @@ public class Agent7CalendarService {
 		} catch (RuntimeException ex) {
 			log.warn("Agent 7 calendar run failed: {}", ex.getMessage());
 		}
+	}
+
+	/**
+	 * Boot catch-up: the daily run is a single 06:00 ET slot, so a host that was down then would
+	 * otherwise wait a whole day (and read as stalled meanwhile). Runs once at startup when the last
+	 * recorded run is missing or older than a day.
+	 */
+	@EventListener(ApplicationReadyEvent.class)
+	public void catchUpOnStartup() {
+		if (!catchUpOnBoot || sources.isEmpty()) {
+			return;
+		}
+		Thread.startVirtualThread(() -> {
+			try {
+				Instant last = events.lastRunAt();
+				if (last == null || last.isBefore(Instant.now().minus(CATCH_UP_AFTER))) {
+					log.info("Agent 7 startup catch-up: last run {}", last == null ? "never recorded" : last);
+					ingestOnce();
+				}
+			}
+			catch (RuntimeException ex) {
+				log.warn("Agent 7 startup catch-up failed: {}", ex.getMessage());
+			}
+		});
 	}
 
 	/** Run one ingestion pass across all sources. Returns the number of new events stored. */
@@ -79,6 +114,12 @@ public class Agent7CalendarService {
 			}
 		}
 		log.info("Agent 7 calendar: {} fetched, {} new across {} source(s)", raws.size(), stored, sources.size());
+		try {
+			events.recordRun(); // a run that found nothing new is still a healthy run
+		}
+		catch (RuntimeException ex) {
+			log.warn("Failed to record Agent 7 run: {}", ex.getMessage());
+		}
 
 		companyLogos.ifPresent(service -> {
 			try {

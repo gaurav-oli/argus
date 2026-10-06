@@ -24,9 +24,26 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 	List<CalendarEvent> findBySourceAndTypeAndTickerAndEpsActualIsNull(
 			String source, CalendarEventType type, String ticker);
 
-	/** Most-recent calendar ingest — Agent 7 "last run" (Operations dashboard). */
+	/** Most-recent NEW calendar event — not the same as the last run; see {@link #latestActivityAt()}. */
 	@Query("select max(c.ingestedAt) from CalendarEvent c")
 	Instant latestIngestedAt();
+
+	/** When Agent 7 last completed a run (whether or not it found anything new), or null if never recorded. */
+	@Query(value = "select last_run_at from agent_runs where agent_id = 'calendar'", nativeQuery = true)
+	Instant lastRunAt();
+
+	/** Agent 7 "last activity" for the Agents page and freshness alert: its last run, or its newest
+	 * event if that is somehow later (e.g. before the first recorded run). */
+	@Query(value = "select greatest((select max(ingested_at) from calendar_events), "
+			+ "(select last_run_at from agent_runs where agent_id = 'calendar'))", nativeQuery = true)
+	Instant latestActivityAt();
+
+	/** Stamp a completed Agent 7 run. */
+	@org.springframework.transaction.annotation.Transactional
+	@org.springframework.data.jpa.repository.Modifying
+	@Query(value = "insert into agent_runs (agent_id, last_run_at) values ('calendar', now()) "
+			+ "on conflict (agent_id) do update set last_run_at = excluded.last_run_at", nativeQuery = true)
+	void recordRun();
 
 	/** Events occurring within {@code [from, to]}, soonest first — alert scans + the UI calendar. */
 	List<CalendarEvent> findByEventDateBetweenOrderByEventDateAsc(LocalDate from, LocalDate to);

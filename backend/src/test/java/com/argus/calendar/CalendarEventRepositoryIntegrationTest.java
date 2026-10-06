@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.argus.TestcontainersConfiguration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * {@link CalendarEvent} persistence against real Postgres (Story 5.1): enum-text mapping, dedup
@@ -24,9 +26,28 @@ class CalendarEventRepositoryIntegrationTest {
 	@Autowired
 	CalendarEventRepository repo;
 
+	@Autowired
+	JdbcTemplate jdbc;
+
 	@BeforeEach
 	void clean() {
 		repo.deleteAll();
+	}
+
+	@Test
+	void lastActivityIsTheLastRunEvenWhenNothingNewWasFound() {
+		repo.save(event("AAPL", LocalDate.of(2026, 7, 10), "a"));
+		jdbc.update("update calendar_events set ingested_at = now() - interval '5 days'");
+		jdbc.update("delete from agent_runs where agent_id = 'calendar'");
+		Instant newestEvent = repo.latestIngestedAt();
+		assertEquals(newestEvent, repo.latestActivityAt(), "no recorded run yet: fall back to the newest event");
+
+		repo.recordRun();
+		repo.recordRun(); // upsert, not a duplicate key
+
+		Instant lastRun = repo.lastRunAt();
+		assertTrue(lastRun.isAfter(newestEvent));
+		assertEquals(lastRun, repo.latestActivityAt(), "a quiet run still counts as activity");
 	}
 
 	@Test

@@ -65,6 +65,8 @@ class Agent7CalendarServiceTest {
 
 		assertEquals(0, service(List.of(src)).ingestOnce());
 		verify(events, never()).save(any());
+		// Nothing new is still a completed run — it must not read as "stalled" on the Agents page.
+		verify(events).recordRun();
 	}
 
 	@Test

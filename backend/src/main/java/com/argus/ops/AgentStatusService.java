@@ -138,7 +138,7 @@ public class AgentStatusService {
 				costGovernor(),
 				active("calendar", "Agent 7", "Economic Calendar",
 						"Tracks earnings, Fed/CPI/jobs/GDP, ex-dividend and lock-up dates; flags pre-event quiet periods.",
-						calendar.count(), "events tracked", calendar.latestIngestedAt(), "daily · 6am ET",
+						calendar.count(), "events tracked", calendar.latestActivityAt(), "daily · 6am ET",
 						finnhubEnabled ? null : "Earnings calendar needs a Finnhub key"),
 				active("macro", "Agent 8", "Macro / Political News",
 						"Tags tariff/Fed/currency-policy stories that move every held ticker at once, from the "

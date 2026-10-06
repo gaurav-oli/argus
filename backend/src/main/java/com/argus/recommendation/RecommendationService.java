@@ -109,6 +109,12 @@ public class RecommendationService {
 		return current;
 	}
 
+	/** When Agent 5 last produced a call — the end of its most recent review pass. */
+	@Transactional(readOnly = true)
+	public java.util.Optional<java.time.Instant> latestCreatedAt() {
+		return java.util.Optional.ofNullable(repository.latestCreatedAt());
+	}
+
 	/** When each recommendation's current call (same action, unbroken) was first made, keyed by id. */
 	@Transactional(readOnly = true)
 	public java.util.Map<Long, java.time.Instant> callSince(java.util.Collection<Long> ids) {

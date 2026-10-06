@@ -52,7 +52,7 @@ public class FreshnessService {
 				freshness("filings", "SEC filings (Agent 4)", sec::latestIngestedAt, AgentCadence.FILINGS.staleAfter(), now),
 				freshness("recommender", "Recommendations (Agent 5)", recommendations::latestCreatedAt,
 						AgentCadence.RECOMMENDER.staleAfter(), now),
-				freshness("calendar", "Calendar (Agent 7)", calendar::latestIngestedAt, AgentCadence.CALENDAR.staleAfter(), now));
+				freshness("calendar", "Calendar (Agent 7)", calendar::latestActivityAt, AgentCadence.CALENDAR.staleAfter(), now));
 		boolean anyStale = sources.stream().anyMatch(SourceFreshness::stale);
 		return new FreshnessView(sources, anyStale);
 	}

@@ -15,10 +15,15 @@ import com.argus.regime.Sector;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudy;
 import com.argus.technical.ChartStudyService;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -83,6 +88,44 @@ public class RecommendationTrigger implements Agent {
 		if (ticker != null) {
 			trigger(String.valueOf(ticker));
 		}
+	}
+
+	/** Set false in tests so no review fires against the shared test database at context start. */
+	@Value("${argus.boot-catch-up.enabled:true}")
+	private boolean catchUpOnBoot = true;
+
+	/** A review is "missed" once the newest call is older than one six-hourly pass. */
+	private static final Duration REVIEW_INTERVAL = Duration.ofHours(6);
+
+	/** Lets live prices and the market regime warm up before the catch-up pass scores anything. */
+	private static final Duration CATCH_UP_DELAY = Duration.ofMinutes(2);
+
+	/**
+	 * Boot catch-up: a host that was down across a review slot (00/06/12/18 UTC) would otherwise wait
+	 * for the next one, leaving the board on old calls and Agent 5 reading as stalled. Shortly after
+	 * startup, run one review if the newest call is older than a pass.
+	 */
+	@EventListener(ApplicationReadyEvent.class)
+	public void catchUpOnStartup() {
+		if (!catchUpOnBoot) {
+			return;
+		}
+		Thread.startVirtualThread(() -> {
+			try {
+				Thread.sleep(CATCH_UP_DELAY);
+				Optional<Instant> latest = recommendations.latestCreatedAt();
+				if (latest.isEmpty() || latest.get().isBefore(Instant.now().minus(REVIEW_INTERVAL))) {
+					log.info("Agent 5 startup catch-up: newest call {}", latest.map(Instant::toString).orElse("none"));
+					scheduledReview();
+				}
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+			catch (RuntimeException ex) {
+				log.warn("Agent 5 startup catch-up failed: {}", ex.getMessage());
+			}
+		});
 	}
 
 	/** Six-hourly routine review of the known universe (holdings + watchlist), feeding the briefing (FR-14). */
