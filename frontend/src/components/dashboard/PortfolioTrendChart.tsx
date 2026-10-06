@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
 import { getValueHistory, type ValuePoint } from "@/lib/apiClient";
@@ -8,6 +8,7 @@ import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { DemoPlaceholder } from "@/features/privacy/DemoPlaceholder";
 import { usd } from "@/lib/format";
 import { useMounted } from "@/lib/useMounted";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type TooltipProps = {
   active?: boolean;
@@ -31,13 +32,11 @@ export function PortfolioTrendChart() {
   const { demoMode } = useDemoMode();
   const [series, setSeries] = useState<ValuePoint[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getValueHistory("1M").then((s) => active && setSeries(s)).catch(() => active && setSeries([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(() =>
+    getValueHistory("1M")
+      .then(setSeries)
+      .catch(() => setSeries((prev) => prev ?? [])),
+  );
 
   const change =
     series && series.length > 1

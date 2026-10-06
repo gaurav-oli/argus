@@ -12,7 +12,8 @@ import {
   type AdminInvite,
   type AdminUserStats,
 } from "@/lib/apiClient";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /** Relative "time ago", or "never". */
 function relTime(iso: string | null): string {
@@ -55,20 +56,17 @@ export function AdminUserStats({ index }: { index: number }) {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  // Re-polled so a friend joining (or opening their invite) shows up without reloading Profile.
+  useAutoRefresh(() => {
     getAdminUserStats()
-      .then((v) => active && setRows(v))
+      .then(setRows)
       .catch(() => {
-        // 403 = not an admin — this section simply doesn't exist for them. Any other failure
-        // (network blip) also just hides it rather than showing a scary error in a settings page.
-        if (active) setRows(null);
+        // 403 = not an admin — this section simply doesn't exist for them. A blip after a successful
+        // load keeps what's shown; a failed first load hides it rather than showing a scary error.
+        setRows((prev) => (prev === undefined ? null : prev));
       });
     refetchInvites();
-    return () => {
-      active = false;
-    };
-  }, [refetchInvites]);
+  });
 
   /** After a revoke/restore/delete/remove: both lists change (status badges, a row disappearing). */
   const refetchAll = useCallback(() => {

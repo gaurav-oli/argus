@@ -95,12 +95,15 @@ public class ResearchAgentService {
 	private final DeepScorecardService scorecard;
 	private final ExecutorService executor;
 
+	private final com.argus.technical.LivePriceService livePrices;
+
 	public ResearchAgentService(ResearchJobRepository jobs, NewsArticleRepository news,
 			SocialPostRepository social, SecFilingRepository sec, WebMentionRepository web,
 			CalendarEventRepository calendar, ModelGateway gateway, LivePushService livePush,
 			ResearchJobProperties props, ChartStudyService charts, FundamentalsService fundamentals,
 			DeepAnalysisService deepAnalyses, DeepAnalysisRunner deepRunner,
-			FilingDigestService filings, DeepScorecardService scorecard) {
+			FilingDigestService filings, DeepScorecardService scorecard, com.argus.technical.LivePriceService livePrices) {
+		this.livePrices = livePrices;
 		this.filings = filings;
 		this.scorecard = scorecard;
 		this.jobs = jobs;
@@ -475,9 +478,9 @@ public class ResearchAgentService {
 		return sb.toString();
 	}
 
-	/** Agent 10's chart study, from stored candles. */
+	/** Agent 10's chart study, from stored candles, with its support/resistance measured from the live price. */
 	private String summarizeChart(String ticker) {
-		Optional<ChartStudy> s = charts.studyFor(ticker);
+		Optional<ChartStudy> s = charts.studyFor(ticker, livePrices.livePrice(ticker).orElse(null));
 		return s.map(ChartStudy::render).orElse("No chart study: not enough daily price history is stored for this symbol yet.");
 	}
 

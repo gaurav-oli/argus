@@ -2,7 +2,8 @@
 
 import { getFilings, getFundamentals, type FilingRow, type FundamentalsRow } from "@/lib/apiClient";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const VALUATION_STYLE: Record<string, string> = {
   CHEAP: "bg-gains/15 text-gains",
@@ -21,9 +22,7 @@ function signed(n: number, digits = 2): string {
  */
 export function FundamentalsPanel() {
   const [rows, setRows] = useState<FundamentalsRow[] | null>(null);
-  useEffect(() => {
-    getFundamentals().then(setRows).catch(() => setRows([]));
-  }, []);
+  useAutoRefresh(() => getFundamentals().then(setRows).catch(() => setRows((prev) => prev ?? [])), REFRESH.SLOW);
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
@@ -87,9 +86,7 @@ const KIND_LABEL: Record<FilingRow["kind"], string> = {
 
 export function FilingsPanel() {
   const [rows, setRows] = useState<FilingRow[] | null>(null);
-  useEffect(() => {
-    getFilings().then(setRows).catch(() => setRows([]));
-  }, []);
+  useAutoRefresh(() => getFilings().then(setRows).catch(() => setRows((prev) => prev ?? [])), REFRESH.SLOW);
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">

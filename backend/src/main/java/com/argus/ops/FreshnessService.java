@@ -26,15 +26,30 @@ public class FreshnessService {
 	private final SecFilingRepository sec;
 	private final RecommendationRepository recommendations;
 	private final CalendarEventRepository calendar;
+	private final com.argus.technical.PriceCandleRepository candles;
+	private final com.argus.deepanalysis.DeepAnalysisRepository deep;
+	private final com.argus.intelligence.KnownUniverse universe;
+	private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	/** Fundamentals refresh nightly with an hourly retry: the OLDEST tracked ticker past this means one is stuck. */
+	static final Duration FUNDAMENTALS_STALE_AFTER = Duration.ofHours(36);
+	/** The morning briefing is daily; past this, a morning was missed. */
+	static final Duration BRIEFING_STALE_AFTER = Duration.ofHours(26);
 
 	public FreshnessService(NewsArticleRepository news, SocialPostRepository social, WebMentionRepository web,
-			SecFilingRepository sec, RecommendationRepository recommendations, CalendarEventRepository calendar) {
+			SecFilingRepository sec, RecommendationRepository recommendations, CalendarEventRepository calendar,
+			com.argus.technical.PriceCandleRepository candles, com.argus.deepanalysis.DeepAnalysisRepository deep,
+			com.argus.intelligence.KnownUniverse universe, org.springframework.jdbc.core.JdbcTemplate jdbc) {
 		this.news = news;
 		this.social = social;
 		this.web = web;
 		this.sec = sec;
 		this.recommendations = recommendations;
 		this.calendar = calendar;
+		this.candles = candles;
+		this.deep = deep;
+		this.universe = universe;
+		this.jdbc = jdbc;
 	}
 
 	public FreshnessView snapshot() {
@@ -52,9 +67,32 @@ public class FreshnessService {
 				freshness("filings", "SEC filings (Agent 4)", sec::latestIngestedAt, AgentCadence.FILINGS.staleAfter(), now),
 				freshness("recommender", "Recommendations (Agent 5)", recommendations::latestCreatedAt,
 						AgentCadence.RECOMMENDER.staleAfter(), now),
-				freshness("calendar", "Calendar (Agent 7)", calendar::latestActivityAt, AgentCadence.CALENDAR.staleAfter(), now));
+				freshness("calendar", "Calendar (Agent 7)", calendar::latestActivityAt, AgentCadence.CALENDAR.staleAfter(), now),
+				freshness("technical", "Daily prices (Agent 10)", candles::latestIngestedAt, AgentCadence.TECHNICAL.staleAfter(), now),
+				// The OLDEST tracked ticker's snapshot, not the newest: "most recent fetch" hid SMCI/SPCX sitting
+				// 3-4 days old behind tickers that did refresh.
+				freshness("fundamentals", "Fundamentals, oldest ticker (Agent 12)", this::oldestTrackedFundamentals,
+						FUNDAMENTALS_STALE_AFTER, now),
+				freshness("deep", "Deep analysis (Agent 11)", deep::latestFinishedAt, AgentCadence.DEEP.staleAfter(), now),
+				freshness("briefing", "Morning briefing", this::latestBriefing, BRIEFING_STALE_AFTER, now));
 		boolean anyStale = sources.stream().anyMatch(SourceFreshness::stale);
 		return new FreshnessView(sources, anyStale);
+	}
+
+	private Instant oldestTrackedFundamentals() {
+		java.util.Set<String> tracked = universe.knownTickers();
+		if (tracked.isEmpty()) {
+			return null;
+		}
+		return jdbc.query("select min(fetched_at) from fundamentals_snapshot where ticker = any(?)",
+				ps -> ps.setArray(1, ps.getConnection().createArrayOf("text", tracked.toArray())),
+				rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null);
+	}
+
+	/** Across everyone — this runs with no signed-in user, where the per-user briefing finder sees nothing. */
+	private Instant latestBriefing() {
+		return jdbc.query("select max(generated_at) from briefings",
+				rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null);
 	}
 
 	private static SourceFreshness freshness(String key, String label, Supplier<Instant> latest,

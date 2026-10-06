@@ -6,7 +6,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { riskColorClass } from "@/lib/scoreBands";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 function tier(t: string): { text: string; bar: string } {
   switch (t) {
@@ -32,18 +33,14 @@ export function TrustPanel() {
   const [sources, setSources] = useState<SourceCredibilityItem[] | null>(null);
   const [strangers, setStrangers] = useState<StrangerAlertItem[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() => {
     getSourceCredibility()
-      .then((v) => active && setSources(v))
-      .catch(() => active && setSources([]));
+      .then(setSources)
+      .catch(() => setSources((prev) => prev ?? []));
     getStrangerAlerts()
-      .then((v) => active && setStrangers(v))
-      .catch(() => active && setStrangers([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .then(setStrangers)
+      .catch(() => setStrangers((prev) => prev ?? []));
+  });
 
   const logos = useCompanyLogos(useMemo(() => (strangers ?? []).map((a) => a.ticker), [strangers]));
 

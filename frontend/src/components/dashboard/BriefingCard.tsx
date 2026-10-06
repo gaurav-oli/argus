@@ -12,6 +12,7 @@ import {
 import { TypedText } from "@/components/terminal/TypedText";
 import { RefreshIcon } from "@/components/ui/RefreshIcon";
 import { absTime } from "@/lib/time";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Morning Briefing (Epic 8, FR-16) — the pinned card at the top of the dashboard. Shows the latest
@@ -121,26 +122,24 @@ export function BriefingCard() {
 
   // onRefresh is a stable useCallback (its only dep, stopTick, never changes), so this mount effect
   // runs once — referencing it directly won't re-trigger the load.
-  useEffect(() => {
-    let active = true;
+  useEffect(() => stopTick, [stopTick]);
+
+  // Re-pulled on the normal cadence and whenever the page comes back into view: a new morning briefing
+  // appears without a reload, and a pulse that has gone stale while the tab sat open regenerates the
+  // same way it does on login (onRefresh ignores a call while one is already running).
+  useAutoRefresh(() => {
     getLatestBriefing()
-      .then((b) => active && setBriefing(b))
-      .catch(() => active && setBriefing(null));
+      .then(setBriefing)
+      .catch(() => setBriefing((prev) => (prev === undefined ? null : prev)));
     getMarketPulse()
       .then((p) => {
-        if (!active) return;
         setPulse(p);
-        // Fresh-on-login: regenerate silently if we have nothing or it's gone stale.
         if (p === null || isStale(p.generatedAt)) {
           void onRefresh();
         }
       })
-      .catch(() => active && setPulse(null));
-    return () => {
-      active = false;
-      stopTick();
-    };
-  }, [onRefresh, stopTick]);
+      .catch(() => setPulse((prev) => (prev === undefined ? null : prev)));
+  });
 
   return (
     <div>

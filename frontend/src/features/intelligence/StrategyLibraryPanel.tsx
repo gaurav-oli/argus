@@ -4,7 +4,8 @@ import { getStrategyLibrary, revalidateStrategies, type StrategyLibrary, type St
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { STRATEGY_STATUS_GLOSSARY } from "./statusGlossary";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const STATUS_STYLE: Record<StrategyRow["status"], { label: string; cls: string }> = {
   ACTIVE: { label: "validated", cls: "bg-gains/15 text-gains" },
@@ -37,9 +38,7 @@ export function StrategyLibraryPanel() {
       .catch(() => setLib((cur) => cur ?? null));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useAutoRefresh(load, REFRESH.SLOW);
 
   async function revalidate() {
     setBusy(true);

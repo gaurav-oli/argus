@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ApiError, getResearchJobs, startResearch, type ResearchJobView } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { ResearchJobDetail } from "./ResearchJobDetail";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Agent 9 — on-demand research (Agents page). Unlike every other agent, this one only works when
@@ -18,15 +19,13 @@ export function ResearchAgentSection() {
   const [jobs, setJobs] = useState<ResearchJobView[] | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getResearchJobs()
-      .then((j) => active && setJobs(j))
-      .catch(() => active && setJobs([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getResearchJobs()
+        .then(setJobs)
+        .catch(() => setJobs((prev) => prev ?? [])),
+    REFRESH.FAST,
+  );
 
   const onStarted = useCallback((job: ResearchJobView) => {
     setJobs((prev) => [job, ...(prev ?? [])]);

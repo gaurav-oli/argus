@@ -1,7 +1,8 @@
 "use client";
 
 import { getWatching, type WatchItem } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Names Argus is tracking but has no clear edge on, each with the reason. This is the honest
@@ -11,15 +12,11 @@ import { useEffect, useState } from "react";
 export function WatchingList() {
   const [items, setItems] = useState<WatchItem[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     getWatching()
-      .then((w) => active && setItems(w))
-      .catch(() => active && setItems([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .then(setItems)
+      .catch(() => setItems((prev) => prev ?? [])),
+  );
 
   if (!items || items.length === 0) return null;
 

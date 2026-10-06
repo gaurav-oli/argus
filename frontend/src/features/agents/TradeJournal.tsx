@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
@@ -15,6 +15,7 @@ import {
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { cn } from "@/lib/utils";
 import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Trade Journal (Story 11.1, F22): the 100 most recent Taken/Declined recommendation decisions,
@@ -26,15 +27,11 @@ import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./
 export function TradeJournal() {
   const [entries, setEntries] = useState<JournalEntryView[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     getJournal()
-      .then((e) => active && setEntries(e))
-      .catch(() => active && setEntries([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .then(setEntries)
+      .catch(() => setEntries((prev) => prev ?? [])),
+  );
 
   const logos = useCompanyLogos(useMemo(() => (entries ?? []).map((e) => e.ticker), [entries]));
 

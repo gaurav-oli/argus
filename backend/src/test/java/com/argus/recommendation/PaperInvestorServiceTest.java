@@ -313,7 +313,7 @@ class PaperInvestorServiceTest {
 	}
 
 	private double stop(SignalDirection dir, ChartStudy chart) {
-		when(charts.studyFor("AAPL")).thenReturn(Optional.ofNullable(chart));
+		when(charts.studyFor("AAPL", 100.0)).thenReturn(Optional.ofNullable(chart)); // levels measured from the entry
 		return investor.stopFor(dir, "AAPL", bd(100)).doubleValue();
 	}
 

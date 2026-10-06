@@ -102,7 +102,9 @@ public class PaperInvestorService {
 	BigDecimal stopFor(SignalDirection direction, String ticker, BigDecimal entry) {
 		ChartStudy chart = null;
 		try {
-			chart = charts.studyFor(ticker).orElse(null);
+			// Levels measured from the entry (today's price): a stop from yesterday's levels could sit on the
+			// wrong side of a stock that already broke through them today.
+			chart = charts.studyFor(ticker, entry.doubleValue()).orElse(null);
 		}
 		catch (RuntimeException ex) {
 			log.debug("Investor: chart unavailable for {} stop: {}", ticker, ex.getMessage());

@@ -11,7 +11,8 @@ import type { ForecastInput } from "./ForecastSpread";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, DEEP_VERDICT_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 export type RosterAction = "STRONG_BUY" | "BUY" | "AVOID" | "STRONG_AVOID" | "WATCH";
 
@@ -49,24 +50,15 @@ export function useTickerRoster() {
   const [recs, setRecs] = useState<RecommendationCard[] | null>(null);
   const [watching, setWatching] = useState<WatchItem[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    // A failed refresh keeps what's on screen; only a failed first load falls back to empty.
-    const load = () => {
-      getRecommendations()
-        .then((v) => active && setRecs(v))
-        .catch(() => active && setRecs((prev) => prev ?? []));
-      getWatching()
-        .then((v) => active && setWatching(v))
-        .catch(() => active && setWatching((prev) => prev ?? []));
-    };
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, []);
+  // A failed refresh keeps what's on screen; only a failed first load falls back to empty.
+  useAutoRefresh(() => {
+    getRecommendations()
+      .then(setRecs)
+      .catch(() => setRecs((prev) => prev ?? []));
+    getWatching()
+      .then(setWatching)
+      .catch(() => setWatching((prev) => prev ?? []));
+  }, REFRESH_MS);
 
   const rows = useMemo<RosterRow[] | null>(() => {
     if (recs === null || watching === null) return null;

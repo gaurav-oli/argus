@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   addWatchlist,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Watchlist — the universe beyond your holdings. Adding a ticker widens what the agents cover, so
@@ -33,15 +34,11 @@ export function Watchlist() {
     }
   }
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     getWatchlist()
-      .then((e) => active && setEntries(e))
-      .catch(() => active && setEntries([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .then(setEntries)
+      .catch(() => setEntries((prev) => prev ?? [])),
+  );
 
   async function onAdd() {
     const t = ticker.trim().toUpperCase();

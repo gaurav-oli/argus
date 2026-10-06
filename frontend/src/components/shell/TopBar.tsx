@@ -5,9 +5,9 @@ import { PortfolioChat } from "@/features/conversation/PortfolioChat";
 import { HealthScoreBadge } from "@/features/portfolio/HealthScoreBadge";
 import { PrivacyToggle } from "@/features/privacy/PrivacyToggle";
 import { Sensitive } from "@/features/privacy/Sensitive";
-import { getPortfolioValue } from "@/lib/apiClient";
 import { usdOrDash } from "@/lib/format";
-import { useEffect, useState } from "react";
+import { usePortfolioSnapshot } from "@/lib/usePortfolioSnapshot";
+import { useState } from "react";
 
 /**
  * Top bar — brand (mobile) + the real Portfolio Health Score (Story 3.8) and the real total value
@@ -17,17 +17,7 @@ import { useEffect, useState } from "react";
  */
 export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
-  const [totalValue, setTotalValue] = useState<number | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    getPortfolioValue()
-      .then((s) => active && setTotalValue(s.totalValueCad))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  const totalValue = usePortfolioSnapshot()?.totalValueCad ?? null;
 
   return (
     <header className="glass-chrome sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-[var(--glass-border)] px-4 lg:px-6">

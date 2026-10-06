@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import { getLastLogicReview, runLogicReview, type LogicReviewLast } from "@/lib/apiClient";
 import { absTime } from "@/lib/time";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Analyst Logic Review (Ops) — the recommender's automated "LLM proposes, data disposes" self-tuning.
@@ -19,15 +20,13 @@ export function LogicReview() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getLastLogicReview()
-      .then((v) => active && setLast(v))
-      .catch(() => active && setLast(null));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getLastLogicReview()
+        .then(setLast)
+        .catch(() => setLast((prev) => (prev === undefined ? null : prev))),
+    REFRESH.SLOW,
+  );
 
   async function onRun() {
     setBusy(true);

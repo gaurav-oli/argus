@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { subscribeToTopic } from "@/lib/wsClient";
 import { useCallback, useEffect, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Agents dashboard (Epic 9, Story 9.1). Live per-agent status from /api/agents/status: what each
@@ -31,9 +32,6 @@ export function AgentFleet() {
     getAgentStatus()
       .then((v) => active && setAgents(v))
       .catch(() => active && setAgents([]));
-    getBudgetStatus()
-      .then((v) => active && setBudget(v))
-      .catch(() => {});
 
     // Story 9.1 — live updates: the backend pushes the fleet snapshot to /topic/agents on an interval.
     const sub = subscribeToTopic<AgentStatus[]>("/topic/agents", (v) => active && setAgents(v));
@@ -43,6 +41,9 @@ export function AgentFleet() {
       sub.disconnect();
     };
   }, []);
+
+  // The fleet streams over /topic/agents; the Haiku budget doesn't, so it re-polls.
+  useAutoRefresh(() => getBudgetStatus().then(setBudget).catch(() => {}));
 
   if (agents === null) return <FleetSkeleton />;
 

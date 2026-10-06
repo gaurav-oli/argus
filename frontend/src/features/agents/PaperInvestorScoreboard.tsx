@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { absTime } from "@/lib/time";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * The Investor persona's autonomous scoreboard (FR-11 follow-up). Instead of asking you to log which
@@ -29,16 +30,12 @@ export function PaperInvestorScoreboard() {
   const [board, setBoard] = useState<PaperTradeScoreboard | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     getPaperTrades()
-      .then((b) => active && setBoard(b))
-      .catch(() => active && setBoard(null))
-      .finally(() => active && setLoaded(true));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .then(setBoard)
+      .catch(() => {}) // keep the book on screen; a first-load failure stays null
+      .finally(() => setLoaded(true)),
+  );
 
   const logos = useCompanyLogos(
     useMemo(

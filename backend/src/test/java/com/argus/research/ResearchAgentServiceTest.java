@@ -60,8 +60,10 @@ class ResearchAgentServiceTest {
 	private final com.argus.filings.FilingDigestService filings = mock(com.argus.filings.FilingDigestService.class);
 	private final com.argus.deepanalysis.DeepScorecardService scorecard = mock(com.argus.deepanalysis.DeepScorecardService.class);
 
+	private final com.argus.technical.LivePriceService livePrices = mock(com.argus.technical.LivePriceService.class);
 	private final ResearchAgentService service = new ResearchAgentService(
-			jobs, news, social, sec, web, calendar, gateway, livePush, props, charts, fundamentals, deepAnalyses, deepRunner, filings, scorecard);
+			jobs, news, social, sec, web, calendar, gateway, livePush, props, charts, fundamentals, deepAnalyses, deepRunner, filings, scorecard,
+			livePrices);
 
 	{
 		// Default every raw-data source to empty unless a test overrides it — keeps each test focused
@@ -72,7 +74,7 @@ class ResearchAgentServiceTest {
 		when(web.findByTickerAndPostedAtAfter(anyString(), any())).thenReturn(List.of());
 		when(calendar.findByTickerAndTypeAndEventDateBetweenOrderByEventDateAsc(anyString(), any(), any(), any()))
 				.thenReturn(List.of());
-		when(charts.studyFor(anyString())).thenReturn(Optional.empty());
+		when(charts.studyFor(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
 		when(fundamentals.getOrRefresh(anyString(), any())).thenReturn(Optional.empty());
 		when(deepAnalyses.latestDone(anyString())).thenReturn(Optional.empty());
 		when(filings.view(anyString())).thenReturn(Optional.empty());
@@ -241,7 +243,7 @@ class ResearchAgentServiceTest {
 
 	@Test
 	void technicalReturnsAgent10sChartStudy() {
-		when(charts.studyFor("SPCX")).thenReturn(Optional.of(chart()));
+		when(charts.studyFor(org.mockito.ArgumentMatchers.eq("SPCX"), org.mockito.ArgumentMatchers.any())).thenReturn(Optional.of(chart()));
 
 		ResearchJob job = runSingleStep("TECHNICAL");
 

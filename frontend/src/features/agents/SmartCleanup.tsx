@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import {
@@ -11,6 +11,7 @@ import {
   type CleanupReport,
 } from "@/lib/apiClient";
 import { absTime } from "@/lib/time";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Smart Cleanup agent (Ops). Keeps raw firehose data by its future linking value — event-anchored,
@@ -24,15 +25,13 @@ export function SmartCleanup() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getLastCleanup()
-      .then((v) => active && setLast(v))
-      .catch(() => active && setLast(null));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getLastCleanup()
+        .then(setLast)
+        .catch(() => setLast((prev) => (prev === undefined ? null : prev))),
+    REFRESH.SLOW,
+  );
 
   async function onPreview() {
     setBusy("preview");

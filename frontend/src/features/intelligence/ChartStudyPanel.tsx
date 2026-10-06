@@ -3,7 +3,8 @@
 import { getChartDetail, getChartStudies, type ChartDetail, type ChartStudyRow } from "@/lib/apiClient";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CandlestickChart } from "./CandlestickChart";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const BIAS_CLS: Record<string, string> = {
   BULLISH: "bg-gains/15 text-gains",
@@ -27,30 +28,31 @@ export function ChartStudyPanel() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ChartDetail | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     getChartStudies()
       .then((r) => {
-        if (!active) return;
         setRows(r);
         if (r.length > 0) setSelected((s) => s ?? r[0].ticker);
       })
-      .catch(() => active && setRows([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+      .catch(() => setRows((prev) => prev ?? [])),
+  );
 
+  // The selected ticker's chart, re-pulled with the list so its live levels stay current.
+  const selectedRef = useRef(selected);
   useEffect(() => {
-    if (!selected) return;
-    let active = true;
-    getChartDetail(selected)
-      .then((d) => active && setDetail(d))
-      .catch(() => active && setDetail(null));
-    return () => {
-      active = false;
-    };
+    selectedRef.current = selected;
   }, [selected]);
+  useAutoRefresh(
+    () => {
+      const want = selected;
+      if (!want) return;
+      return getChartDetail(want)
+        .then((d) => want === selectedRef.current && setDetail(d))
+        .catch(() => want === selectedRef.current && setDetail((prev) => (prev?.study.ticker === want ? prev : null)));
+    },
+    REFRESH.NORMAL,
+    [selected],
+  );
 
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">

@@ -24,7 +24,8 @@ import { SlidingTabs } from "@/components/ui/SlidingTabs";
 import { TiltCard } from "@/components/ui/TiltCard";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /** "Oct 5, 8:00 AM" in the viewer's own timezone — when a call was first made. */
 function callDate(iso: string): string {
@@ -66,27 +67,18 @@ export function IntelligenceView() {
   const [insider, setInsider] = useState<InsiderActivity[] | null>(null);
   const [buzz, setBuzz] = useState<TickerBuzz[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    // Refreshed every few minutes too — these feed every ticker page's News & Sentiment tab. A failed
-    // refresh keeps what's on screen; only a failed first load falls back to empty.
+  // Refreshed every few minutes too — these feed every ticker page's News & Sentiment tab. A failed
+  // refresh keeps what's on screen; only a failed first load falls back to empty.
+  useAutoRefresh(() => {
     const keep = <T,>(fn: () => Promise<T[]>, set: (u: (prev: T[] | null) => T[] | null) => void) =>
       fn()
-        .then((v) => active && set(() => v))
-        .catch(() => active && set((prev) => prev ?? []));
-    const loadAll = () => {
-      keep(getNewsFeed, setNews);
-      keep(getSocialSentiment, setSocial);
-      keep(getInsiderActivity, setInsider);
-      keep(getWebBuzz, setBuzz);
-    };
-    loadAll();
-    const timer = setInterval(loadAll, 5 * 60_000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, []);
+        .then((v) => set(() => v))
+        .catch(() => set((prev) => prev ?? []));
+    keep(getNewsFeed, setNews);
+    keep(getSocialSentiment, setSocial);
+    keep(getInsiderActivity, setInsider);
+    keep(getWebBuzz, setBuzz);
+  });
 
   const actionable = useMemo(() => (rows ?? []).filter((r) => r.action !== "WATCH").slice(0, 4), [rows]);
   const condensed = useMemo(() => (rows ?? []).slice(0, 6), [rows]);
@@ -121,6 +113,7 @@ export function IntelligenceView() {
         {selectedTicker ? (
           <motion.div key="detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <TickerDetail
+              key={selectedTicker}
               ticker={selectedTicker}
               roster={selectedRoster}
               news={news ?? []}

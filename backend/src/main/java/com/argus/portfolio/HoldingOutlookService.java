@@ -33,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class HoldingOutlookService {
 
 	/** A latest recommendation older than this is too stale to confidently classify a holding — fall
-	 * back to "not enough data" rather than lean on a read-out that predates recent news/price action. */
-	private static final Duration STALE_AFTER = Duration.ofDays(30);
+	 * back to "not enough data" rather than lean on a read-out that predates recent news/price action.
+	 * Held tickers are re-scored every 6h, so a gap this long means scoring stopped (an earnings quiet
+	 * period is ~2 trading days); it used to be 30 days, long enough to present a month-old call as current. */
+	static final Duration STALE_AFTER = Duration.ofDays(7);
 	/** A "keep" position not edited in this long gets a nudge to confirm it's still being added to. */
 	private static final Duration NUDGE_AFTER = Duration.ofDays(21);
 
@@ -96,9 +98,10 @@ public class HoldingOutlookService {
 		}
 		Recommendation r = rec.get();
 		DeepView deep = deepAnalyses.viewFor(ticker).orElse(null);
-		ChartStudy chart = charts.studyFor(ticker).orElse(null);
-		String valuation = valuationToken(r);
 		Double lastPrice = livePrices.latestPrice(ticker).map(BigDecimal::doubleValue).orElse(null);
+		// Levels re-measured from the live price, so "good time to add?" doesn't lean on yesterday's levels.
+		ChartStudy chart = charts.studyFor(ticker, lastPrice).orElse(null);
+		String valuation = valuationToken(r);
 		PriceGuidance.Guidance guidance = PriceGuidance.build(r.getAction(), r.getHoldDays() == null ? 0 : r.getHoldDays(),
 				lastPrice, chart, deep, valuation);
 		HoldingOutlook.Outlook outlook = HoldingOutlook.classify(r, deep, guidance);

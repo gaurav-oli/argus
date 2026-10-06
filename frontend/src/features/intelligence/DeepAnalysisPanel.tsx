@@ -18,6 +18,7 @@ import {
 import { DeepAnalysisDetail, DeepSummaryLine, ageText } from "@/features/intelligence/DeepAnalysisCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useCallback, useEffect, useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Agent 11 — the deep analyst's verdicts. Each stock gets a slow, multi-stage analysis (every other agent's
@@ -156,10 +157,12 @@ function Scorecard() {
     getDeepScorecardHistory().then(setHistory).catch(() => setHistory([]));
   }, []);
 
-  useEffect(() => {
-    getDeepScorecard().then(setSc).catch(() => setSc(null));
+  useAutoRefresh(() => {
+    getDeepScorecard()
+      .then(setSc)
+      .catch(() => setSc((prev) => (prev === undefined ? null : prev)));
     loadHistory();
-  }, [loadHistory]);
+  }, REFRESH.SLOW);
 
   async function snapshotNow() {
     setSaving(true);
@@ -269,9 +272,13 @@ const VERDICT_LABEL: Record<string, string> = { WORTH_BUYING: "Buy", WAIT: "Wait
 function HaikuVsLocal() {
   const [data, setData] = useState<DeepModelComparison | null | undefined>(undefined);
 
-  useEffect(() => {
-    getDeepScorecardByModel().then(setData).catch(() => setData(null));
-  }, []);
+  useAutoRefresh(
+    () =>
+      getDeepScorecardByModel()
+        .then(setData)
+        .catch(() => setData((prev) => (prev === undefined ? null : prev))),
+    REFRESH.SLOW,
+  );
 
   if (!data) return null;
   const models = Object.keys(data.totalVerdicts) as VerdictModel[];

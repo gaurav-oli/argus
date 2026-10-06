@@ -4,6 +4,7 @@ import { AreaSeries, ColorType, createChart, type IChartApi, type ISeriesApi } f
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { getValueHistory } from "@/lib/apiClient";
 import { useEffect, useRef, useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const RANGES = ["1D", "1W", "1M", "3M", "YTD", "1Y", "All"] as const;
 
@@ -74,21 +75,28 @@ export function PortfolioChart() {
     });
   }, [theme]);
 
+  // The range being shown, so a slow response for a range the user already switched away from is dropped.
+  const rangeRef = useRef(range);
   useEffect(() => {
-    let active = true;
-    getValueHistory(range)
-      .then((points) => {
-        if (!active || !seriesRef.current || !chartRef.current) return;
-        // A single point renders a degenerate line (e.g. the 1D range early on) — treat <2 as empty.
-        setEmpty(points.length < 2);
-        seriesRef.current.setData(points.map((p) => ({ time: p.date, value: p.totalValueCad })));
-        chartRef.current.timeScale().fitContent();
-      })
-      .catch(() => active && setEmpty(true));
-    return () => {
-      active = false;
-    };
+    rangeRef.current = range;
   }, [range]);
+
+  useAutoRefresh(
+    () => {
+      const want = range;
+      return getValueHistory(want)
+        .then((points) => {
+          if (want !== rangeRef.current || !seriesRef.current || !chartRef.current) return;
+          // A single point renders a degenerate line (e.g. the 1D range early on) — treat <2 as empty.
+          setEmpty(points.length < 2);
+          seriesRef.current.setData(points.map((p) => ({ time: p.date, value: p.totalValueCad })));
+          chartRef.current.timeScale().fitContent();
+        })
+        .catch(() => {}); // keep the chart already drawn; the next refresh retries
+    },
+    REFRESH.NORMAL,
+    [range],
+  );
 
   return (
     <div className="flex h-full flex-col">

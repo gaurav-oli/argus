@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -17,6 +17,7 @@ import {
   type WindowStat,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Agent 5 performance (Epic 9, Stories 9.2–9.4 + regret analysis): accuracy over time windows,
@@ -31,20 +32,15 @@ export function AgentPerformance() {
   const [regret, setRegret] = useState<RegretView | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() =>
     Promise.allSettled([getAccuracy(), getAttribution(), getCalibration(), getRegret()]).then((r) => {
-      if (!active) return;
       if (r[0].status === "fulfilled") setAccuracy(r[0].value);
       if (r[1].status === "fulfilled") setAttribution(r[1].value);
       if (r[2].status === "fulfilled") setCalibration(r[2].value);
       if (r[3].status === "fulfilled") setRegret(r[3].value);
       setLoaded(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+    }),
+  );
 
   if (!loaded) {
     return (

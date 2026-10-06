@@ -18,6 +18,7 @@ import {
   type HardwareMetrics,
   type SourceFreshness,
 } from "@/lib/apiClient";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * System health for the Operations view (Epic 9): host hardware (Story 9.5), data-source freshness
@@ -39,19 +40,17 @@ export function OpsHealth() {
     getBackupStatus().then(setBackup).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    Promise.allSettled([getHardware(), getFreshness(), getBackupStatus()]).then((r) => {
-      if (!active) return;
+  // The data-freshness panel itself must never be stale: hardware + freshness re-poll every minute.
+  useAutoRefresh(
+    () =>
+      Promise.allSettled([getHardware(), getFreshness(), getBackupStatus()]).then((r) => {
       if (r[0].status === "fulfilled") setHw(r[0].value);
       if (r[1].status === "fulfilled") setFresh(r[1].value);
       if (r[2].status === "fulfilled") setBackup(r[2].value);
       setLoaded(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+      }),
+    REFRESH.FAST,
+  );
 
   // Poll while a backup is actively running; stop the instant it settles.
   useEffect(() => {

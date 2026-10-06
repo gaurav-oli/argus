@@ -4,7 +4,8 @@ import { Sensitive } from "@/features/privacy/Sensitive";
 import { getHealthScore, type HealthScoreResult } from "@/lib/apiClient";
 import { HealthScoreBreakdown } from "@/features/portfolio/HealthScoreBreakdown";
 import { healthBand } from "@/lib/scoreBands";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Always-visible Portfolio Health Score for the top bar (Stories 3.8/3.9, FR-6/FR-7). Shows the
@@ -15,15 +16,7 @@ export function HealthScoreBadge() {
   const [result, setResult] = useState<HealthScoreResult | null>(null);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    getHealthScore()
-      .then((r) => active && setResult(r))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(() => getHealthScore().then(setResult).catch(() => {}));
 
   const score = result?.score ?? null;
   const color = healthBand(score).textClass;

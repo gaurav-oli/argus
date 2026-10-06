@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { getUpcomingEvents, type UpcomingEvent } from "@/lib/apiClient";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SortToggle } from "@/components/ui/SortToggle";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 type SortMode = "newest" | "oldest" | "soonest";
 const SORT_OPTIONS = [
@@ -40,15 +41,13 @@ export function UpcomingEvents() {
   const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
 
-  useEffect(() => {
-    let active = true;
-    getUpcomingEvents()
-      .then((e) => active && setEvents(e))
-      .catch(() => active && setEvents([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getUpcomingEvents()
+        .then(setEvents)
+        .catch(() => setEvents((prev) => prev ?? [])),
+    REFRESH.SLOW,
+  );
 
   const sorted = useMemo(() => (events ? sortEvents(events, sortMode) : []), [events, sortMode]);
 

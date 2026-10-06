@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { getLiveAlerts, type LiveAlert } from "@/lib/apiClient";
 import { relTime } from "@/lib/time";
 import { SortToggle } from "@/components/ui/SortToggle";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const tier = {
   critical: { color: "var(--color-losses)", label: "Crit", rank: 0 },
@@ -46,15 +47,13 @@ export function AlertCards() {
   const [items, setItems] = useState<LiveAlert[] | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
 
-  useEffect(() => {
-    let active = true;
-    getLiveAlerts()
-      .then((v) => active && setItems(v))
-      .catch(() => active && setItems([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getLiveAlerts()
+        .then(setItems)
+        .catch(() => setItems((prev) => prev ?? [])),
+    REFRESH.FAST,
+  );
 
   const sorted = useMemo(() => (items ? sortAlerts(items, sortMode) : []), [items, sortMode]);
 

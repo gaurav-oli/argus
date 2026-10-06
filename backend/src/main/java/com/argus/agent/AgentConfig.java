@@ -21,8 +21,23 @@ public class AgentConfig {
 	 * scheduling infrastructure selects it.
 	 */
 	@Bean
-	TaskScheduler taskScheduler() {
-		SimpleAsyncTaskScheduler scheduler = new SimpleAsyncTaskScheduler();
+	TaskScheduler taskScheduler(org.springframework.beans.factory.ObjectProvider<com.argus.ops.ScheduledRunLedger> ledger) {
+		// Every clock-scheduled (cron) job is stamped in the run ledger as it completes, so a slot missed
+		// while the host was down can be detected and caught up at the next start (MissedRunCatchUp).
+		// The task's toString is Spring's "fully.qualified.Class.method" for an @Scheduled method.
+		SimpleAsyncTaskScheduler scheduler = new SimpleAsyncTaskScheduler() {
+			@Override
+			public java.util.concurrent.ScheduledFuture<?> schedule(Runnable task, org.springframework.scheduling.Trigger trigger) {
+				String job = task.toString();
+				return super.schedule(() -> {
+					task.run();
+					com.argus.ops.ScheduledRunLedger l = ledger.getIfAvailable();
+					if (l != null) {
+						l.recordRun(job);
+					}
+				}, trigger);
+			}
+		};
 		scheduler.setVirtualThreads(true);
 		scheduler.setThreadNamePrefix("agent-scheduler-");
 		return scheduler;

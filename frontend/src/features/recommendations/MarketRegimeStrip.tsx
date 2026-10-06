@@ -1,7 +1,8 @@
 "use client";
 
 import { getMarketRegime, type MarketRegimeView } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const STATE_STYLE: Record<MarketRegimeView["state"], { label: string; cls: string }> = {
   RISK_OFF: { label: "Risk-off", cls: "bg-losses/15 text-losses" },
@@ -18,15 +19,7 @@ const STATE_STYLE: Record<MarketRegimeView["state"], { label: string; cls: strin
 export function MarketRegimeStrip() {
   const [regime, setRegime] = useState<MarketRegimeView | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getMarketRegime()
-      .then((r) => active && setRegime(r))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(() => getMarketRegime().then(setRegime).catch(() => {}));
 
   if (!regime || regime.state === "UNKNOWN") return null;
   const style = STATE_STYLE[regime.state];

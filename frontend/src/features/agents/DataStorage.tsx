@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { getStorage, type AgentStorage, type StorageView } from "@/lib/apiClient";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Data storage by agent (Ops) — how much each agent has accumulated and where it lives. Shows the
@@ -16,16 +17,17 @@ export function DataStorage() {
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    getStorage()
-      .then((v) => active && setView(v))
-      .catch(() => active && setError(true))
-      .finally(() => active && setLoaded(true));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getStorage()
+        .then((v) => {
+          setView(v);
+          setError(false);
+        })
+        .catch(() => setError(true))
+        .finally(() => setLoaded(true)),
+    REFRESH.SLOW,
+  );
 
   if (!loaded) return <Skeleton className="h-72" />;
   if (error || !view) {

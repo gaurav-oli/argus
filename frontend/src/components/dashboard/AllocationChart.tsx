@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { getPortfolioValue, type PortfolioSnapshot } from "@/lib/apiClient";
+import { usePortfolioSnapshot } from "@/lib/usePortfolioSnapshot";
 import { useDemoMode } from "@/features/privacy/DemoModeProvider";
 import { DemoPlaceholder } from "@/features/privacy/DemoPlaceholder";
 
@@ -19,15 +18,7 @@ const CATS = [
 export function AllocationChart() {
   const reduce = useReducedMotion();
   const { demoMode } = useDemoMode();
-  const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getPortfolioValue().then((s) => alive && setSnap(s)).catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const snap = usePortfolioSnapshot();
 
   // Positions are per-lot (a ticker can appear once per account/holding), so group by ticker and
   // sum weight before rendering — otherwise a stock held across several accounts shows up as

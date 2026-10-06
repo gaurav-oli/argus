@@ -2,7 +2,8 @@
 
 import { getLearning, runLearning, type LearnedRuleView, type LearningView } from "@/lib/apiClient";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 function effectText(r: LearnedRuleView): string {
   switch (r.kind) {
@@ -56,15 +57,13 @@ export function LearningPanel() {
   const [view, setView] = useState<LearningView | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    getLearning()
-      .then((v) => active && setView(v))
-      .catch(() => active && setView({ report: null, activeRules: [], otherRules: [], running: false }));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(
+    () =>
+      getLearning()
+        .then(setView)
+        .catch(() => setView((prev) => prev ?? { report: null, activeRules: [], otherRules: [], running: false })),
+    REFRESH.SLOW,
+  );
 
   async function learnNow() {
     setBusy(true);

@@ -23,6 +23,7 @@ import { MarketRegimeStrip } from "@/features/recommendations/MarketRegimeStrip"
 import { WatchingList } from "@/features/recommendations/WatchingList";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { useEffect, useMemo, useState } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Recommendation cards (Epic 6 — Agent 5) from /api/recommendations. Only calls with a real edge get a
@@ -41,21 +42,17 @@ export function RecommendationCards() {
   // underlying call, which stays the same objective read for everyone.
   const [horizon, setHorizon] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  useAutoRefresh(() => {
     getRecommendations()
-      .then((c) => active && setCards(c))
-      .catch(() => active && setCards([]));
+      .then(setCards)
+      .catch(() => setCards((prev) => prev ?? []));
     getGraduation()
-      .then((g) => active && setGrad(g))
+      .then(setGrad)
       .catch(() => {});
     getInvestorProfile()
-      .then((p) => active && setHorizon(p.tradingHorizon))
+      .then((p) => setHorizon(p.tradingHorizon))
       .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+  });
 
   const logos = useCompanyLogos(useMemo(() => (cards ?? []).map((c) => c.ticker), [cards]));
 

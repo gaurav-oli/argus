@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ResponsiveContainer, Treemap } from "recharts";
-import { getPortfolioValue, type PortfolioSnapshot } from "@/lib/apiClient";
+import { usePortfolioSnapshot } from "@/lib/usePortfolioSnapshot";
 import { useMounted } from "@/lib/useMounted";
 
 type TileProps = { x?: number; y?: number; width?: number; height?: number; name?: string };
@@ -10,15 +9,7 @@ type TileProps = { x?: number; y?: number; width?: number; height?: number; name
 /** Holdings heatmap (real positions, /api/portfolio/value) — tiles sized by value, coloured by move. */
 export function HoldingsTreemap() {
   const mounted = useMounted();
-  const [snap, setSnap] = useState<PortfolioSnapshot | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getPortfolioValue().then((s) => alive && setSnap(s)).catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const snap = usePortfolioSnapshot();
 
   // Aggregate by ticker first — the same symbol can be held across several accounts (e.g. NVDA in
   // both a TFSA and an RRSP), and without this each account-position rendered its own same-labelled

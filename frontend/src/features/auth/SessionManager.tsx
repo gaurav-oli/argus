@@ -1,7 +1,8 @@
 "use client";
 
 import { listSessions, revokeSession, type SessionInfo } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -23,19 +24,16 @@ export function SessionManager() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    listSessions()
-      .then((s) => {
-        if (active) setSessions(s);
-      })
-      .catch(() => {
-        /* leave empty */
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  // A new sign-in on another device (or one ending) shows up without reloading Settings.
+  useAutoRefresh(
+    () =>
+      listSessions()
+        .then(setSessions)
+        .catch(() => {
+          /* keep what's listed */
+        }),
+    REFRESH.FAST,
+  );
 
   function refresh() {
     listSessions()

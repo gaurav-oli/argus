@@ -25,7 +25,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ACTION_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import type { RosterRow } from "./TickerRoster";
 
 const TABS = [
@@ -101,31 +102,27 @@ export function TickerDetail({
   const [filings, setFilings] = useState<FilingsDetail | null | undefined>(undefined);
   const [strategies, setStrategies] = useState<StrategyReading[] | undefined>(undefined);
 
-  useEffect(() => {
-    let active = true;
-    // Re-pulled every few minutes while open, so live levels, a just-refreshed fundamentals snapshot or a
-    // new filing show up without leaving the page. A failed refresh keeps what's on screen.
-    const load = () => {
+  // Re-pulled every few minutes while open (and on returning to the tab), so live levels, a just-refreshed
+  // fundamentals snapshot or a new filing show up without leaving the page. A failed refresh keeps what's
+  // on screen. The panel is keyed per ticker by its parent, so a response can't land on another ticker.
+  useAutoRefresh(
+    () => {
       getChartDetail(ticker)
-        .then((v) => active && setChart(v))
-        .catch(() => active && setChart((prev) => (prev === undefined ? null : prev)));
+        .then(setChart)
+        .catch(() => setChart((prev) => (prev === undefined ? null : prev)));
       getFundamentalsFor(ticker)
-        .then((v) => active && setFundamentals(v))
-        .catch(() => active && setFundamentals((prev) => (prev === undefined ? null : prev)));
+        .then(setFundamentals)
+        .catch(() => setFundamentals((prev) => (prev === undefined ? null : prev)));
       getFilingsFor(ticker)
-        .then((v) => active && setFilings(v))
-        .catch(() => active && setFilings((prev) => (prev === undefined ? null : prev)));
+        .then(setFilings)
+        .catch(() => setFilings((prev) => (prev === undefined ? null : prev)));
       getStrategyReadings(ticker)
-        .then((v) => active && setStrategies(v))
-        .catch(() => active && setStrategies((prev) => prev ?? []));
-    };
-    load();
-    const timer = setInterval(load, DETAIL_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [ticker]);
+        .then(setStrategies)
+        .catch(() => setStrategies((prev) => prev ?? []));
+    },
+    DETAIL_REFRESH_MS,
+    [ticker],
+  );
 
   const tickerNews = news.filter((n) => n.tickers.includes(ticker)).slice(0, 8);
   const tickerSocial = social.find((s) => s.ticker === ticker);

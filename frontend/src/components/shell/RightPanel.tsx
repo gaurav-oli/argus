@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   getLiveAlerts,
   getRecommendations,
@@ -10,6 +10,7 @@ import {
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { relTime } from "@/lib/time";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 const tierColor = {
   critical: "var(--color-losses)",
@@ -25,14 +26,14 @@ export function RightPanel() {
   const [alerts, setAlerts] = useState<LiveAlert[] | null>(null);
   const [recs, setRecs] = useState<RecommendationCard[] | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getLiveAlerts().then((v) => active && setAlerts(v)).catch(() => active && setAlerts([]));
-    getRecommendations().then((v) => active && setRecs(v)).catch(() => active && setRecs([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  useAutoRefresh(() => {
+    getLiveAlerts()
+      .then(setAlerts)
+      .catch(() => setAlerts((prev) => prev ?? []));
+    getRecommendations()
+      .then(setRecs)
+      .catch(() => setRecs((prev) => prev ?? []));
+  }, REFRESH.FAST);
 
   const logos = useCompanyLogos(useMemo(() => (recs ?? []).map((r) => r.ticker), [recs]));
 
