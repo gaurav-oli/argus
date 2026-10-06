@@ -43,6 +43,12 @@ public class FundamentalsService {
 	private static final String BASE = "https://finnhub.io/api/v1/";
 	private static final int MAX_PEERS = 5;
 	private static final Duration REFRESH_AFTER = Duration.ofHours(20);
+	/** Older than a nightly cycle plus slack: the nightly run missed it (host down, Finnhub refused). */
+	static final Duration MISSED_AFTER = Duration.ofHours(26);
+
+	/** Off in tests so the hourly retry sweep never fires against the shared test database. */
+	@Value("${argus.boot-catch-up.enabled:true}")
+	private boolean retryMissed = true;
 
 	private final FinnhubRest finnhub;
 	private final String apiKey;
@@ -193,10 +199,26 @@ public class FundamentalsService {
 
 	@Scheduled(cron = "${argus.fundamentals.refresh-cron:0 0 2 * * *}", zone = "America/New_York")
 	public void refreshUniverse() {
+		refreshOlderThan(REFRESH_AFTER);
+	}
+
+	/**
+	 * Hourly retry: the nightly run is one shot, so a ticker it missed (Finnhub rate-limited it, or the
+	 * host was down at 02:00) used to stay stale for days. Only tickers older than a full cycle — or
+	 * never fetched, like a newly discovered name — are refreshed, so a healthy night makes this a no-op.
+	 */
+	@Scheduled(cron = "0 40 * * * *")
+	public void retryMissed() {
+		if (retryMissed) {
+			refreshOlderThan(MISSED_AFTER);
+		}
+	}
+
+	private void refreshOlderThan(Duration maxAge) {
 		int done = 0;
 		for (String t : universe.knownTickers()) {
 			try {
-				if (latestFresh(t, REFRESH_AFTER).isPresent()) continue;
+				if (latestFresh(t, maxAge).isPresent()) continue;
 				refresh(t);
 				done++;
 				Thread.sleep(1_000);
@@ -210,6 +232,21 @@ public class FundamentalsService {
 			}
 		}
 		log.info("Fundamentals refresh: {} ticker(s) updated ({})", done, LocalDate.now());
+	}
+
+	/** Kick off a refresh on a virtual thread when the stored snapshot is missing or older than {@code maxAge}. */
+	public void refreshInBackgroundIfOlderThan(String ticker, Duration maxAge) {
+		if (latestFresh(ticker, maxAge).isPresent()) {
+			return;
+		}
+		Thread.startVirtualThread(() -> {
+			try {
+				refresh(ticker); // per-ticker lock + "just refreshed" check make concurrent page loads harmless
+			}
+			catch (RuntimeException ex) {
+				log.warn("Background fundamentals refresh for {} failed: {}", ticker, ex.getMessage());
+			}
+		});
 	}
 
 	/** Boot fill — without it a fresh deploy would wait until 02:00 ET for its first fundamentals. */

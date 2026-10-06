@@ -68,16 +68,23 @@ export function IntelligenceView() {
 
   useEffect(() => {
     let active = true;
-    const load = <T,>(fn: () => Promise<T>, set: (v: T) => void) =>
+    // Refreshed every few minutes too — these feed every ticker page's News & Sentiment tab. A failed
+    // refresh keeps what's on screen; only a failed first load falls back to empty.
+    const keep = <T,>(fn: () => Promise<T[]>, set: (u: (prev: T[] | null) => T[] | null) => void) =>
       fn()
-        .then((v) => active && set(v))
-        .catch(() => active && set([] as unknown as T));
-    load(getNewsFeed, setNews);
-    load(getSocialSentiment, setSocial);
-    load(getInsiderActivity, setInsider);
-    load(getWebBuzz, setBuzz);
+        .then((v) => active && set(() => v))
+        .catch(() => active && set((prev) => prev ?? []));
+    const loadAll = () => {
+      keep(getNewsFeed, setNews);
+      keep(getSocialSentiment, setSocial);
+      keep(getInsiderActivity, setInsider);
+      keep(getWebBuzz, setBuzz);
+    };
+    loadAll();
+    const timer = setInterval(loadAll, 5 * 60_000);
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, []);
 

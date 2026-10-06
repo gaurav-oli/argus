@@ -27,9 +27,12 @@ public class TechnicalController {
 	private final ChartStudyService charts;
 	private final KnownUniverse universe;
 
-	public TechnicalController(ChartStudyService charts, KnownUniverse universe) {
+	private final LivePriceService livePrices;
+
+	public TechnicalController(ChartStudyService charts, KnownUniverse universe, LivePriceService livePrices) {
 		this.charts = charts;
 		this.universe = universe;
+		this.livePrices = livePrices;
 	}
 
 	/** Every tracked ticker with enough history, the most decisive charts (either direction) first. */
@@ -37,7 +40,7 @@ public class TechnicalController {
 	public List<StudyRow> studies() {
 		List<StudyRow> rows = new ArrayList<>();
 		for (String t : universe.knownTickers()) {
-			charts.studyFor(t).ifPresent(s -> rows.add(StudyRow.from(t, s)));
+			charts.studyFor(t, livePrices.livePrice(t).orElse(null)).ifPresent(s -> rows.add(StudyRow.from(t, s)));
 		}
 		rows.sort(Comparator.comparingDouble((StudyRow r) -> Math.abs(r.score())).reversed());
 		return rows;
@@ -46,7 +49,10 @@ public class TechnicalController {
 	@GetMapping("/{ticker}")
 	public ChartDetail detail(@PathVariable String ticker) {
 		String t = ticker.trim().toUpperCase(Locale.ROOT);
-		ChartStudy study = charts.studyFor(t).orElseThrow(() -> new NotFoundException("Chart study", t));
+		// Support/resistance (and the levels note) re-measured from the live price, like the cards.
+		Double live = livePrices.livePrice(t).orElse(null);
+		ChartStudy study = charts.studyFor(t, live).orElseThrow(() -> new NotFoundException("Chart study", t));
+		boolean levelsLive = ChartStudyService.livePriceUsable(study, live);
 		List<PriceCandle> all = charts.history(t);
 		int from = Math.max(0, all.size() - CHART_BARS);
 		List<Bar> bars = new ArrayList<>();
@@ -59,7 +65,8 @@ public class TechnicalController {
 			sma(all, i, 50).ifPresent(v -> sma50.add(new Point(c.getCandleDate(), v)));
 			sma(all, i, 200).ifPresent(v -> sma200.add(new Point(c.getCandleDate(), v)));
 		}
-		return new ChartDetail(StudyRow.from(t, study), study.notes(), study.support(), study.resistance(), bars, sma20, sma50, sma200);
+		return new ChartDetail(StudyRow.from(t, study), study.notes(), study.support(), study.resistance(), bars, sma20, sma50, sma200,
+				levelsLive ? live : study.lastClose(), levelsLive);
 	}
 
 	private static Optional<Double> sma(List<PriceCandle> all, int index, int period) {
@@ -85,7 +92,9 @@ public class TechnicalController {
 	public record Point(LocalDate time, double value) {
 	}
 
+	/** {@code levelsPrice} is what support/resistance were measured from: the live price when {@code levelsLive},
+	 * else the last daily close ({@code study.asOf}). */
 	public record ChartDetail(StudyRow study, List<String> notes, Double support, Double resistance, List<Bar> candles, List<Point> sma20,
-			List<Point> sma50, List<Point> sma200) {
+			List<Point> sma50, List<Point> sma200, double levelsPrice, boolean levelsLive) {
 	}
 }

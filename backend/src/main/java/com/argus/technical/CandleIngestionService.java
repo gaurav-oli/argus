@@ -72,12 +72,14 @@ public class CandleIngestionService {
 	private final ListingResolver listings;
 	private final TechnicalAnalysisProperties props;
 	private final NotificationService notifications;
+	private final ChartStudyService charts;
 	private volatile long requestSpacingMs = REQUEST_SPACING_MS;
 
 	public CandleIngestionService(@Value("${argus.alpha-vantage.api-key:}") String alphaVantageKey,
 			YahooChartClient yahoo, AlphaVantageRest alphaVantage, PriceCandleRepository candles,
 			KnownUniverse universe, LivePortfolioService livePrices, TechnicalAnalysisProperties props,
-			NotificationService notifications, ListingResolver listings) {
+			NotificationService notifications, ListingResolver listings, ChartStudyService charts) {
+		this.charts = charts;
 		this.alphaVantageKey = alphaVantageKey;
 		this.yahoo = yahoo;
 		this.alphaVantage = alphaVantage;
@@ -165,6 +167,7 @@ public class CandleIngestionService {
 		}
 		if (saved > 0) {
 			log.info("Candle ingestion: {} new candle(s) across {} ticker(s) refreshed", saved, attempted);
+			charts.evictAll(); // studies built on yesterday's bars must not outlive tonight's candles
 		}
 		return saved;
 	}

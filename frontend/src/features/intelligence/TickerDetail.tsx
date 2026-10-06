@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ACTION_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { RosterRow } from "./TickerRoster";
 
 const TABS = [
@@ -42,6 +42,34 @@ const TABS = [
  * full-width panel over the roster; its header icon shares a layoutId with the row that opened it, so
  * there's one small moment of genuine shared-element motion rather than a flat, instant swap.
  */
+/** How often an open ticker page re-pulls its tabs. */
+const DETAIL_REFRESH_MS = 5 * 60_000;
+
+/** Fundamentals refresh nightly; older than this means a run was missed (a refresh is already queued). */
+const FUNDAMENTALS_STALE_HOURS = 26;
+
+/** "3h ago" / "2d ago". */
+function ago(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 48 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+}
+
+function hoursSince(iso: string): number {
+  return (Date.now() - new Date(iso).getTime()) / 3_600_000;
+}
+
+/** "Oct 5" for a yyyy-mm-dd date, without a timezone shift. */
+function shortDate(isoDate: string): string {
+  return new Date(`${isoDate.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** A small "as of" line under a section, amber when the data is older than it should be. */
+function AsOf({ children, stale = false }: { children: ReactNode; stale?: boolean }) {
+  return <p className={`text-[10px] ${stale ? "font-semibold text-warning" : "text-text-tertiary"}`}>{children}</p>;
+}
+
 /** "4.6%" — how far a support/resistance level sits from the price it was measured from. */
 function levelDistance(level: number, price: number): string {
   return `${((Math.abs(level - price) / price) * 100).toFixed(1)}%`;
@@ -75,20 +103,27 @@ export function TickerDetail({
 
   useEffect(() => {
     let active = true;
-    getChartDetail(ticker)
-      .then((v) => active && setChart(v))
-      .catch(() => active && setChart(null));
-    getFundamentalsFor(ticker)
-      .then((v) => active && setFundamentals(v))
-      .catch(() => active && setFundamentals(null));
-    getFilingsFor(ticker)
-      .then((v) => active && setFilings(v))
-      .catch(() => active && setFilings(null));
-    getStrategyReadings(ticker)
-      .then((v) => active && setStrategies(v))
-      .catch(() => active && setStrategies([]));
+    // Re-pulled every few minutes while open, so live levels, a just-refreshed fundamentals snapshot or a
+    // new filing show up without leaving the page. A failed refresh keeps what's on screen.
+    const load = () => {
+      getChartDetail(ticker)
+        .then((v) => active && setChart(v))
+        .catch(() => active && setChart((prev) => (prev === undefined ? null : prev)));
+      getFundamentalsFor(ticker)
+        .then((v) => active && setFundamentals(v))
+        .catch(() => active && setFundamentals((prev) => (prev === undefined ? null : prev)));
+      getFilingsFor(ticker)
+        .then((v) => active && setFilings(v))
+        .catch(() => active && setFilings((prev) => (prev === undefined ? null : prev)));
+      getStrategyReadings(ticker)
+        .then((v) => active && setStrategies(v))
+        .catch(() => active && setStrategies((prev) => prev ?? []));
+    };
+    load();
+    const timer = setInterval(load, DETAIL_REFRESH_MS);
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, [ticker]);
 
@@ -236,6 +271,10 @@ export function TickerDetail({
                 <p className="text-sm text-text-secondary">Not enough price history yet for a chart study.</p>
               ) : (
                 <>
+                  <AsOf>
+                    Daily chart through {shortDate(chart.study.asOf)} · levels measured from ${chart.levelsPrice.toFixed(2)}{" "}
+                    {chart.levelsLive ? "live" : "(last close)"}
+                  </AsOf>
                   <CandlestickChart detail={chart} />
                   <ul className="flex flex-col gap-1">
                     {chart.notes.map((n, i) => (
@@ -257,6 +296,15 @@ export function TickerDetail({
                 <p className="text-sm text-text-secondary">No fundamentals apply (ETF, fund, or not covered).</p>
               ) : (
                 <>
+                  {(() => {
+                    const hours = hoursSince(fundamentals.fetchedAt);
+                    return (
+                      <AsOf stale={hours > FUNDAMENTALS_STALE_HOURS}>
+                        Fundamentals updated {ago(fundamentals.fetchedAt)}
+                        {hours > FUNDAMENTALS_STALE_HOURS ? " — older than a day; a refresh is running and this page will pick it up" : " · refreshed nightly"}
+                      </AsOf>
+                    );
+                  })()}
                   {fundamentals.valuation && (
                     <div className="rounded-lg border border-border p-4">
                       <div className="mb-2 flex items-center justify-between">
@@ -335,7 +383,9 @@ export function TickerDetail({
                         {s.direction} · {Math.round(s.percentile * 100)}th pct
                       </span>
                     </div>
-                    <p className="text-[11.5px] text-text-secondary">Out-of-sample t={s.measuredTStat.toFixed(2)} over {s.horizonDays}-day holds.</p>
+                    <p className="text-[11.5px] text-text-secondary">
+                      Out-of-sample t={s.measuredTStat.toFixed(2)} over {s.horizonDays}-day holds · reading as of {shortDate(s.asOf)}.
+                    </p>
                   </motion.div>
                 ))
               )}
@@ -351,6 +401,7 @@ export function TickerDetail({
                   tickerNews.map((n) => (
                     <div key={n.id} className="flex items-start justify-between gap-3 border-t border-[var(--hairline)] py-2.5 first:border-t-0">
                       <p className="min-w-0 flex-1 truncate text-[12.5px] text-text-primary">{n.headline}</p>
+                      <span className="shrink-0 text-[10.5px] tabular-nums text-text-tertiary">{ago(n.publishedAt)}</span>
                       {n.sentimentScore != null && (
                         <span className={`shrink-0 text-[11px] font-semibold tabular-nums ${n.sentimentScore > 0 ? "text-gains" : n.sentimentScore < 0 ? "text-losses" : "text-text-secondary"}`}>
                           {n.sentimentScore > 0 ? "+" : ""}
@@ -377,7 +428,7 @@ export function TickerDetail({
                 <div className="rounded-lg border border-border p-3.5">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">Insider · Agent 4</p>
                   <p className="text-xs text-text-secondary">
-                    {tickerInsider.length === 0 ? "No filings in the last 90 days." : `${tickerInsider.length} filing(s), most recent: ${tickerInsider[0].transactionType.toLowerCase()} by ${tickerInsider[0].insiderName ?? "an insider"}.`}
+                    {tickerInsider.length === 0 ? "No filings in the last 90 days." : `${tickerInsider.length} filing(s), most recent: ${tickerInsider[0].transactionType.toLowerCase()} by ${tickerInsider[0].insiderName ?? "an insider"}${tickerInsider[0].filedAt ? `, filed ${shortDate(tickerInsider[0].filedAt)}` : ""}.`}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border p-3.5">

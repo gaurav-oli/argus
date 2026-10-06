@@ -2077,6 +2077,9 @@ export interface ChartDetail {
   sma20: ChartPoint[];
   sma50: ChartPoint[];
   sma200: ChartPoint[];
+  /** What support/resistance were measured from: live when `levelsLive`, else the last daily close. */
+  levelsPrice: number;
+  levelsLive: boolean;
 }
 
 export const getChartStudies = (): Promise<ChartStudyRow[]> => apiGet<ChartStudyRow[]>("/api/technical/studies");

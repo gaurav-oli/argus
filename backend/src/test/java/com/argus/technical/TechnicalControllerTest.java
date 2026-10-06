@@ -20,7 +20,8 @@ class TechnicalControllerTest {
 
 	private final ChartStudyService charts = mock(ChartStudyService.class);
 	private final KnownUniverse universe = mock(KnownUniverse.class);
-	private final TechnicalController controller = new TechnicalController(charts, universe);
+	private final LivePriceService livePrices = mock(LivePriceService.class);
+	private final TechnicalController controller = new TechnicalController(charts, universe, livePrices);
 
 	private static ChartStudy study(double score) {
 		return new ChartStudy(250, LocalDate.of(2026, 9, 24), 100, 1.0, 2.0, 3.0, 100.0, 98.0, 90.0, ChartStudy.Trend.UPTREND, 55.0, 0.5, 0.5, 2.0,
@@ -31,10 +32,10 @@ class TechnicalControllerTest {
 	@Test
 	void theStudiesListRanksTheMostDecisiveChartsFirstInEitherDirection() {
 		when(universe.knownTickers()).thenReturn(new LinkedHashSet<>(List.of("AAA", "BBB", "CCC", "DDD")));
-		when(charts.studyFor("AAA")).thenReturn(Optional.of(study(0.3)));
-		when(charts.studyFor("BBB")).thenReturn(Optional.of(study(-0.8)));
-		when(charts.studyFor("CCC")).thenReturn(Optional.of(study(0.6)));
-		when(charts.studyFor("DDD")).thenReturn(Optional.empty()); // not enough history
+		when(charts.studyFor("AAA", null)).thenReturn(Optional.of(study(0.3)));
+		when(charts.studyFor("BBB", null)).thenReturn(Optional.of(study(-0.8)));
+		when(charts.studyFor("CCC", null)).thenReturn(Optional.of(study(0.6)));
+		when(charts.studyFor("DDD", null)).thenReturn(Optional.empty()); // not enough history
 
 		List<TechnicalController.StudyRow> rows = controller.studies();
 
@@ -50,7 +51,7 @@ class TechnicalControllerTest {
 			BigDecimal p = BigDecimal.valueOf(100 + i * 0.1);
 			history.add(new PriceCandle("NVDA", LocalDate.of(2025, 10, 1).plusDays(i), p, p, p, p, 1000L));
 		}
-		when(charts.studyFor("NVDA")).thenReturn(Optional.of(study(0.5)));
+		when(charts.studyFor("NVDA", null)).thenReturn(Optional.of(study(0.5)));
 		when(charts.history("NVDA")).thenReturn(history);
 
 		TechnicalController.ChartDetail d = controller.detail("nvda");
@@ -63,8 +64,25 @@ class TechnicalControllerTest {
 	}
 
 	@Test
+	void theDetailSaysWhetherItsLevelsAreMeasuredFromTheLivePrice() {
+		when(livePrices.livePrice("NVDA")).thenReturn(Optional.of(103.0));
+		when(charts.studyFor("NVDA", 103.0)).thenReturn(Optional.of(study(0.5)));
+		when(charts.history("NVDA")).thenReturn(List.of());
+
+		TechnicalController.ChartDetail live = controller.detail("NVDA");
+		assertTrue(live.levelsLive());
+		assertEquals(103.0, live.levelsPrice());
+
+		when(livePrices.livePrice("NVDA")).thenReturn(Optional.empty());
+		when(charts.studyFor("NVDA", null)).thenReturn(Optional.of(study(0.5)));
+		TechnicalController.ChartDetail atClose = controller.detail("NVDA");
+		assertTrue(!atClose.levelsLive());
+		assertEquals(100.0, atClose.levelsPrice(), "no live price: measured from the last close");
+	}
+
+	@Test
 	void anUnknownOrTooYoungTickerIs404() {
-		when(charts.studyFor("ZZZ")).thenReturn(Optional.empty());
+		when(charts.studyFor("ZZZ", null)).thenReturn(Optional.empty());
 
 		assertThrows(NotFoundException.class, () -> controller.detail("zzz"));
 	}

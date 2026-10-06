@@ -119,6 +119,24 @@ class FundamentalsServiceTest {
 	}
 
 	@Test
+	void theHourlyRetryRefreshesOnlyWhatTheNightlyRunMissed() {
+		stubFinnhub("{\"name\":\"Acme\",\"marketCapitalization\":1}", "{\"metric\":{\"peTTM\":10.0}}");
+		service.refresh("ACME");
+		FundamentalsSnapshot s = stored();
+		FundamentalsSnapshot lastNight = new FundamentalsSnapshot("ACME", s.getPayload(), s.isApplicable(), 0.0, "NEUTRAL",
+				Instant.now().minus(Duration.ofHours(3)));
+		when(repo.findById("ACME")).thenReturn(Optional.of(lastNight));
+		when(repo.findById("NEWCO")).thenReturn(Optional.empty()); // missed (or never fetched)
+		when(universe.knownTickers()).thenReturn(new java.util.LinkedHashSet<>(java.util.List.of("ACME", "NEWCO")));
+		org.mockito.Mockito.clearInvocations(finnhub);
+
+		service.retryMissed();
+
+		verify(finnhub, never()).get(org.mockito.ArgumentMatchers.contains("stock/profile2?symbol=ACME"));
+		verify(finnhub, org.mockito.Mockito.atLeastOnce()).get(org.mockito.ArgumentMatchers.contains("stock/profile2?symbol=NEWCO"));
+	}
+
+	@Test
 	void aStaleSnapshotIsRefreshedButFallsBackToItIfFinnhubIsDown() {
 		stubFinnhub("{\"name\":\"Acme\",\"marketCapitalization\":1}", "{\"metric\":{\"peTTM\":10.0}}");
 		service.refresh("ACME");

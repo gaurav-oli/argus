@@ -30,6 +30,9 @@ public class FundamentalsController {
 	@GetMapping("/{ticker}")
 	public Fundamentals detail(@PathVariable String ticker) {
 		String t = ticker.trim().toUpperCase(Locale.ROOT);
+		// Never block the page on ~10 Finnhub calls: serve what's stored and refresh a stale one behind it,
+		// so the page's next poll (or the next visit) gets the new snapshot.
+		service.refreshInBackgroundIfOlderThan(t, FundamentalsService.MISSED_AFTER);
 		return service.latest(t).orElseThrow(() -> new NotFoundException("Fundamentals", t));
 	}
 

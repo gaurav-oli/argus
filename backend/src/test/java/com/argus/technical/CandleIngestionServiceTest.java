@@ -45,6 +45,7 @@ class CandleIngestionServiceTest {
 	private final KnownUniverse universe = mock(KnownUniverse.class);
 	private final LivePortfolioService livePrices = mock(LivePortfolioService.class);
 	private final NotificationService notifications = mock(NotificationService.class);
+	private final ChartStudyService charts = mock(ChartStudyService.class);
 	private final TechnicalAnalysisProperties props = new TechnicalAnalysisProperties(400);
 	private final CandleIngestionService service = service("test-key", props);
 
@@ -62,7 +63,7 @@ class CandleIngestionServiceTest {
 
 	private CandleIngestionService service(String avKey, TechnicalAnalysisProperties p) {
 		CandleIngestionService s = new CandleIngestionService(avKey, yahoo, alphaVantage, candles, universe,
-				livePrices, p, notifications, new ListingResolver("VFV,DOL"));
+				livePrices, p, notifications, new ListingResolver("VFV,DOL"), charts);
 		s.setRequestSpacingMs(0);
 		return s;
 	}
