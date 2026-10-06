@@ -149,20 +149,10 @@ public final class ChartReader {
 		}
 
 		// ---- support / resistance ----
-		Double support = null, resistance = null;
-		int from = Math.max(PIVOT_SIDE, n - PIVOT_LOOKBACK);
-		for (int i = from; i < n - PIVOT_SIDE; i++) {
-			if (isPivotLow(l, i)) {
-				if (l[i] < last && (support == null || l[i] > support)) support = l[i];
-			}
-			if (isPivotHigh(h, i)) {
-				if (h[i] > last && (resistance == null || h[i] < resistance)) resistance = h[i];
-			}
-		}
+		double[] lv = levels(h, l, last);
+		Double support = Double.isNaN(lv[0]) ? null : lv[0], resistance = Double.isNaN(lv[1]) ? null : lv[1];
 		if (support != null || resistance != null) {
-			notes.add(String.format(Locale.ROOT, "Levels: nearest support %s, nearest resistance %s.",
-					support == null ? "none found" : String.format(Locale.ROOT, "%.2f (%.1f%% below)", support, (last - support) / last * 100),
-					resistance == null ? "none found" : String.format(Locale.ROOT, "%.2f (%.1f%% above)", resistance, (resistance - last) / last * 100)));
+			notes.add(levelsNote(support, resistance, last));
 			if (support != null && (last - support) / last <= 0.03) score += 0.05;
 			if (resistance != null && (resistance - last) / last <= 0.02) score -= 0.05;
 		}
@@ -263,6 +253,42 @@ public final class ChartReader {
 			if (l[i] >= l[i - k] || l[i] > l[i + k]) return false;
 		}
 		return true;
+	}
+
+	/**
+	 * The nearest swing low below and swing high above {@code price} — support and resistance. Public
+	 * so the same rule can be re-run against a live intraday price ({@link ChartStudyService#withLivePrice}):
+	 * the stored study is measured from the last daily close, and a big move today can put price on the
+	 * other side of a level.
+	 */
+	public static ChartStudy.Levels levels(List<PriceCandle> ascending, double price) {
+		int n = ascending.size();
+		double[] h = new double[n], l = new double[n];
+		for (int i = 0; i < n; i++) {
+			h[i] = ascending.get(i).getHigh().doubleValue();
+			l[i] = ascending.get(i).getLow().doubleValue();
+		}
+		double[] lv = levels(h, l, price);
+		return new ChartStudy.Levels(Double.isNaN(lv[0]) ? null : lv[0], Double.isNaN(lv[1]) ? null : lv[1]);
+	}
+
+	/** {@code [support, resistance]}, NaN where none is found. */
+	private static double[] levels(double[] h, double[] l, double price) {
+		int n = h.length;
+		double support = Double.NaN, resistance = Double.NaN;
+		int from = Math.max(PIVOT_SIDE, n - PIVOT_LOOKBACK);
+		for (int i = from; i < n - PIVOT_SIDE; i++) {
+			if (isPivotLow(l, i) && l[i] < price && (Double.isNaN(support) || l[i] > support)) support = l[i];
+			if (isPivotHigh(h, i) && h[i] > price && (Double.isNaN(resistance) || h[i] < resistance)) resistance = h[i];
+		}
+		return new double[] { support, resistance };
+	}
+
+	/** The human line for the levels, distances measured from {@code price}. */
+	public static String levelsNote(Double support, Double resistance, double price) {
+		return String.format(Locale.ROOT, "Levels: nearest support %s, nearest resistance %s.",
+				support == null ? "none found" : String.format(Locale.ROOT, "%.2f (%.1f%% below)", support, (price - support) / price * 100),
+				resistance == null ? "none found" : String.format(Locale.ROOT, "%.2f (%.1f%% above)", resistance, (resistance - price) / price * 100));
 	}
 
 	private static boolean isPivotHigh(double[] h, int i) {

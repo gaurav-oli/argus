@@ -42,6 +42,11 @@ const TABS = [
  * full-width panel over the roster; its header icon shares a layoutId with the row that opened it, so
  * there's one small moment of genuine shared-element motion rather than a flat, instant swap.
  */
+/** "4.6%" — how far a support/resistance level sits from the price it was measured from. */
+function levelDistance(level: number, price: number): string {
+  return `${((Math.abs(level - price) / price) * 100).toFixed(1)}%`;
+}
+
 export function TickerDetail({
   ticker,
   roster,
@@ -150,15 +155,25 @@ export function TickerDetail({
         </motion.div>
       )}
 
-      {roster?.chart?.support != null && roster?.chart?.resistance != null && (
+      {roster?.chart && (roster.chart.support != null || roster.chart.resistance != null) && (
         <div className="mt-4 grid grid-cols-3 gap-4 border-t border-border pt-4">
           <div>
             <p className="text-[9.5px] uppercase tracking-wide text-text-tertiary">Support</p>
-            <p className="font-display text-base font-semibold tabular-nums text-text-primary">${roster.chart.support.toFixed(2)}</p>
+            <p className="font-display text-base font-semibold tabular-nums text-text-primary">
+              {roster.chart.support != null ? `$${roster.chart.support.toFixed(2)}` : "—"}
+            </p>
+            {roster.chart.support != null && (
+              <p className="text-[10px] tabular-nums text-text-tertiary">{levelDistance(roster.chart.support, roster.chart.levelsPrice)} below</p>
+            )}
           </div>
           <div>
             <p className="text-[9.5px] uppercase tracking-wide text-text-tertiary">Resistance</p>
-            <p className="font-display text-base font-semibold tabular-nums text-text-primary">${roster.chart.resistance.toFixed(2)}</p>
+            <p className="font-display text-base font-semibold tabular-nums text-text-primary">
+              {roster.chart.resistance != null ? `$${roster.chart.resistance.toFixed(2)}` : "—"}
+            </p>
+            <p className="text-[10px] tabular-nums text-text-tertiary">
+              {roster.chart.resistance != null ? `${levelDistance(roster.chart.resistance, roster.chart.levelsPrice)} above` : "none — near its highs"}
+            </p>
           </div>
           <div>
             <p className="text-[9.5px] uppercase tracking-wide text-text-tertiary">Valuation · 12</p>
@@ -170,6 +185,10 @@ export function TickerDetail({
               <p className="font-display text-base font-semibold text-text-primary">—</p>
             )}
           </div>
+          <p className="col-span-3 -mt-2 text-[10px] text-text-tertiary">
+            Measured from ${roster.chart.levelsPrice.toFixed(2)} {roster.chart.levelsLive ? "live" : "(last close — no live price yet)"} · daily
+            chart data through {new Date(`${roster.chart.barsThrough}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </p>
         </div>
       )}
 

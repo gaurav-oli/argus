@@ -8,13 +8,13 @@ import com.argus.intelligence.KnownUniverse;
 import com.argus.intelligence.StrangerDangerService;
 import com.argus.deepanalysis.DeepAnalysisService;
 import com.argus.deepanalysis.DeepView;
-import com.argus.portfolio.LivePortfolioService;
 import com.argus.regime.MarketRegime;
 import com.argus.regime.MarketRegimeService;
 import com.argus.regime.Sector;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudy;
 import com.argus.technical.ChartStudyService;
+import com.argus.technical.LivePriceService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -49,15 +49,16 @@ public class RecommendationTrigger implements Agent {
 	private final RecommendationPolicy policy;
 	private final SectorClassifier sectors;
 	private final MarketRegimeService regimes;
-	private final LivePortfolioService prices;
 	private final ChartStudyService charts;
 	private final DeepAnalysisService deepAnalyses;
+	private final LivePriceService livePrices;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
 			GraduationService graduation, EarningsQuietPeriodService quietPeriod, KnownUniverse universe,
 			PaperInvestorService investor, RecommendationPolicy policy, SectorClassifier sectors,
-			MarketRegimeService regimes, LivePortfolioService prices, ChartStudyService charts,
+			MarketRegimeService regimes, LivePriceService livePrices, ChartStudyService charts,
 			DeepAnalysisService deepAnalyses) {
+		this.livePrices = livePrices;
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
 		this.graduation = graduation;
@@ -67,7 +68,6 @@ public class RecommendationTrigger implements Agent {
 		this.policy = policy;
 		this.sectors = sectors;
 		this.regimes = regimes;
-		this.prices = prices;
 		this.charts = charts;
 		this.deepAnalyses = deepAnalyses;
 	}
@@ -162,10 +162,11 @@ public class RecommendationTrigger implements Agent {
 		// the stock trades and how far it has already moved today.
 		Sector sector = sectors.sectorOf(ticker);
 		MarketRegime regime = regimes.current();
-		Double lastPrice = prices.latestPrice(ticker).map(java.math.BigDecimal::doubleValue).orElse(null);
+		// Streaming price for holdings, else a polled quote — watchlist names have no stream.
+		Double lastPrice = livePrices.livePrice(ticker).orElse(null);
 		Double move1d = regimes.moveOf(ticker).map(MarketRegimeService.StockMove::changePct1d).orElse(null);
 		boolean earningsSoon = quiet.status() == QuietPeriodStatus.Status.NOTE;
-		ChartStudy chart = charts.studyFor(ticker).orElse(null);
+		ChartStudy chart = charts.studyFor(ticker, lastPrice).orElse(null);
 		DeepView deep = deepAnalyses.viewFor(ticker).orElse(null);
 		RecommendationPolicy.Standing standing = gatherer.standing(ticker);
 

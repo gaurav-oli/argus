@@ -34,12 +34,12 @@ public class RecommendationController {
 	private final RecommendationDebateService debates;
 	private final com.argus.technical.ChartStudyService charts;
 	private final com.argus.deepanalysis.DeepAnalysisService deepAnalyses;
-	private final com.argus.portfolio.LivePortfolioService prices;
+	private final com.argus.technical.LivePriceService prices;
 
 	public RecommendationController(RecommendationService recommendations,
 			TradeConfirmationService confirmation, GraduationService graduation,
 			RecommendationDebateService debates, com.argus.technical.ChartStudyService charts,
-			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.portfolio.LivePortfolioService prices) {
+			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.technical.LivePriceService prices) {
 		this.recommendations = recommendations;
 		this.confirmation = confirmation;
 		this.graduation = graduation;
@@ -66,13 +66,15 @@ public class RecommendationController {
 
 	/** The card plus what Agent 10 (the chart) and Agent 11 (the deep analysis) contributed to it. */
 	private RecommendationCard card(Recommendation r, GraduationState state, boolean blackSwan, Instant callSince) {
-		com.argus.technical.ChartStudy chart = charts.studyFor(r.getTicker()).orElse(null);
+		// Streaming price for holdings, else a polled quote — watchlist names have no stream.
+		Double lastPrice = prices.livePrice(r.getTicker()).orElse(null);
+		// Levels re-measured from the live price, so a level broken today isn't shown on the wrong side of it.
+		com.argus.technical.ChartStudy chart = charts.studyFor(r.getTicker(), lastPrice).orElse(null);
 		com.argus.deepanalysis.DeepView deep = deepAnalyses.viewFor(r.getTicker()).orElse(null);
 		String valuation = token(r, "val=");
-		Double lastPrice = prices.latestPrice(r.getTicker()).map(BigDecimal::doubleValue).orElse(null);
 		PriceGuidance.Guidance guidance = PriceGuidance.build(r.getAction(), r.getHoldDays() == null ? 0 : r.getHoldDays(),
 				lastPrice, chart, deep, valuation);
-		return RecommendationCard.from(r, state, blackSwan, chart == null ? null : ChartView.from(chart),
+		return RecommendationCard.from(r, state, blackSwan, chart == null ? null : ChartView.from(chart, lastPrice),
 				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance), callSince);
 	}
 
@@ -171,10 +173,18 @@ public class RecommendationController {
 	}
 
 	/** Agent 10's chart read on the card: bias, score, trend, and the evidence lines behind it. */
-	public record ChartView(String bias, double score, String trend, List<String> notes, Double support, Double resistance) {
+	/**
+	 * Agent 10's read for the card. {@code levelsPrice} is the price support/resistance were measured
+	 * from — the live price when {@code levelsLive}, otherwise the last daily close — and {@code barsThrough}
+	 * is the newest daily candle behind the study, so the UI can say exactly how current it is.
+	 */
+	public record ChartView(String bias, double score, String trend, List<String> notes, Double support, Double resistance,
+			double levelsPrice, boolean levelsLive, LocalDate barsThrough) {
 
-		static ChartView from(com.argus.technical.ChartStudy s) {
-			return new ChartView(s.bias(), s.score(), s.trend().name(), s.notes().stream().limit(5).toList(), s.support(), s.resistance());
+		static ChartView from(com.argus.technical.ChartStudy s, Double livePrice) {
+			boolean live = com.argus.technical.ChartStudyService.livePriceUsable(s, livePrice);
+			return new ChartView(s.bias(), s.score(), s.trend().name(), s.notes().stream().limit(5).toList(), s.support(),
+					s.resistance(), live ? livePrice : s.lastClose(), live, s.asOf());
 		}
 	}
 

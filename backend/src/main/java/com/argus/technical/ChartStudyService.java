@@ -30,6 +30,8 @@ public class ChartStudyService {
 
 	private final PriceCandleRepository candles;
 	private final Map<String, Cached<Optional<ChartStudy>>> studies = new ConcurrentHashMap<>();
+	/** The candles each cached study was built from, so a live re-measure of its levels needs no query. */
+	private final Map<String, Cached<List<PriceCandle>>> series = new ConcurrentHashMap<>();
 	private volatile Cached<List<PriceCandle>> benchmark;
 
 	public ChartStudyService(PriceCandleRepository candles) {
@@ -43,9 +45,40 @@ public class ChartStudyService {
 		if (c != null && c.fresh()) {
 			return c.value();
 		}
-		Optional<ChartStudy> fresh = ChartReader.study(ascending(t), benchmarkCandles());
-		studies.put(t, new Cached<>(fresh, Instant.now()));
+		List<PriceCandle> bars = ascending(t);
+		Optional<ChartStudy> fresh = ChartReader.study(bars, benchmarkCandles());
+		Instant now = Instant.now();
+		studies.put(t, new Cached<>(fresh, now));
+		series.put(t, new Cached<>(bars, now));
 		return fresh;
+	}
+
+	/** A live price further than this from the last close is distrusted (e.g. a wrong-listing quote). */
+	static final double MAX_LIVE_DRIFT = 0.25;
+
+	/**
+	 * The study with support/resistance re-measured from {@code livePrice}, so a stock that broke a level
+	 * today isn't shown on the wrong side of it until tonight's candle. Falls back to the close-based
+	 * study when there is no live price or it is implausibly far from the last close.
+	 */
+	public Optional<ChartStudy> studyFor(String ticker, Double livePrice) {
+		return studyFor(ticker).map(s -> withLivePrice(s, ticker, livePrice));
+	}
+
+	/** Whether {@code livePrice} is usable against {@code study}: present, positive and near the last close. */
+	public static boolean livePriceUsable(ChartStudy study, Double livePrice) {
+		return livePrice != null && livePrice > 0 && study.lastClose() > 0
+				&& Math.abs(livePrice / study.lastClose() - 1) <= MAX_LIVE_DRIFT;
+	}
+
+	ChartStudy withLivePrice(ChartStudy study, String ticker, Double livePrice) {
+		if (!livePriceUsable(study, livePrice) || livePrice.doubleValue() == study.lastClose()) {
+			return study;
+		}
+		String t = normalize(ticker);
+		Cached<List<PriceCandle>> bars = series.get(t);
+		List<PriceCandle> candles = bars != null && bars.fresh() ? bars.value() : ascending(t);
+		return study.withLevels(ChartReader.levels(candles, livePrice), livePrice);
 	}
 
 	/** All stored candles (up to ~300), oldest first — for computing indicator series on the chart. */
@@ -62,6 +95,7 @@ public class ChartStudyService {
 	/** Drop cached studies (after a candle ingest, or in tests). */
 	public void evictAll() {
 		studies.clear();
+		series.clear();
 		benchmark = null;
 	}
 

@@ -29,6 +29,21 @@ public record ChartStudy(
 
 	public enum Trend { UPTREND, DOWNTREND, SIDEWAYS }
 
+	/** Nearest support below / resistance above a given price; either may be null. */
+	public record Levels(Double support, Double resistance) {
+	}
+
+	/** This study with support/resistance (and the levels note) re-measured from {@code price}. */
+	public ChartStudy withLevels(Levels levels, double price) {
+		List<String> rewritten = notes.stream()
+				.map(n -> n.startsWith("Levels:") ? ChartReader.levelsNote(levels.support(), levels.resistance(), price) : n)
+				.toList();
+		return new ChartStudy(bars, asOf, lastClose, ret5d, ret20d, ret60d, sma20, sma50, sma200, trend, rsi14,
+				macdHistogram, bollingerPercentB, atrPct, volumeRatio20v60, upDownVolumeRatio20, pctOf52wRange,
+				drawdown60dPct, levels.support(), levels.resistance(), patterns, relStrength20d, relStrength60d, score,
+				bias, rewritten);
+	}
+
 	/**
 	 * A candlestick pattern seen in the last few sessions.
 	 *

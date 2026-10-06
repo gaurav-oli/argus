@@ -781,6 +781,11 @@ export interface ChartSummary {
   notes: string[];
   support: number | null;
   resistance: number | null;
+  /** The price support/resistance were measured from: live when `levelsLive`, else the last daily close. */
+  levelsPrice: number;
+  levelsLive: boolean;
+  /** ISO date of the newest daily candle behind the study. */
+  barsThrough: string;
 }
 
 export interface DeepSummary {

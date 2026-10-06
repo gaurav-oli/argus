@@ -13,12 +13,12 @@ import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
 import com.argus.intelligence.KnownUniverse;
 import com.argus.deepanalysis.DeepAnalysisService;
-import com.argus.portfolio.LivePortfolioService;
 import com.argus.regime.MarketRegime;
 import com.argus.regime.MarketRegimeService;
 import com.argus.regime.Sector;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudyService;
+import com.argus.technical.LivePriceService;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class RecommendationTriggerTest {
 	private final RecommendationPolicy policy = mock(RecommendationPolicy.class);
 	private final SectorClassifier sectors = mock(SectorClassifier.class);
 	private final MarketRegimeService regimes = mock(MarketRegimeService.class);
-	private final LivePortfolioService prices = mock(LivePortfolioService.class);
+	private final LivePriceService prices = mock(LivePriceService.class);
 	private final ChartStudyService charts = mock(ChartStudyService.class);
 	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
 	private final RecommendationTrigger trigger = new RecommendationTrigger(
@@ -51,7 +51,7 @@ class RecommendationTriggerTest {
 		lenient().when(sectors.sectorOf(anyString())).thenReturn(Sector.TECHNOLOGY);
 		lenient().when(regimes.current()).thenReturn(MarketRegime.unavailable());
 		lenient().when(regimes.moveOf(anyString())).thenReturn(java.util.Optional.empty());
-		lenient().when(prices.latestPrice(anyString())).thenReturn(java.util.Optional.empty());
+		lenient().when(prices.livePrice(anyString())).thenReturn(java.util.Optional.empty());
 		lenient().when(charts.studyFor(anyString())).thenReturn(java.util.Optional.empty());
 		lenient().when(deepAnalyses.viewFor(anyString())).thenReturn(java.util.Optional.empty());
 		Recommendation buy = recWithAction(RecommendationAction.BUY); // built first: no mock creation mid-stubbing
