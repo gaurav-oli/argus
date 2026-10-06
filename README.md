@@ -34,6 +34,26 @@ Mac Mini deploy, the full stack (backend + frontend containers) comes up behind 
 (`docker compose --profile deploy up -d --build`) and is exposed through Tailscale Funnel.
 See the **[deploy & Tailscale runbook](docs/deploy-runbook.md)** for the full procedure.
 
+## Starting the portal (Mac Mini)
+
+After a reboot, or whenever the site is down, bring these up **in this order**. Each step depends on
+the one before it.
+
+| # | Service | Start it | Check it |
+|---|---|---|---|
+| 1 | **Docker Desktop** | `open -a Docker` | `docker info` succeeds |
+| 2 | **Ollama** (native, not Docker) | `brew services start ollama` (starts at login) | `curl -s localhost:11434/api/tags` lists the Gemma model |
+| 3 | **Argus stack** (Postgres, Redis, backend, frontend) | `docker compose --profile deploy down && docker compose --profile deploy up -d` | `curl -s 127.0.0.1:8080/actuator/health` → `{"status":"UP"}`; `127.0.0.1:3000` → 200 |
+| 4 | **Tailscale** | `tailscale up` | `tailscale status` lists this machine (`sh-dow`) |
+| 5 | **Tailscale Funnel** (public HTTPS) | the three `tailscale funnel --bg …` commands in [RECOVERY.md](RECOVERY.md#restarting-after-a-host-reboot--docker-restart) | `tailscale funnel status` shows `/`, `/api`, `/ws` with Funnel on |
+
+The portal is live when `https://sh-dow.taila43287.ts.net/` returns 200 and `/api/system-info` returns
+401 (401 before sign-in means the request reached the backend).
+
+Always use `--profile deploy` in step 3. A bare `docker compose up`/`down` restarts only Postgres and
+Redis, and the backend loses its connection to them. If the Funnel config is empty after a reboot, run
+step 5 again. Ollama being down doesn't stop the site, but AI features fall back to Haiku or fail.
+
 ## Stack
 
 | Layer    | Choice |

@@ -72,6 +72,11 @@ deploy procedure in [`docs/deploy-runbook.md`](docs/deploy-runbook.md).
 This is the common case (Mac Mini rebooted, Docker Desktop was quit) — **not** a data-loss event, so
 you don't touch Postgres. Two things break and must be brought back in order.
 
+0. **Make sure Docker Desktop and Ollama are running.** If `docker info` fails with "no such file or
+   directory" for `docker.sock`, Docker Desktop isn't running: `open -a Docker` and wait for
+   `docker info` to succeed. Ollama runs natively: `curl -s localhost:11434/api/tags` should list the
+   model (`brew services start ollama` if not).
+
 1. **Restart the full stack with the `deploy` profile — always.** `backend` and `frontend` live under
    `--profile deploy`. A bare `docker compose down` / `up` only touches `postgres` + `redis`, recreating
    them with **new container IPs** while the still-running backend holds the **old** ones. The backend
