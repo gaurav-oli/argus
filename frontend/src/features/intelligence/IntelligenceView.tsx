@@ -15,6 +15,7 @@ import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { CommandPalette, type PaletteItem } from "@/features/intelligence/CommandPalette";
 import { TickerDetail } from "@/features/intelligence/TickerDetail";
 import { TickerRow, useTickerRoster } from "@/features/intelligence/TickerRoster";
+import { TickersTable } from "@/features/intelligence/TickersTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
@@ -239,15 +240,15 @@ export function IntelligenceView() {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.22 }}
                 >
-                  <div className="rounded-xl border border-border bg-surface px-4">
-                    {loading ? (
-                      <Skeleton className="h-96 w-full" />
-                    ) : rows && rows.length > 0 ? (
-                      rows.map((r, i) => <TickerRow key={r.ticker} row={r} logoUrl={logos[r.ticker]} index={i} onOpen={setSelectedTicker} />)
-                    ) : (
+                  {loading ? (
+                    <Skeleton className="h-96 w-full" />
+                  ) : rows && rows.length > 0 ? (
+                    <TickersTable rows={rows} logos={logos} onOpen={setSelectedTicker} />
+                  ) : (
+                    <div className="rounded-xl border border-border bg-surface px-4">
                       <p className="py-6 text-sm text-text-secondary">No tickers scored yet.</p>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
 

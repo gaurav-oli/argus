@@ -9,7 +9,7 @@ import {
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import type { ForecastInput } from "./ForecastSpread";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
+import { ACTION_GLOSSARY, CHART_GLOSSARY, DEEP_GLOSSARY, DEEP_VERDICT_GLOSSARY, VALUATION_GLOSSARY } from "./statusGlossary";
 import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -119,6 +119,13 @@ export function useTickerRoster() {
   return { rows, loading: rows === null, allTickers };
 }
 
+/** Agent 11's verdict colours: only a real buy case reads green. */
+const DEEP_CLS: Record<string, string> = {
+  WORTH_BUYING: "text-gains",
+  WAIT: "text-text-secondary",
+  NOT_WORTH_BUYING: "text-losses",
+};
+
 const biasColor: Record<string, string> = {
   BULLISH: "text-gains",
   BEARISH: "text-losses",
@@ -138,12 +145,15 @@ export function TickerRow({
   index,
   onOpen,
   dense = false,
+  showConviction = false,
 }: {
   row: RosterRow;
   logoUrl?: string;
   index: number;
   onOpen: (ticker: string) => void;
   dense?: boolean;
+  /** Adds a 0-100 conviction column (the Tickers table, which has a header to label it). */
+  showConviction?: boolean;
 }) {
   return (
     <motion.button
@@ -152,7 +162,7 @@ export function TickerRow({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.025, type: "spring", stiffness: 300, damping: 26 }}
-      className="grid w-full grid-cols-[1.5fr_0.9fr_0.9fr_0.9fr_0.9fr] items-center gap-2 border-b border-[var(--hairline)] py-2.5 text-left transition-colors hover:bg-[var(--hover-wash)] last:border-b-0"
+      className={`grid w-full ${showConviction ? "grid-cols-[1.5fr_0.9fr_0.6fr_0.9fr_0.9fr_0.9fr]" : "grid-cols-[1.5fr_0.9fr_0.9fr_0.9fr_0.9fr]"} items-center gap-2 border-b border-[var(--hairline)] py-2.5 text-left transition-colors hover:bg-[var(--hover-wash)] last:border-b-0`}
     >
       <span className="flex min-w-0 items-center gap-2.5">
         <motion.span layoutId={`avatar-${row.ticker}`} className="shrink-0">
@@ -165,9 +175,14 @@ export function TickerRow({
           {row.actionLabel}
         </span>
       </Tooltip>
-      <Tooltip content={row.deepVerdict?.atRisk ? DEEP_GLOSSARY.atRisk : row.deepVerdict ? DEEP_GLOSSARY.worthBuying : DEEP_GLOSSARY.none}>
-        <span className={`w-fit text-[12px] ${row.deepVerdict?.atRisk ? "text-warning" : row.deepVerdict ? "text-gains" : "text-text-tertiary"}`}>
-          {row.deepVerdict?.atRisk ? "⚠ at risk" : row.deepVerdict ? "worth buying" : "—"}
+      {showConviction && (
+        <span className={`font-mono text-[12px] tabular-nums ${row.conviction == null ? "text-text-tertiary" : "text-text-primary"}`}>
+          {row.conviction ?? "—"}
+        </span>
+      )}
+      <Tooltip content={row.deepVerdict?.atRisk ? DEEP_GLOSSARY.atRisk : row.deepVerdict ? DEEP_VERDICT_GLOSSARY[row.deepVerdict.verdict] : DEEP_GLOSSARY.none}>
+        <span className={`w-fit text-[12px] ${row.deepVerdict?.atRisk ? "text-warning" : row.deepVerdict ? DEEP_CLS[row.deepVerdict.verdict] : "text-text-tertiary"}`}>
+          {row.deepVerdict?.atRisk ? "⚠ at risk" : row.deepVerdict ? row.deepVerdict.verdictLabel.toLowerCase() : "—"}
         </span>
       </Tooltip>
       {row.chart ? (
