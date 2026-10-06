@@ -64,6 +64,10 @@ public class RecommendationService {
 	/** How far back a ticker's latest read still counts as "current" for the feed. */
 	private static final java.time.Duration CURRENT_WINDOW = java.time.Duration.ofDays(3);
 
+	/** One six-hourly review pass plus an hour of slack: a read older than this, relative to the newest
+	 * one, was skipped by the latest pass and is no longer current. */
+	static final java.time.Duration LAST_PASS_WINDOW = java.time.Duration.ofHours(7);
+
 	/**
 	 * The current, <b>actionable</b> calls: each ticker's latest recommendation, kept only if it is a
 	 * BUY/AVOID (or a legacy verdict-less row), strongest conviction first. A ticker whose latest read is
@@ -85,11 +89,49 @@ public class RecommendationService {
 				.sorted(java.util.Comparator.comparing(Recommendation::getTicker)).toList();
 	}
 
+	/**
+	 * Each ticker's latest read — but only if the most recent review pass re-scored it. A ticker that
+	 * dropped out of the universe (an expired "trending" discovery, a sold holding) or is in an earnings
+	 * quiet period gets no new row, and its last call must not linger as if it were still live. Measured
+	 * from the newest row rather than the clock, so a host outage shows the last pass instead of nothing.
+	 */
 	private List<Recommendation> latestPerTicker() {
 		List<Recommendation> latest = repository.latestPerTickerSince(
 				java.time.Instant.now().minus(CURRENT_WINDOW));
-		latest.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx
-		return latest;
+		java.util.Optional<java.time.Instant> newest = latest.stream().map(Recommendation::getCreatedAt)
+				.max(java.util.Comparator.naturalOrder());
+		if (newest.isEmpty()) {
+			return latest;
+		}
+		java.time.Instant cutoff = newest.get().minus(LAST_PASS_WINDOW);
+		List<Recommendation> current = latest.stream().filter(r -> !r.getCreatedAt().isBefore(cutoff)).toList();
+		current.forEach(r -> r.getSignals().size()); // initialize the diagnostic within the tx
+		return current;
+	}
+
+	/** When each recommendation's current call (same action, unbroken) was first made, keyed by id. */
+	@Transactional(readOnly = true)
+	public java.util.Map<Long, java.time.Instant> callSince(java.util.Collection<Long> ids) {
+		java.util.Map<Long, java.time.Instant> since = new java.util.HashMap<>();
+		if (ids.isEmpty()) {
+			return since;
+		}
+		for (Object[] row : repository.callSince(ids)) {
+			if (row[1] != null) {
+				since.put(((Number) row[0]).longValue(), toInstant(row[1]));
+			}
+		}
+		return since;
+	}
+
+	private static java.time.Instant toInstant(Object value) {
+		if (value instanceof java.time.Instant i) {
+			return i;
+		}
+		if (value instanceof java.time.OffsetDateTime o) {
+			return o.toInstant();
+		}
+		return ((java.sql.Timestamp) value).toInstant();
 	}
 
 	/** IDs of the currently-surfaced recommendations (one per ticker) — for persona pre-warming. */

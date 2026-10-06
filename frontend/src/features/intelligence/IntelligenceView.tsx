@@ -25,6 +25,19 @@ import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
+/** "Oct 5, 8:00 AM" in the viewer's own timezone — when a call was first made. */
+function callDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** Relative age of the latest re-check, so a stale board is obvious at a glance. */
+function checkedAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 48 ? `${hrs}h ago` : `${Math.round(hrs / 24)}d ago`;
+}
+
 const VIEWS = [
   { value: "today", label: "Today" },
   { value: "tickers", label: "Tickers" },
@@ -161,6 +174,12 @@ export function IntelligenceView() {
                                 {r.holdLabel && ` · hold ~${r.holdLabel}`}
                                 {r.deepVerdict?.atRisk && <span className="ml-1 font-semibold text-warning">⚠ at risk</span>}
                               </p>
+                              {r.callSince && (
+                                <p className="mt-1.5 text-[10.5px] text-text-tertiary" title={r.checkedAt ? `Last re-checked ${new Date(r.checkedAt).toLocaleString()}` : undefined}>
+                                  Since {callDate(r.callSince)}
+                                  {r.checkedAt && ` · checked ${checkedAgo(r.checkedAt)}`}
+                                </p>
+                              )}
                             </TiltCard>
                           </motion.div>
                         ))}

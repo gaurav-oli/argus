@@ -28,6 +28,9 @@ export interface RosterRow {
   reason: string | null;
   /** The call's model odds + horizon + price levels, for the forecast spread. Null for a WATCH. */
   forecast: ForecastInput | null;
+  /** When this call was first made, and when the latest review pass last re-checked it. Null for a WATCH. */
+  callSince: string | null;
+  checkedAt: string | null;
 }
 
 const ACTION_CLS: Record<string, string> = {
@@ -38,6 +41,9 @@ const ACTION_CLS: Record<string, string> = {
   WATCH: "bg-[var(--hover-wash)] text-text-secondary",
 };
 
+/** How often an open page re-pulls the roster, so a new six-hourly review pass shows up without a reload. */
+const REFRESH_MS = 5 * 60_000;
+
 /** Fetches and merges actionable recommendations + watched names into one roster, ranked by conviction. */
 export function useTickerRoster() {
   const [recs, setRecs] = useState<RecommendationCard[] | null>(null);
@@ -45,14 +51,20 @@ export function useTickerRoster() {
 
   useEffect(() => {
     let active = true;
-    getRecommendations()
-      .then((v) => active && setRecs(v))
-      .catch(() => active && setRecs([]));
-    getWatching()
-      .then((v) => active && setWatching(v))
-      .catch(() => active && setWatching([]));
+    // A failed refresh keeps what's on screen; only a failed first load falls back to empty.
+    const load = () => {
+      getRecommendations()
+        .then((v) => active && setRecs(v))
+        .catch(() => active && setRecs((prev) => prev ?? []));
+      getWatching()
+        .then((v) => active && setWatching(v))
+        .catch(() => active && setWatching((prev) => prev ?? []));
+    };
+    load();
+    const timer = setInterval(load, REFRESH_MS);
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, []);
 
@@ -74,6 +86,8 @@ export function useTickerRoster() {
           r.holdDays != null && r.holdDays > 0
             ? { bullProbability: r.bullProbability, direction: r.direction, holdDays: r.holdDays, priceGuidance: r.priceGuidance }
             : null,
+        callSince: r.callSince ?? r.createdAt,
+        checkedAt: r.createdAt,
       });
     }
     for (const w of watching) {
@@ -89,6 +103,8 @@ export function useTickerRoster() {
         valuation: null,
         reason: w.reason,
         forecast: null,
+        callSince: null,
+        checkedAt: null,
       });
     }
     return [...byTicker.values()].sort((a, b) => {

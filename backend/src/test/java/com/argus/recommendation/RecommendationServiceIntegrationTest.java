@@ -5,12 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.argus.TestcontainersConfiguration;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Recommendation persistence + diagnostic against real Postgres (Story 6.2): the scored
@@ -28,6 +32,9 @@ class RecommendationServiceIntegrationTest {
 
 	@Autowired
 	TradeDecisionRepository decisions;
+
+	@Autowired
+	JdbcTemplate jdbc;
 
 	@BeforeEach
 	void clean() {
@@ -64,5 +71,46 @@ class RecommendationServiceIntegrationTest {
 		List<Recommendation> recent = service.recent();
 		assertEquals(2, recent.size());
 		assertEquals("MSFT", recent.get(0).getTicker(), "newest first");
+	}
+
+	@Test
+	void recentDropsTickersTheLatestPassSkipped() {
+		Recommendation dropped = service.create("MU", List.of(new AgentSignal("a1", SignalDirection.BULLISH, 1, "x")), null, null);
+		service.create("AAPL", List.of(new AgentSignal("a1", SignalDirection.BULLISH, 1, "x")), null, null);
+		// MU's last read is a pass older than the newest one: it left the universe and wasn't re-scored.
+		ageBy(dropped.getId(), Duration.ofHours(12));
+
+		List<String> tickers = service.recent().stream().map(Recommendation::getTicker).toList();
+		assertEquals(List.of("AAPL"), tickers, "a call the latest pass didn't refresh is no longer current");
+	}
+
+	@Test
+	void recentKeepsTheLastPassWhenNothingIsNewer() {
+		Recommendation old = service.create("AAPL", List.of(new AgentSignal("a1", SignalDirection.BULLISH, 1, "x")), null, null);
+		ageBy(old.getId(), Duration.ofHours(30)); // the host was down — show the last pass, not nothing
+
+		assertEquals(1, service.recent().size());
+	}
+
+	@Test
+	void callSinceIsTheStartOfTheUnbrokenCall() {
+		List<AgentSignal> bull = List.of(new AgentSignal("a1", SignalDirection.BULLISH, 1, "x"));
+		Recommendation before = service.create("AAPL", bull, null, null);
+		Recommendation first = service.create("AAPL", bull, null, null);
+		Recommendation latest = service.create("AAPL", bull, null, null);
+		ageBy(before.getId(), Duration.ofHours(18));
+		ageBy(first.getId(), Duration.ofHours(12));
+		ageBy(latest.getId(), Duration.ofHours(6));
+		jdbc.update("update recommendations set action = 'AVOID' where id = ?", before.getId());
+		jdbc.update("update recommendations set action = 'BUY' where id in (?, ?)", first.getId(), latest.getId());
+
+		Instant since = service.callSince(List.of(latest.getId())).get(latest.getId());
+		assertEquals(repo.findById(first.getId()).orElseThrow().getCreatedAt().truncatedTo(ChronoUnit.MILLIS),
+				since.truncatedTo(ChronoUnit.MILLIS), "the call began at the first same-direction read after the flip");
+	}
+
+	private void ageBy(Long id, Duration age) {
+		jdbc.update("update recommendations set created_at = now() - make_interval(secs => ?) where id = ?",
+				(double) age.toSeconds(), id);
 	}
 }

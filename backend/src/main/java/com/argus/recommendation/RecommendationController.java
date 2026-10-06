@@ -53,7 +53,9 @@ public class RecommendationController {
 	public List<RecommendationCard> list() {
 		boolean blackSwan = isBlackSwanActive();
 		GraduationState state = graduation.currentState();
-		return recommendations.recent().stream().map(r -> card(r, state, blackSwan)).toList();
+		List<Recommendation> recent = recommendations.recent();
+		java.util.Map<Long, Instant> since = recommendations.callSince(recent.stream().map(Recommendation::getId).toList());
+		return recent.stream().map(r -> card(r, state, blackSwan, since.get(r.getId()))).toList();
 	}
 
 	/** Tickers Argus is watching but has no clear edge on — with the reason — so silence is explained. */
@@ -63,7 +65,7 @@ public class RecommendationController {
 	}
 
 	/** The card plus what Agent 10 (the chart) and Agent 11 (the deep analysis) contributed to it. */
-	private RecommendationCard card(Recommendation r, GraduationState state, boolean blackSwan) {
+	private RecommendationCard card(Recommendation r, GraduationState state, boolean blackSwan, Instant callSince) {
 		com.argus.technical.ChartStudy chart = charts.studyFor(r.getTicker()).orElse(null);
 		com.argus.deepanalysis.DeepView deep = deepAnalyses.viewFor(r.getTicker()).orElse(null);
 		String valuation = token(r, "val=");
@@ -71,7 +73,7 @@ public class RecommendationController {
 		PriceGuidance.Guidance guidance = PriceGuidance.build(r.getAction(), r.getHoldDays() == null ? 0 : r.getHoldDays(),
 				lastPrice, chart, deep, valuation);
 		return RecommendationCard.from(r, state, blackSwan, chart == null ? null : ChartView.from(chart),
-				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance));
+				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance), callSince);
 	}
 
 	@GetMapping("/graduation")
@@ -89,7 +91,8 @@ public class RecommendationController {
 	@GetMapping("/{id}")
 	public RecommendationCard get(@PathVariable Long id) {
 		return recommendations.diagnostic(id)
-				.map(r -> card(r, graduation.currentState(), isBlackSwanActive()))
+				.map(r -> card(r, graduation.currentState(), isBlackSwanActive(),
+						recommendations.callSince(List.of(r.getId())).get(r.getId())))
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 	}
 
@@ -127,6 +130,8 @@ public class RecommendationController {
 	 * The recommendation card: the call (action + 0-100 conviction score), how long to hold it, the
 	 * reasoning and risks behind it, and — kept for the diagnostic view — the raw probabilities and
 	 * per-agent signals. {@code action}/{@code convictionScore}/{@code holdDays} are null only on legacy rows.
+	 * {@code callSince} is when this call (same action, unbroken) was first made; {@code createdAt} is
+	 * when it was last re-checked.
 	 */
 	public record RecommendationCard(Long id, String ticker, String direction, BigDecimal bullProbability,
 			BigDecimal bearProbability, BigDecimal confidence, boolean confidenceCapped, BigDecimal priceTarget,
@@ -134,9 +139,10 @@ public class RecommendationController {
 			List<SignalView> signals, String action, String actionLabel, Integer convictionScore, Integer holdDays,
 			String horizonLabel, LocalDate reviewOn, String thesis, List<String> reasons, List<String> caveats,
 			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep, String guidance, String valuation,
-			GuidanceView priceGuidance) {
+			GuidanceView priceGuidance, Instant callSince) {
 
-		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep, GuidanceView priceGuidance) {
+		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep, GuidanceView priceGuidance,
+				Instant callSince) {
 			BigDecimal confidence = r.getConfidence();
 			boolean capped = blackSwan && confidence.compareTo(BLACK_SWAN_CONFIDENCE_CAP) > 0;
 			if (capped) {
@@ -152,7 +158,8 @@ public class RecommendationController {
 					action == null ? null : action.name(), action == null ? null : action.label(),
 					r.getConvictionScore(), r.getHoldDays(), r.getHorizonLabel(), reviewOn, r.getThesis(),
 					lines(r.getReasons()), lines(r.getCaveats()), r.getExitPlan(), sectorLabel(r.getSector()),
-					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="), priceGuidance);
+					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="), priceGuidance,
+					callSince == null ? r.getCreatedAt() : callSince);
 		}
 	}
 
