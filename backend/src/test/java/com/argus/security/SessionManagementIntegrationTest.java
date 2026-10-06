@@ -49,6 +49,20 @@ class SessionManagementIntegrationTest {
 	}
 
 	@Test
+	void revokingAPersonEndsAllOfTheirSessionsAndNobodyElses() throws Exception {
+		Cookie phone = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "iPhone");
+		Long userId = sessionStore.userId(phone.getValue()).orElseThrow();
+		Cookie laptop = TestUserSessions.loginAs(sessionStore, userId, "Mac");
+		Cookie someoneElse = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "Pixel");
+
+		org.junit.jupiter.api.Assertions.assertEquals(2, sessionStore.revokeAllForUser(userId));
+
+		mockMvc.perform(get("/api/auth/sessions").cookie(phone)).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/auth/sessions").cookie(laptop)).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/auth/sessions").cookie(someoneElse)).andExpect(status().isOk());
+	}
+
+	@Test
 	void listAndRemotelyKillAnotherSession() throws Exception {
 		// Same real person, two devices — e.g. the phone and the laptop both signed in with Google.
 		Cookie phone = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "iPhone");

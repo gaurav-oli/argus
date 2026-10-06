@@ -136,6 +136,23 @@ public class SessionStore {
 		return out;
 	}
 
+	/** End every session signed in as {@code userId} (admin revoked or deleted them). Returns how many. */
+	public int revokeAllForUser(Long userId) {
+		Set<String> keys = redis.keys(KEY_PREFIX + "*");
+		if (keys == null || userId == null) {
+			return 0;
+		}
+		int removed = 0;
+		for (String k : keys) {
+			Object owner = redis.opsForHash().get(k, F_USER_ID);
+			if (owner != null && userId.toString().equals(owner.toString())) {
+				redis.delete(k);
+				removed++;
+			}
+		}
+		return removed;
+	}
+
 	/** Revoke the session whose handle matches (Story 2.7). Returns true if one was removed. */
 	public boolean revokeByHandle(String targetHandle) {
 		Set<String> keys = redis.keys(KEY_PREFIX + "*");

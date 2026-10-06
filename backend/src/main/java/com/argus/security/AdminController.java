@@ -27,14 +27,67 @@ public class AdminController {
 	private final UserActivityService activity;
 	private final InvitedEmailRepository invites;
 	private final InviteEmailService inviteEmail;
+	private final SessionStore sessions;
+	private final UserDeletionService deletion;
 
 	public AdminController(CurrentUserService currentUser, AppUserRepository users, UserActivityService activity,
-			InvitedEmailRepository invites, InviteEmailService inviteEmail) {
+			InvitedEmailRepository invites, InviteEmailService inviteEmail, SessionStore sessions,
+			UserDeletionService deletion) {
 		this.currentUser = currentUser;
 		this.users = users;
 		this.activity = activity;
 		this.invites = invites;
 		this.inviteEmail = inviteEmail;
+		this.sessions = sessions;
+		this.deletion = deletion;
+	}
+
+	/** Lock someone out now — sign-in refused, every session ended — but keep their data. Reversible. */
+	@PostMapping("/users/revoke")
+	public UserStatsView revoke(@RequestBody InviteRequest body, HttpServletRequest request) {
+		AppUser target = manageableUser(body, currentUser.requireAdmin(request));
+		target.revoke();
+		users.save(target);
+		sessions.revokeAllForUser(target.getId());
+		return viewFor(target);
+	}
+
+	/** Give a revoked person their access back, data intact. */
+	@PostMapping("/users/restore")
+	public UserStatsView restore(@RequestBody InviteRequest body, HttpServletRequest request) {
+		AppUser target = manageableUser(body, currentUser.requireAdmin(request));
+		target.restore();
+		return viewFor(users.save(target));
+	}
+
+	/** Permanently delete someone: their account, all their private data and their invite. Not reversible. */
+	@PostMapping("/users/delete")
+	public void delete(@RequestBody InviteRequest body, HttpServletRequest request) {
+		AppUser target = manageableUser(body, currentUser.requireAdmin(request));
+		sessions.revokeAllForUser(target.getId());
+		deletion.delete(target);
+	}
+
+	/** Withdraw an invite nobody has used yet. Someone who already joined is revoked or deleted instead. */
+	@PostMapping("/invites/remove")
+	public void removeInvite(@RequestBody InviteRequest body, HttpServletRequest request) {
+		currentUser.requireAdmin(request);
+		String email = requireEmail(body == null ? null : body.email());
+		if (users.findByEmailIgnoreCase(email).isPresent()) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "They've already joined — revoke or delete them instead");
+		}
+		invites.deleteById(email);
+	}
+
+	/** The account behind {@code body.email}, refusing the admin's own account and any admin. */
+	private AppUser manageableUser(InviteRequest body, AppUser admin) {
+		String email = requireEmail(body == null ? null : body.email());
+		AppUser target = users.findByEmailIgnoreCase(email)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No such user"));
+		if (target.isAdmin() || target.getEmail().equalsIgnoreCase(admin.getEmail())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An admin's access can't be removed here");
+		}
+		return target;
 	}
 
 	@GetMapping("/users")
@@ -87,8 +140,9 @@ public class AdminController {
 	}
 
 	private InviteView viewFor(InvitedEmail i) {
-		return new InviteView(i.getEmail(), i.getInvitedAt(), users.findByEmailIgnoreCase(i.getEmail()).isPresent(),
-				i.getEmailSentAt(), i.getOpenedAt());
+		java.util.Optional<AppUser> user = users.findByEmailIgnoreCase(i.getEmail());
+		return new InviteView(i.getEmail(), i.getInvitedAt(), user.isPresent(), i.getEmailSentAt(), i.getOpenedAt(),
+				user.map(AppUser::isRevoked).orElse(false));
 	}
 
 	public record InviteRequest(String email) {
@@ -96,7 +150,8 @@ public class AdminController {
 
 	/** {@code emailSentAt}/{@code openedAt} are null until the admin sends it / the person visits the
 	 * link — {@code joined} (from {@code app_user}) is the one that actually matters. */
-	public record InviteView(String email, Instant invitedAt, boolean joined, Instant emailSentAt, Instant openedAt) {
+	public record InviteView(String email, Instant invitedAt, boolean joined, Instant emailSentAt, Instant openedAt,
+			boolean revoked) {
 	}
 
 	private UserStatsView viewFor(AppUser u) {
@@ -108,11 +163,12 @@ public class AdminController {
 				.sum();
 		Instant lastActiveAt = days.stream().map(UserActivityDay::getLastSeenAt).max(Instant::compareTo).orElse(null);
 		return new UserStatsView(u.getName(), u.getEmail(), u.getPictureUrl(), u.isAdmin(), u.getCreatedAt(),
-				u.getLastLoginAt(), u.getLoginCount(), days.size(), totalActiveMinutes, lastActiveAt);
+				u.getLastLoginAt(), u.getLoginCount(), days.size(), totalActiveMinutes, lastActiveAt, u.getRevokedAt());
 	}
 
 	/** No portfolio/financial fields here, by design — see the class javadoc. */
 	public record UserStatsView(String name, String email, String pictureUrl, boolean admin, Instant joinedAt,
-			Instant lastLoginAt, int loginCount, int activeDays, long totalActiveMinutes, Instant lastActiveAt) {
+			Instant lastLoginAt, int loginCount, int activeDays, long totalActiveMinutes, Instant lastActiveAt,
+			Instant revokedAt) {
 	}
 }

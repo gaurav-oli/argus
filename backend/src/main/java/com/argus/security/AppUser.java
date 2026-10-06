@@ -42,6 +42,10 @@ public class AppUser {
 	@Column(name = "login_count", nullable = false)
 	private int loginCount;
 
+	/** Non-null while the admin has revoked this person's access; their data is kept. */
+	@Column(name = "revoked_at")
+	private Instant revokedAt;
+
 	protected AppUser() {
 		// JPA
 	}
@@ -66,6 +70,19 @@ public class AppUser {
 		this.lastLoginAt = Instant.now();
 		this.loginCount++;
 	}
+
+	public void revoke() {
+		if (revokedAt == null) {
+			revokedAt = Instant.now();
+		}
+	}
+
+	public void restore() {
+		revokedAt = null;
+	}
+
+	public boolean isRevoked() { return revokedAt != null; }
+	public Instant getRevokedAt() { return revokedAt; }
 
 	public Long getId() { return id; }
 	public String getGoogleSub() { return googleSub; }

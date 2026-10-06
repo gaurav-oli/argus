@@ -141,6 +141,8 @@ export interface AdminUserStats {
   activeDays: number;
   totalActiveMinutes: number;
   lastActiveAt: string | null;
+  /** Set while the admin has revoked this person's access (their data is kept). */
+  revokedAt: string | null;
 }
 
 /** 403 (ApiError) for a non-admin — the caller should already know not to show this to one. */
@@ -155,6 +157,8 @@ export interface AdminInvite {
   joined: boolean;
   emailSentAt: string | null;
   openedAt: string | null;
+  /** They joined, then the admin revoked their access. */
+  revoked: boolean;
 }
 
 export const getAdminInvites = (): Promise<AdminInvite[]> =>
@@ -167,6 +171,20 @@ export const inviteFriend = (email: string): Promise<AdminInvite> =>
 /** Actually email the invite (Resend) — throws (ApiError, 503) if sending isn't configured or fails. */
 export const sendInviteEmail = (email: string): Promise<AdminInvite> =>
   apiPost<AdminInvite>("/api/admin/invites/send", { email });
+
+/** Lock someone out (sign-in refused, all sessions ended) but keep their data. Reversible. */
+export const revokeUser = (email: string): Promise<AdminUserStats> =>
+  apiPost<AdminUserStats>("/api/admin/users/revoke", { email });
+
+/** Give a revoked person their access back. */
+export const restoreUser = (email: string): Promise<AdminUserStats> =>
+  apiPost<AdminUserStats>("/api/admin/users/restore", { email });
+
+/** Permanently delete someone's account, all their private data and their invite. Not reversible. */
+export const deleteUser = (email: string): Promise<void> => apiPost("/api/admin/users/delete", { email });
+
+/** Withdraw an invite nobody has used yet (409 if they already joined). */
+export const removeInvite = (email: string): Promise<void> => apiPost("/api/admin/invites/remove", { email });
 
 /** Best-effort: tell the backend an invite link was opened, before the person has even signed in.
  * Never throws into the caller — a failed beacon shouldn't block showing the sign-in screen. */

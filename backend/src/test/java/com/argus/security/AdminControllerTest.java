@@ -24,10 +24,87 @@ class AdminControllerTest {
 	private final UserActivityService activity = mock(UserActivityService.class);
 	private final InvitedEmailRepository invites = mock(InvitedEmailRepository.class);
 	private final InviteEmailService inviteEmail = mock(InviteEmailService.class);
-	private final AdminController controller = new AdminController(currentUser, users, activity, invites, inviteEmail);
+	private final SessionStore sessions = mock(SessionStore.class);
+	private final UserDeletionService deletion = mock(UserDeletionService.class);
+	private final AdminController controller =
+			new AdminController(currentUser, users, activity, invites, inviteEmail, sessions, deletion);
 
 	private static final AppUser ADMIN = new AppUser("sub-admin", "admin@example.com", "Admin", null, true);
 	private final HttpServletRequest request = mock(HttpServletRequest.class);
+
+	private AppUser friend() {
+		AppUser friend = new AppUser("sub-f", "friend@gmail.com", "Friend", null, false);
+		when(users.findByEmailIgnoreCase("friend@gmail.com")).thenReturn(Optional.of(friend));
+		when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+		return friend;
+	}
+
+	@Test
+	void revokingLocksThePersonOutAndEndsTheirSessionsButKeepsTheAccount() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		AppUser friend = friend();
+
+		AdminController.UserStatsView view = controller.revoke(new AdminController.InviteRequest("Friend@gmail.com"), request);
+
+		assertTrue(friend.isRevoked());
+		assertTrue(view.revokedAt() != null);
+		verify(sessions).revokeAllForUser(friend.getId());
+		verify(deletion, never()).delete(any());
+	}
+
+	@Test
+	void restoringGivesAccessBack() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		AppUser friend = friend();
+		friend.revoke();
+
+		controller.restore(new AdminController.InviteRequest("friend@gmail.com"), request);
+
+		assertTrue(!friend.isRevoked());
+	}
+
+	@Test
+	void deletingEndsSessionsAndRemovesEverything() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		AppUser friend = friend();
+
+		controller.delete(new AdminController.InviteRequest("friend@gmail.com"), request);
+
+		verify(sessions).revokeAllForUser(friend.getId());
+		verify(deletion).delete(friend);
+	}
+
+	@Test
+	void anAdminCannotBeRevokedOrDeleted() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		when(users.findByEmailIgnoreCase("admin@example.com")).thenReturn(Optional.of(ADMIN));
+
+		assertThrows(org.springframework.web.server.ResponseStatusException.class,
+				() -> controller.revoke(new AdminController.InviteRequest("admin@example.com"), request));
+		assertThrows(org.springframework.web.server.ResponseStatusException.class,
+				() -> controller.delete(new AdminController.InviteRequest("admin@example.com"), request));
+		verify(deletion, never()).delete(any());
+	}
+
+	@Test
+	void removingAnInviteRefusesSomeoneWhoAlreadyJoined() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		friend();
+
+		assertThrows(org.springframework.web.server.ResponseStatusException.class,
+				() -> controller.removeInvite(new AdminController.InviteRequest("friend@gmail.com"), request));
+		verify(invites, never()).deleteById(any());
+	}
+
+	@Test
+	void removingAPendingInviteDeletesIt() {
+		when(currentUser.requireAdmin(request)).thenReturn(ADMIN);
+		when(users.findByEmailIgnoreCase("pending@gmail.com")).thenReturn(Optional.empty());
+
+		controller.removeInvite(new AdminController.InviteRequest("pending@gmail.com"), request);
+
+		verify(invites).deleteById("pending@gmail.com");
+	}
 
 	@Test
 	void invitingRequiresAdmin() {

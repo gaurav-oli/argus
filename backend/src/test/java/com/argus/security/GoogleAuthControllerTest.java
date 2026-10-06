@@ -151,6 +151,21 @@ class GoogleAuthControllerTest {
 	}
 
 	@Test
+	void callbackRefusesARevokedAccountAndStartsNoSession() {
+		AppUser revoked = new AppUser("sub-4", "gone@gmail.com", "Gone", null, false);
+		revoked.revoke();
+		when(google.exchangeCodeForIdToken("code")).thenReturn("id-token");
+		when(google.verify("id-token")).thenReturn(new GoogleIdentity("sub-4", "gone@gmail.com", true, "Gone", null));
+		when(users.findByGoogleSub("sub-4")).thenReturn(Optional.of(revoked));
+
+		ResponseEntity<Void> res = controller(CONFIGURED).callback("code", "s", null, requestWithStateCookie("s"));
+
+		assertEquals("/?auth=not_invited", res.getHeaders().getFirst(HttpHeaders.LOCATION));
+		verify(sessions, never()).create(anyString(), any());
+		verify(users, never()).save(any());
+	}
+
+	@Test
 	void callbackUpdatesAnExistingAccountsProfileWithoutRecheckingTheInviteList() {
 		AppUser existing = new AppUser("sub-3", "old@gmail.com", "Old Name", null, false);
 		when(google.exchangeCodeForIdToken("code")).thenReturn("id-token");

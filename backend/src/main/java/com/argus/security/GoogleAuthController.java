@@ -118,6 +118,9 @@ public class GoogleAuthController {
 		AppUser user;
 		if (existing.isPresent()) {
 			user = existing.get();
+			if (user.isRevoked()) {
+				return null; // the admin removed their access — same "not invited" answer as a stranger
+			}
 			user.refreshProfile(identity.name(), identity.pictureUrl());
 		}
 		else {

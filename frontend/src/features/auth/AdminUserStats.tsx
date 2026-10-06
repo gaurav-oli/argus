@@ -2,8 +2,12 @@
 
 import { MotionCard } from "@/components/ui/MotionCard";
 import {
+  deleteUser,
   getAdminInvites,
   getAdminUserStats,
+  removeInvite,
+  restoreUser,
+  revokeUser,
   sendInviteEmail,
   type AdminInvite,
   type AdminUserStats,
@@ -66,6 +70,14 @@ export function AdminUserStats({ index }: { index: number }) {
     };
   }, [refetchInvites]);
 
+  /** After a revoke/restore/delete/remove: both lists change (status badges, a row disappearing). */
+  const refetchAll = useCallback(() => {
+    getAdminUserStats()
+      .then(setRows)
+      .catch(() => {});
+    refetchInvites();
+  }, [refetchInvites]);
+
   const send = async (email: string) => {
     setSendingFor(email);
     setErrorFor((prev) => ({ ...prev, [email]: "" }));
@@ -89,6 +101,7 @@ export function AdminUserStats({ index }: { index: number }) {
   if (!rows || rows.length === 0) {
     return null;
   }
+  const adminEmails = new Set(rows.filter((r) => r.admin).map((r) => r.email.toLowerCase()));
 
   return (
     <MotionCard index={index} interactive={false} className="p-6">
@@ -130,10 +143,15 @@ export function AdminUserStats({ index }: { index: number }) {
                       {r.name.slice(0, 1).toUpperCase()}
                     </span>
                   )}
-                  <span className="font-medium text-text-primary">{r.name}</span>
+                  <span className={`font-medium ${r.revokedAt ? "text-text-secondary line-through" : "text-text-primary"}`}>{r.name}</span>
                   {r.admin && (
                     <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent">
                       admin
+                    </span>
+                  )}
+                  {r.revokedAt && (
+                    <span className="rounded bg-losses/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-losses">
+                      revoked
                     </span>
                   )}
                 </div>
@@ -155,7 +173,10 @@ export function AdminUserStats({ index }: { index: number }) {
 
       <div className="mt-5 border-t border-border/60 pt-4">
         <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-secondary">Invite a friend</h3>
-        <p className="mt-1 text-[11px] text-text-secondary">Sends a real email with their own sign-in link.</p>
+        <p className="mt-1 text-[11px] text-text-secondary">
+          Sends a real email with their own sign-in link. Use Revoke to lock someone out (their data is kept and you can
+          restore them), or Delete to remove them and everything of theirs for good.
+        </p>
         <form onSubmit={onInvite} className="mt-2 flex items-center gap-2">
           <input
             type="email"
@@ -189,16 +210,19 @@ export function AdminUserStats({ index }: { index: number }) {
                       : "Not sent yet"}
                   </span>
                   {!i.joined && (
-                    <button
-                      type="button"
-                      onClick={() => void send(i.email)}
-                      disabled={sendingFor === i.email}
-                      className="shrink-0 text-[11px] font-medium text-accent transition hover:opacity-80 disabled:opacity-50"
-                    >
-                      {sendingFor === i.email ? "Sending…" : i.emailSentAt ? "Resend" : "Send"}
-                    </button>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void send(i.email)}
+                        disabled={sendingFor === i.email}
+                        className="text-[11px] font-medium text-accent transition hover:opacity-80 disabled:opacity-50"
+                      >
+                        {sendingFor === i.email ? "Sending…" : i.emailSentAt ? "Resend" : "Send"}
+                      </button>
+                    </span>
                   )}
                 </div>
+                {!adminEmails.has(i.email.toLowerCase()) && <AccessActions invite={i} onChanged={refetchAll} />}
                 {errorFor[i.email] && <p className="text-[11px] text-losses">{errorFor[i.email]}</p>}
               </li>
             ))}
@@ -211,6 +235,9 @@ export function AdminUserStats({ index }: { index: number }) {
 
 /** joined (signed in) beats opened (clicked the link) beats sent (emailed) beats invited-only. */
 function InviteStatus({ invite }: { invite: AdminInvite }) {
+  if (invite.revoked) {
+    return <span className="rounded bg-losses/15 px-1.5 py-0.5 text-[10px] font-semibold text-losses">Revoked</span>;
+  }
   if (invite.joined) {
     return <span className="rounded bg-gains/15 px-1.5 py-0.5 text-[10px] font-semibold text-gains">Joined</span>;
   }
@@ -228,5 +255,124 @@ function InviteStatus({ invite }: { invite: AdminInvite }) {
     <span className="rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">
       Not sent
     </span>
+  );
+}
+
+type Pending = "idle" | "revoke" | "delete" | "remove";
+
+/**
+ * Per-person access controls in the invite list. Someone who hasn't joined can have their invite
+ * withdrawn; someone who has can be revoked (locked out, data kept, restorable) or deleted (account
+ * and every row of their private data, for good). Each destructive action asks first; delete makes
+ * the admin type the person's email, since there is no undo.
+ */
+function AccessActions({ invite, onChanged }: { invite: AdminInvite; onChanged: () => void }) {
+  const [pending, setPending] = useState<Pending>("idle");
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      setPending("idle");
+      setTyped("");
+      onChanged();
+    } catch {
+      setError("That didn't work — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const linkCls = "text-[11px] font-medium transition hover:opacity-80 disabled:opacity-50";
+  const cancel = (
+    <button type="button" onClick={() => { setPending("idle"); setTyped(""); setError(""); }} disabled={busy} className={`${linkCls} text-text-secondary`}>
+      Cancel
+    </button>
+  );
+
+  if (pending === "remove") {
+    return (
+      <div className="flex flex-wrap items-center gap-3 text-[11px]">
+        <span className="text-text-secondary">Withdraw this invite? Their link will stop working.</span>
+        <button type="button" onClick={() => void run(() => removeInvite(invite.email))} disabled={busy} className={`${linkCls} text-losses`}>
+          {busy ? "Removing…" : "Remove invite"}
+        </button>
+        {cancel}
+        {error && <span className="text-losses">{error}</span>}
+      </div>
+    );
+  }
+
+  if (pending === "revoke") {
+    return (
+      <div className="flex flex-wrap items-center gap-3 text-[11px]">
+        <span className="text-text-secondary">Sign them out everywhere and block sign-in? Their data is kept.</span>
+        <button type="button" onClick={() => void run(() => revokeUser(invite.email))} disabled={busy} className={`${linkCls} text-warning`}>
+          {busy ? "Revoking…" : "Revoke access"}
+        </button>
+        {cancel}
+        {error && <span className="text-losses">{error}</span>}
+      </div>
+    );
+  }
+
+  if (pending === "delete") {
+    const matches = typed.trim().toLowerCase() === invite.email.toLowerCase();
+    return (
+      <div className="flex flex-col gap-1.5 rounded-md border border-losses/40 bg-losses/[0.06] p-2 text-[11px]">
+        <span className="text-text-primary">
+          Permanently delete {invite.email}? This erases their account, portfolio, statements, briefings and history.
+          It can&apos;t be undone.
+        </span>
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="text-text-secondary">Type their email to confirm:</span>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={invite.email}
+            autoComplete="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 rounded border border-border/60 bg-background px-2 py-1 text-[11px] text-text-primary outline-none focus:border-losses/60"
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => void run(() => deleteUser(invite.email))} disabled={busy || !matches} className={`${linkCls} text-losses`}>
+            {busy ? "Deleting…" : "Delete permanently"}
+          </button>
+          {cancel}
+          {error && <span className="text-losses">{error}</span>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {!invite.joined ? (
+        <button type="button" onClick={() => setPending("remove")} className={`${linkCls} text-text-secondary hover:text-losses`}>
+          Remove invite
+        </button>
+      ) : (
+        <>
+          {invite.revoked ? (
+            <button type="button" onClick={() => void run(() => restoreUser(invite.email))} disabled={busy} className={`${linkCls} text-accent`}>
+              {busy ? "Restoring…" : "Restore access"}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setPending("revoke")} className={`${linkCls} text-warning`}>
+              Revoke access
+            </button>
+          )}
+          <button type="button" onClick={() => setPending("delete")} className={`${linkCls} text-losses`}>
+            Delete user
+          </button>
+        </>
+      )}
+      {error && <span className="text-[11px] text-losses">{error}</span>}
+    </div>
   );
 }

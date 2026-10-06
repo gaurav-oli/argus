@@ -19,7 +19,8 @@ public class CurrentUserService {
 	}
 
 	public Optional<AppUser> resolve(HttpServletRequest request) {
-		return sessions.userId(SessionCookie.read(request)).flatMap(users::findById);
+		// A revoked account is treated as signed out even if a session somehow outlived the revoke.
+		return sessions.userId(SessionCookie.read(request)).flatMap(users::findById).filter(u -> !u.isRevoked());
 	}
 
 	/** For an endpoint that cannot run without a real user — should be unreachable given
