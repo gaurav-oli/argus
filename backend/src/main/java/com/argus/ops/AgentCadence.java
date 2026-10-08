@@ -24,9 +24,9 @@ public enum AgentCadence {
 	NEWS("news", Duration.ofMinutes(5), Duration.ofMinutes(30)),
 	SOCIAL("social", Duration.ofMinutes(10), Duration.ofHours(1)),
 	INTERNET("internet", Duration.ofHours(6), Duration.ofHours(12)),
-	FILINGS("filings", Duration.ofHours(6), Duration.ofHours(72)),
+	FILINGS("filings", Duration.ofHours(1), Duration.ofHours(72)),
 	RECOMMENDER("recommender", Duration.ofHours(6), Duration.ofHours(12)),
-	CALENDAR("calendar", Duration.ofDays(1), Duration.ofHours(72)),
+	CALENDAR("calendar", Duration.ofHours(2), Duration.ofHours(72)),
 	/** Tags Agent 1's articles, but only macro stories count, and those can be hours apart. */
 	MACRO("macro", Duration.ofMinutes(5), Duration.ofHours(24)),
 	/** Weekday after-close candles: a long weekend is a normal 3–4 day gap. */
@@ -34,8 +34,8 @@ public enum AgentCadence {
 	DEEP("deep", Duration.ofDays(1), Duration.ofHours(72)),
 	FUNDAMENTALS("fundamentals", Duration.ofDays(1), Duration.ofDays(4)),
 	LEARNER("learner", Duration.ofDays(1), Duration.ofHours(72)),
-	/** Runs every 6h, but a digest only appears when a company actually files something new. */
-	FILINGS_READER("filings-reader", Duration.ofHours(6), Duration.ofDays(7)),
+	/** Runs every 2h, but a digest only appears when a company actually files something new. */
+	FILINGS_READER("filings-reader", Duration.ofHours(2), Duration.ofDays(7)),
 	/** Its timestamp is the monthly library import. */
 	STRATEGIES("strategies", Duration.ofDays(30), Duration.ofDays(35));
 

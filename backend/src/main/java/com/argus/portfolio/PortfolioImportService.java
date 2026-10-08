@@ -50,6 +50,7 @@ public class PortfolioImportService {
 	private final CashService cashService;
 	private final AccountMetaRepository accountMeta;
 	private final org.springframework.context.ApplicationEventPublisher events;
+	private final HoldingSanity sanity;
 
 	// Jackson 3 (tools.jackson) — no injectable ObjectMapper bean in this Boot 4 context; handles
 	// LocalDate/BigDecimal natively for the staged-preview JSON round-trip.
@@ -59,7 +60,8 @@ public class PortfolioImportService {
 			PortfolioImportRepository imports, PositionRepository positions, PositionLotRepository lots,
 			PositionAcbService acbService, FxRateService fx, CashService cashService,
 			AccountMetaRepository accountMeta,
-			org.springframework.context.ApplicationEventPublisher events) {
+			org.springframework.context.ApplicationEventPublisher events, HoldingSanity sanity) {
+		this.sanity = sanity;
 		this.parser = parser;
 		this.llmParser = llmParser;
 		this.imports = imports;
@@ -87,13 +89,19 @@ public class PortfolioImportService {
 	/** Package-visible so {@link StatementImportRunner} can stage a result from the adaptive parser
 	 * the exact same way any other parse is staged — one path, regardless of source. */
 	ImportPreview stage(String filename, StatementParser.ParseResult result, String institution) {
-		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), result.message());
+		// Every parser's output, manual or automatic, is sanity-checked before it can be staged (HoldingSanity).
+		HoldingSanity.Checked checked = sanity.check(result, institution);
+		result = checked.result();
+		String message = checked.clean() ? result.message()
+				: java.util.stream.Stream.of(result.message(), "Checks: " + String.join(" · ", checked.problems()))
+						.filter(m -> m != null && !m.isBlank()).collect(java.util.stream.Collectors.joining(" — "));
+		PortfolioImport batch = new PortfolioImport(filename, write(result.holdings()), message);
 		batch.setInstitution(institution);
 		batch.setRawCash(json.writeValueAsString(result.cash()));
 		batch.setRawAccounts(json.writeValueAsString(result.accounts()));
 		PortfolioImport saved = imports.save(batch);
 		return new ImportPreview(saved.getId(), saved.getFilename(), saved.getStatus(),
-				saved.getMessage(), result.holdings());
+				saved.getMessage(), result.holdings(), checked.clean());
 	}
 
 	/** Imports the automatic path staged but couldn't confidently auto-apply — awaiting a manual look

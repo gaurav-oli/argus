@@ -265,7 +265,7 @@ class PaperInvestorServiceTest {
 		investor.closeDueTrades();
 
 		assertEquals(SimulatedTrade.Status.CLOSED, open.getStatus());
-		verify(graduation).recordOutcome(eq(true), eq(9L));
+		verify(graduation).recordOutcome(eq(true), eq(9L), eq(true));
 		// The user's Taken/Declined decision (if any) gets the realized outcome — regret analysis.
 		verify(confirmations).recordOutcomeFromPaperTrade(eq(9L), eq(true));
 	}
@@ -282,7 +282,7 @@ class PaperInvestorServiceTest {
 		investor.closeDueTrades();
 
 		assertEquals(0, open.getExcessReturnPct().compareTo(bd(-10)));
-		verify(graduation).recordOutcome(eq(false), eq(9L));
+		verify(graduation).recordOutcome(eq(false), eq(9L), eq(true));
 	}
 
 	@Test
@@ -295,7 +295,7 @@ class PaperInvestorServiceTest {
 
 		investor.closeDueTrades();
 
-		verify(graduation).recordOutcome(eq(false), eq(9L));
+		verify(graduation).recordOutcome(eq(false), eq(9L), eq(true));
 		assertEquals("Momentum faded; overweighted social buzz.", open.getReview());
 	}
 
@@ -493,7 +493,7 @@ class PaperInvestorServiceTest {
 
 		assertEquals(SimulatedTrade.Status.CLOSED, t.getStatus());
 		assertEquals("STOP", t.getExitReason());
-		verify(graduation).recordOutcome(eq(false), eq(9L));
+		verify(graduation).recordOutcome(eq(false), eq(9L), eq(true));
 	}
 
 	@Test

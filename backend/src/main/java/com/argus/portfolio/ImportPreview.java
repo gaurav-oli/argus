@@ -12,5 +12,11 @@ public record ImportPreview(
 		String filename,
 		String status,
 		String message,
-		List<ParsedHolding> holdings) {
+		List<ParsedHolding> holdings,
+		/** False when {@link HoldingSanity} dropped or flagged anything — then it is never auto-applied. */
+		boolean checksPassed) {
+
+	public ImportPreview(long importId, String filename, String status, String message, List<ParsedHolding> holdings) {
+		this(importId, filename, status, message, holdings, true);
+	}
 }

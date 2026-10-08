@@ -122,12 +122,12 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.ACTIVE);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		when(trades.count()).thenReturn(50L);
-		when(trades.countByWonTrue()).thenReturn(20L);
+		when(trades.countByCountsForGraduationTrue()).thenReturn(50L);
+		when(trades.countByWonTrueAndCountsForGraduationTrue()).thenReturn(20L);
 		// Rolling-10 window with 2 wins (20%) — below the 30% freeze threshold.
 		List<PaperTrade> rolling = List.of(
 				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost());
-		when(trades.findTop10ByOrderByIdDesc()).thenReturn(rolling);
+		when(trades.findTop10ByCountsForGraduationTrueOrderByIdDesc()).thenReturn(rolling);
 		GraduationService service = new GraduationService(repo, trades, notifications);
 
 		GraduationState result = service.recordOutcome(false, 999L);
@@ -144,9 +144,9 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.ACTIVE);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		when(trades.count()).thenReturn(50L);
-		when(trades.countByWonTrue()).thenReturn(20L);
-		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+		when(trades.countByCountsForGraduationTrue()).thenReturn(50L);
+		when(trades.countByWonTrueAndCountsForGraduationTrue()).thenReturn(20L);
+		when(trades.findTop10ByCountsForGraduationTrueOrderByIdDesc()).thenReturn(List.of(
 				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost()));
 		GraduationService service = new GraduationService(repo, trades, notifications);
 
@@ -166,10 +166,10 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.ACTIVE);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		when(trades.count()).thenReturn(50L);
-		when(trades.countByWonTrue()).thenReturn(30L);
+		when(trades.countByCountsForGraduationTrue()).thenReturn(50L);
+		when(trades.countByWonTrueAndCountsForGraduationTrue()).thenReturn(30L);
 		// Healthy rolling window (60%) — no state change at all.
-		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+		when(trades.findTop10ByCountsForGraduationTrueOrderByIdDesc()).thenReturn(List.of(
 				won(), won(), won(), won(), won(), won(), lost(), lost(), lost(), lost()));
 		GraduationService service = new GraduationService(repo, trades, notifications);
 
@@ -187,9 +187,9 @@ class GraduationServiceTest {
 		AgentGraduation g = new AgentGraduation();
 		g.setState(GraduationState.ACTIVE);
 		when(repo.findById(AgentGraduation.SINGLETON_ID)).thenReturn(Optional.of(g));
-		when(trades.count()).thenReturn(50L);
-		when(trades.countByWonTrue()).thenReturn(20L);
-		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(
+		when(trades.countByCountsForGraduationTrue()).thenReturn(50L);
+		when(trades.countByWonTrueAndCountsForGraduationTrue()).thenReturn(20L);
+		when(trades.findTop10ByCountsForGraduationTrueOrderByIdDesc()).thenReturn(List.of(
 				won(), won(), lost(), lost(), lost(), lost(), lost(), lost(), lost(), lost()));
 		when(notifications.notify(any())).thenThrow(new RuntimeException("push boom"));
 		GraduationService service = new GraduationService(repo, trades, notifications);

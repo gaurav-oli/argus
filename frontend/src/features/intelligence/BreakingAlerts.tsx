@@ -8,6 +8,7 @@ import { RefreshButton } from "@/components/ui/RefreshIcon";
 import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getBreakingAlerts, markBreakingDone, type BreakingAlertItem } from "@/lib/apiClient";
 import { absTime, relTime } from "@/lib/time";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * In-app breaking-news carousel — market-moving stories that fired a push, browsable rather than a
@@ -35,9 +36,9 @@ export function BreakingAlerts() {
       .catch(() => setAlerts((prev) => prev ?? null));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Re-pulled every minute and on returning to the tab. Before, a failed first load (e.g. during a server
+  // restart) hid the section until a full page reload — a signed-in friend saw no breaking news at all.
+  useAutoRefresh(load, REFRESH.FAST);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

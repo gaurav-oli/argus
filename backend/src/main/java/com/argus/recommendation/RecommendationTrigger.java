@@ -86,7 +86,7 @@ public class RecommendationTrigger implements Agent {
 	public void handle(EventEnvelope event) {
 		Object ticker = event.payload().get("ticker");
 		if (ticker != null) {
-			trigger(String.valueOf(ticker));
+			trigger(String.valueOf(ticker), "Stranger Danger: unusual activity");
 		}
 	}
 
@@ -131,12 +131,27 @@ public class RecommendationTrigger implements Agent {
 	/** Six-hourly routine review of the known universe (holdings + watchlist), feeding the briefing (FR-14). */
 	@Scheduled(cron = "0 0 */6 * * *")
 	public void scheduledReview() {
+		// The known universe already dedups tickers (a holding split across accounts is one ticker) and, via
+		// CompositeKnownUniverse, spans holdings + the watchlist. Each ticker is isolated: one failing ticker
+		// used to abort the whole pass, silently skipping every ticker after it (ASTS went unreviewed for days).
+		java.util.Set<String> tickers;
 		try {
-			// The known universe already dedups tickers (a holding split across accounts is one ticker)
-			// and, via CompositeKnownUniverse, now spans holdings + the watchlist.
-			universe.knownTickers().forEach(this::trigger);
+			tickers = universe.knownTickers();
 		} catch (RuntimeException ex) {
-			log.warn("Scheduled recommendation review failed: {}", ex.getMessage());
+			log.warn("Scheduled recommendation review failed to load the universe: {}", ex.getMessage());
+			return;
+		}
+		int failed = 0;
+		for (String ticker : tickers) {
+			try {
+				trigger(ticker);
+			} catch (RuntimeException ex) {
+				failed++;
+				log.warn("Recommendation review of {} failed: {}", ticker, ex.toString(), ex);
+			}
+		}
+		if (failed > 0) {
+			log.warn("Recommendation review: {} of {} ticker(s) failed — see the warnings above", failed, tickers.size());
 		}
 	}
 
@@ -145,6 +160,15 @@ public class RecommendationTrigger implements Agent {
 	 * empty when suppressed (FROZEN, quiet period, or no signals). Public so tests drive it directly.
 	 */
 	public Optional<Recommendation> trigger(String ticker) {
+		return trigger(ticker, "6h review");
+	}
+
+	/**
+	 * Review {@code ticker} now, recording {@code reason} (the 6h pass, or the event that prompted it — a breaking
+	 * headline, a price shock, an earnings result; see {@link ChangeWatcher}). Synchronized so an event-driven
+	 * review and the scheduled pass never score the same ticker concurrently (which could open duplicate legs).
+	 */
+	public synchronized Optional<Recommendation> trigger(String ticker, String reason) {
 		if (graduation.currentState() == GraduationState.FROZEN) {
 			log.debug("Agent 5 FROZEN — suppressing recommendation for {}", ticker);
 			return Optional.empty();
@@ -173,7 +197,7 @@ public class RecommendationTrigger implements Agent {
 		Recommendation rec = recommendations.create(ticker, signals,
 				score -> policy.evaluate(new RecommendationPolicy.Context(ticker, score, signals, sector, regime,
 						lastPrice, move1d, earningsSoon, chart, deep, standing)),
-				sector.name(), "6h review");
+				sector.name(), reason == null || reason.length() <= 120 ? reason : reason.substring(0, 117) + "...");
 		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());
 		// Every call — WATCH included — is first checked against what the book already holds on this ticker:

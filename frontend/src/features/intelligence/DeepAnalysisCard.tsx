@@ -16,6 +16,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { DEEP_VERDICT_GLOSSARY } from "./statusGlossary";
 import { DeepAnalysisPipeline } from "./DeepAnalysisPipeline";
 import { useCallback, useEffect, useState } from "react";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 export const VERDICT_STYLE: Record<DeepVerdictName, { label: string; cls: string; icon: string }> = {
   WORTH_BUYING: { label: "Worth buying", cls: "bg-gains/15 text-gains", icon: "✓" },
@@ -229,9 +230,8 @@ export function DeepAnalysisForTicker({ ticker }: { ticker: string }) {
       });
   }, [ticker]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // A new verdict (nightly, or an "Analyze now") appears without a reload; the 5s poll below covers a live run.
+  useAutoRefresh(load, REFRESH.NORMAL);
 
   const running = view?.inProgress != null;
   useEffect(() => {

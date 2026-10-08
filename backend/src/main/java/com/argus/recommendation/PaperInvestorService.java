@@ -514,7 +514,8 @@ public class PaperInvestorService {
 			trade.recordReview(postMortem(trade));
 		}
 		trades.save(trade);
-		graduation.recordOutcome(won, trade.getRecommendationId());
+		// Only a trade the current system opened can move Agent 5's graduation; an old-system leg is just recorded.
+		graduation.recordOutcome(won, trade.getRecommendationId(), !trade.getEntryAt().isBefore(NEW_SYSTEM_SINCE));
 		// Mirror the realized outcome onto the user's Taken/Declined decision (regret analysis).
 		try {
 			confirmations.recordOutcomeFromPaperTrade(trade.getRecommendationId(), won);

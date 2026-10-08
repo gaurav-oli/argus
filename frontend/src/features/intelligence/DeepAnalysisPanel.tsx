@@ -38,9 +38,8 @@ export function DeepAnalysisPanel() {
     getDeepQueue().then(setQueue).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Idle cadence + on returning to the tab; the 10s poll below takes over while the analyst has work.
+  useAutoRefresh(refresh, REFRESH.NORMAL);
 
   // Poll only while the analyst has work — a full pass takes hours, an idle page shouldn't hammer the API.
   const busy = queue != null && (queue.running != null || queue.queued > 0);

@@ -61,7 +61,7 @@ public class FilingDigestService {
 	// ---- scheduled / on-demand refresh ----
 
 	/** Every 6 hours: one cheap submissions call per ticker; the model only runs for filings not yet digested. */
-	@Scheduled(cron = "${argus.filings.cron:0 20 */6 * * *}")
+	@Scheduled(cron = "${argus.filings.cron:0 20 */2 * * *}")
 	public void refreshUniverse() {
 		int created = 0;
 		for (String t : universe.knownTickers()) {

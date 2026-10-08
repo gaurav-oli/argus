@@ -55,10 +55,29 @@ public class PriceCandle {
 		this.ticker = ticker;
 		this.candleDate = candleDate;
 		this.open = open;
-		this.high = high;
-		this.low = low;
 		this.close = close;
+		// A feed's high/low can be off by a rounding hair (ASTS 2026-10-06: low 60.064 above open 60.030). The
+		// indicator library rejects such a bar outright, which broke every chart-dependent agent for the
+		// ticker — so the range is widened to contain the open and close, never stored inconsistent.
+		this.high = maxOf(high, open, close, low);
+		this.low = minOf(low, open, close, high);
 		this.volume = volume;
+	}
+
+	private static BigDecimal maxOf(BigDecimal... values) {
+		BigDecimal m = null;
+		for (BigDecimal v : values) {
+			if (v != null && (m == null || v.compareTo(m) > 0)) m = v;
+		}
+		return m;
+	}
+
+	private static BigDecimal minOf(BigDecimal... values) {
+		BigDecimal m = null;
+		for (BigDecimal v : values) {
+			if (v != null && (m == null || v.compareTo(m) < 0)) m = v;
+		}
+		return m;
 	}
 
 	public String getTicker() {

@@ -29,7 +29,8 @@ public class SecIngestionService {
 		this.universe = universe;
 	}
 
-	@Scheduled(fixedDelayString = "${argus.sec.poll-ms:21600000}",
+	// Hourly (was 6h) so an insider trade reaches the change watcher the same day it is filed.
+	@Scheduled(fixedDelayString = "${argus.sec.poll-ms:3600000}",
 			initialDelayString = "${argus.sec.initial-delay-ms:45000}")
 	public void scheduledTick() {
 		try {

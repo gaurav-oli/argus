@@ -55,4 +55,13 @@ class GraduationIntegrationTest {
 		record(5, 5); // 50%, and only 10 trades
 		assertEquals(GraduationState.SHADOW, service.currentState());
 	}
+
+	@Test
+	void oldSystemOutcomesAreRecordedButNeverFreezeTheCurrentSystem() {
+		for (int i = 0; i < 10; i++) {
+			service.recordOutcome(false, null, false); // ten old-system losses, as on 2026-10-08
+		}
+		assertEquals(GraduationState.SHADOW, service.currentState(), "the old record must not freeze the new system");
+		assertEquals(10, trades.count(), "but every outcome is still recorded");
+	}
 }

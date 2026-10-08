@@ -91,11 +91,24 @@ public class GraduationService {
 	/** Record a recommendation outcome and re-evaluate the state. Returns the (possibly new) state. */
 	@Transactional
 	public GraduationState recordOutcome(boolean won, Long recommendationId) {
-		trades.save(new PaperTrade(won, recommendationId));
+		return recordOutcome(won, recommendationId, true);
+	}
 
-		int total = (int) trades.count();
-		int wins = (int) trades.countByWonTrue();
-		List<PaperTrade> last = trades.findTop10ByOrderByIdDesc();
+	/**
+	 * Record an outcome; only one with {@code countsForGraduation} (a trade the current system opened) feeds the
+	 * state machine. An old-system trade closing — e.g. the thesis-decay rule exiting a months-old losing leg —
+	 * is recorded for the all-time record but can never promote, demote or freeze the current Agent 5.
+	 */
+	@Transactional
+	public GraduationState recordOutcome(boolean won, Long recommendationId, boolean countsForGraduation) {
+		trades.save(new PaperTrade(won, recommendationId, countsForGraduation));
+		if (!countsForGraduation) {
+			return currentState();
+		}
+
+		int total = (int) trades.countByCountsForGraduationTrue();
+		int wins = (int) trades.countByWonTrueAndCountsForGraduationTrue();
+		List<PaperTrade> last = trades.findTop10ByCountsForGraduationTrueOrderByIdDesc();
 		int rollingWins = (int) last.stream().filter(PaperTrade::isWon).count();
 
 		AgentGraduation g = graduation.findById(AgentGraduation.SINGLETON_ID).orElseGet(AgentGraduation::new);

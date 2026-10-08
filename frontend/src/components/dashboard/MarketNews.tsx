@@ -8,6 +8,7 @@ import { RefreshButton } from "@/components/ui/RefreshIcon";
 import { SummaryBlock } from "@/components/ui/SummaryBlock";
 import { getNewsQueue, markNewsDone, type NewsCardItem } from "@/lib/apiClient";
 import { absTime, relTime } from "@/lib/time";
+import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 
 /**
  * Curated market news — a browsable carousel of the important, recent stories Argus fetched (not
@@ -39,9 +40,8 @@ export function MarketNews() {
       .catch(() => setCards((prev) => prev ?? null));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Base cadence + on returning to the tab; the faster poll below still runs while cards are being written.
+  useAutoRefresh(load, REFRESH.FAST);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

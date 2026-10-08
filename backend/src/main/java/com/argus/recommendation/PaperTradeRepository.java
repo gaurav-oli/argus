@@ -16,4 +16,12 @@ public interface PaperTradeRepository extends JpaRepository<PaperTrade, Long> {
 	long countByCreatedAtAfter(Instant since);
 
 	long countByWonTrueAndCreatedAtAfter(Instant since);
+
+	// ---- graduation inputs: the current system's outcomes only ----
+
+	long countByCountsForGraduationTrue();
+
+	long countByWonTrueAndCountsForGraduationTrue();
+
+	List<PaperTrade> findTop10ByCountsForGraduationTrueOrderByIdDesc();
 }

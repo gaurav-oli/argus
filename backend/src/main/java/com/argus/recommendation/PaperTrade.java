@@ -26,13 +26,23 @@ public class PaperTrade {
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt = Instant.now();
 
+	/** False for an outcome of a trade the old (pre-2026-09-25) system opened: recorded, but never used to
+	 * promote, demote or freeze the current Agent 5 (see GraduationService). */
+	@Column(name = "counts_for_graduation", nullable = false)
+	private boolean countsForGraduation = true;
+
 	protected PaperTrade() {
 		// JPA
 	}
 
 	public PaperTrade(boolean won, Long recommendationId) {
+		this(won, recommendationId, true);
+	}
+
+	public PaperTrade(boolean won, Long recommendationId, boolean countsForGraduation) {
 		this.won = won;
 		this.recommendationId = recommendationId;
+		this.countsForGraduation = countsForGraduation;
 	}
 
 	public boolean isWon() {

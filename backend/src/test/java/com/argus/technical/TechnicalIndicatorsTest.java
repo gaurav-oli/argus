@@ -219,4 +219,23 @@ class TechnicalIndicatorsTest {
 	void bollingerPercentBEmptyBelowTwentyCandles() {
 		assertTrue(TechnicalIndicators.bollingerPercentB(closes(new double[19])).isEmpty());
 	}
+
+	@Test
+	void aCandleWhoseLowIsAHairAboveItsOpenStillStudies() {
+		// ASTS 2026-10-06 as the feed sent it: low 60.064 above open 60.030. The indicator library rejects such
+		// a bar, which used to throw out of every chart-dependent agent for the ticker.
+		java.util.List<PriceCandle> candles = new java.util.ArrayList<>();
+		for (int i = 0; i < 40; i++) {
+			java.math.BigDecimal p = java.math.BigDecimal.valueOf(60 + i * 0.1);
+			candles.add(new PriceCandle("ASTS", java.time.LocalDate.of(2026, 8, 1).plusDays(i), p, p.add(java.math.BigDecimal.ONE), p.subtract(java.math.BigDecimal.ONE), p, 1000L));
+		}
+		PriceCandle odd = new PriceCandle("ASTS", java.time.LocalDate.of(2026, 9, 10), new java.math.BigDecimal("60.029999"),
+				new java.math.BigDecimal("64.75"), new java.math.BigDecimal("60.063999"), new java.math.BigDecimal("63.119999"), 1000L);
+		candles.add(odd);
+
+		org.junit.jupiter.api.Assertions.assertEquals(0, new java.math.BigDecimal("60.029999").compareTo(odd.getLow()),
+				"the low is widened to the open");
+		org.junit.jupiter.api.Assertions.assertTrue(TechnicalIndicators.macdHistogram(candles).isPresent());
+		org.junit.jupiter.api.Assertions.assertTrue(ChartReader.study(candles, java.util.List.of()).isPresent());
+	}
 }

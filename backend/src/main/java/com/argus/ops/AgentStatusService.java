@@ -129,16 +129,16 @@ public class AgentStatusService {
 				active("filings", "Agent 4", "Financial Reports",
 						"Watches SEC EDGAR for insider activity (Form 4) on your holdings — open-market "
 								+ "purchases vs sales — and feeds Agent 5.",
-						sec.count(), "filings", sec.latestIngestedAt(), "every 6h", null),
+						sec.count(), "filings", sec.latestIngestedAt(), "hourly", null),
 				active("recommender", "Agent 5", "Recommender",
 						"The only agent that recommends — fuses agent signals into auditable, "
 								+ "probability-scored forecasts via a graduation state machine.",
-						recommendations.count(), "recommendations", recommendations.latestCreatedAt(), "every 6h",
+						recommendations.count(), "recommendations", recommendations.latestCreatedAt(), "every 6h + on news, price & events",
 						null),
 				costGovernor(),
 				active("calendar", "Agent 7", "Economic Calendar",
 						"Tracks earnings, Fed/CPI/jobs/GDP, ex-dividend and lock-up dates; flags pre-event quiet periods.",
-						calendar.count(), "events tracked", calendar.latestActivityAt(), "daily · 6am ET",
+						calendar.count(), "events tracked", calendar.latestActivityAt(), "every 2h",
 						finnhubEnabled ? null : "Earnings calendar needs a Finnhub key"),
 				active("macro", "Agent 8", "Macro / Political News",
 						"Tags tariff/Fed/currency-policy stories that move every held ticker at once, from the "
@@ -183,7 +183,7 @@ public class AgentStatusService {
 						"Reads the company's own words from SEC EDGAR — earnings releases (8-K) and 10-Q/10-K MD&A — "
 								+ "for guidance, tone, going-concern and new-risk language. Every figure is verified against "
 								+ "the filing text before it is trusted.",
-						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 6h", null),
+						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 2h", null),
 				active("strategies", "Agent 15", "Academic Strategies",
 						"Holds the published return-predictor literature as a library — each strategy's exact rule, its "
 								+ "original paper and the authors' own replication grade — computes the ones Argus has data "

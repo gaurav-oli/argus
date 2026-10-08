@@ -50,8 +50,11 @@ public class Agent7CalendarService {
 		this.companyLogos = companyLogos;
 	}
 
-	/** Daily run at 06:00 America/New_York. Never throws out of the scheduler. */
-	@Scheduled(cron = "0 0 6 * * *", zone = "America/New_York")
+	/**
+	 * Every two hours (America/New_York). It used to run once a day at 06:00, so an earnings result released after
+	 * the close wasn't seen for ~14 hours — too late for the change watcher to react to it. Never throws.
+	 */
+	@Scheduled(cron = "${argus.calendar.cron:0 0 */2 * * *}", zone = "America/New_York")
 	public void scheduledRun() {
 		try {
 			ingestOnce();

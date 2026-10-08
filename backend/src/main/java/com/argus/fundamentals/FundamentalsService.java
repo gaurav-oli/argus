@@ -109,7 +109,7 @@ public class FundamentalsService {
 		Optional<JsonNode> profile = fetch("stock/profile2?symbol=" + ticker);
 		Optional<JsonNode> metricBody = fetch("stock/metric?symbol=" + ticker + "&metric=all");
 		if (profile.isEmpty() && metricBody.isEmpty()) {
-			log.debug("Fundamentals for {}: Finnhub unavailable — keeping any stored snapshot", ticker);
+			log.info("Fundamentals for {}: Finnhub returned nothing (rate limit or outage) — keeping the stored snapshot", ticker);
 			return Optional.empty();
 		}
 		JsonNode metric = metricBody.map(b -> b.path("metric")).orElse(JSON.createObjectNode());
@@ -219,6 +219,7 @@ public class FundamentalsService {
 		for (String t : universe.knownTickers()) {
 			try {
 				if (latestFresh(t, maxAge).isPresent()) continue;
+				log.info("Fundamentals: refreshing {} (older than {}h)", t, maxAge.toHours());
 				refresh(t);
 				done++;
 				Thread.sleep(1_000);
@@ -228,10 +229,10 @@ public class FundamentalsService {
 				return;
 			}
 			catch (RuntimeException ex) {
-				log.warn("Fundamentals refresh for {} failed: {}", t, ex.getMessage());
+				log.warn("Fundamentals refresh for {} failed: {}", t, ex.toString(), ex);
 			}
 		}
-		log.info("Fundamentals refresh: {} ticker(s) updated ({})", done, LocalDate.now());
+		log.info("Fundamentals refresh (older than {}h): {} ticker(s) attempted ({})", maxAge.toHours(), done, LocalDate.now());
 	}
 
 	/** Kick off a refresh on a virtual thread when the stored snapshot is missing or older than {@code maxAge}. */

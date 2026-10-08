@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class ChartStudyService {
 
+	private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ChartStudyService.class);
+
 	private static final Duration TTL = Duration.ofMinutes(30);
 	private static final int BARS = 300;
 
@@ -46,7 +48,16 @@ public class ChartStudyService {
 			return c.value();
 		}
 		List<PriceCandle> bars = ascending(t);
-		Optional<ChartStudy> fresh = ChartReader.study(bars, benchmarkCandles());
+		Optional<ChartStudy> fresh;
+		try {
+			fresh = ChartReader.study(bars, benchmarkCandles());
+		}
+		catch (RuntimeException ex) {
+			// One ticker's bad data must never throw into its callers (fundamentals, Agent 5's review, the
+			// investor): before, a single malformed ASTS candle stopped all three for days.
+			log.warn("Chart study for {} failed — treating it as having no chart: {}", t, ex.toString());
+			fresh = Optional.empty();
+		}
 		Instant now = Instant.now();
 		studies.put(t, new Cached<>(fresh, now));
 		series.put(t, new Cached<>(bars, now));

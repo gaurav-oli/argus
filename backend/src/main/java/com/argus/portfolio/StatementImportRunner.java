@@ -75,17 +75,18 @@ public class StatementImportRunner {
 		try {
 			AdaptiveStatementParser.Outcome outcome = parser.parse(pdfBytes);
 			ImportPreview preview = imports.stage(filename, outcome.result(), institution);
-			if (outcome.confident()) {
+			if (outcome.confident() && preview.checksPassed()) {
 				imports.confirmImport(preview.importId());
 				log.info("Statement import {}: confident — auto-applied to the portfolio", preview.importId());
 				notify(userId, "Portfolio updated", "\"" + filename + "\" was read and applied automatically — "
 						+ "your portfolio is up to date.");
 			}
 			else {
-				log.info("Statement import {}: not fully confident ({}) — left pending for review", preview.importId(),
-						outcome.uncertainty());
+				String why = preview.checksPassed() ? outcome.uncertainty()
+						: "some lines didn't look like real holdings (" + preview.message() + ")";
+				log.info("Statement import {}: not applied automatically ({}) — left pending for review", preview.importId(), why);
 				notify(userId, "A statement needs a quick look", "\"" + filename + "\" was parsed, but "
-						+ describe(outcome.uncertainty()) + " — please review it in Argus before it's applied.");
+						+ describe(why) + " — please review it in Argus before it's applied.");
 			}
 		}
 		catch (RuntimeException ex) {
