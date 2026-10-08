@@ -15,7 +15,7 @@ echo "Rows matched:"
 
 mkdir -p "$BACKUP"
 "${PSQL[@]}" -c "\copy (select * from positions where $WHERE order by id) to stdout with csv header" > "$BACKUP/positions.csv"
-"${PSQL[@]}" -c "\copy (select l.* from position_lots l join positions p on p.id = l.position_id where p.$WHERE order by l.id) to stdout with csv header" > "$BACKUP/position_lots.csv"
+"${PSQL[@]}" -c "\copy (select * from position_lots where position_id in (select id from positions where $WHERE) order by id) to stdout with csv header" > "$BACKUP/position_lots.csv"
 rows=$(($(wc -l < "$BACKUP/positions.csv") - 1))
 echo "Backed up $rows position row(s) and their lots to $BACKUP/"
 if [ "$rows" -eq 0 ]; then
