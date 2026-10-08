@@ -25,6 +25,19 @@ public interface SimulatedTradeRepository extends JpaRepository<SimulatedTrade, 
 	 * first), even though the Investor was genuinely acting on that call too. */
 	boolean existsByTickerAndDirection(String ticker, SignalDirection direction);
 
+	/** Stop-outs (STOP / TRAILING_STOP) since {@code since} — the circuit breaker's count. */
+	long countByExitReasonInAndClosedAtAfter(java.util.Collection<String> reasons, java.time.Instant since);
+
+	/** A recent stop-out on this exact thesis — the re-entry cooldown. */
+	boolean existsByTickerAndDirectionAndExitReasonInAndClosedAtAfter(String ticker, SignalDirection direction,
+			java.util.Collection<String> reasons, java.time.Instant since);
+
+	/** Every open leg on a ticker, whatever its direction or era — what a new Agent 5 call is checked against. */
+	List<SimulatedTrade> findByTickerAndStatus(String ticker, SimulatedTrade.Status status);
+
+	/** Early exits still waiting for their hold-to-horizon counterfactual. */
+	List<SimulatedTrade> findByStatusAndHoldReturnPctIsNullAndExitReasonNot(SimulatedTrade.Status status, String exitReason);
+
 	/** Thesis-level dedup — is this (ticker, direction, horizon) leg already on the open book? — limited to legs opened on/after {@code since} (see PaperInvestorService.NEW_SYSTEM_SINCE). */
 	boolean existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(String ticker,
 			SignalDirection direction, int horizonDays, SimulatedTrade.Status status, java.time.Instant since);

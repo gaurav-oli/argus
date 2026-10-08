@@ -1425,8 +1425,12 @@ export interface ClosedTradeView {
   closedAt: string;
   /** The Analyst's post-mortem on a losing call; null for wins. */
   review: string | null;
-  /** How the trade ended: HORIZON (ran its course), STOP (chart-based stop broke), THESIS_FLIP (Agent 11 turned against it). */
-  exitReason: "HORIZON" | "STOP" | "THESIS_FLIP" | null;
+  /**
+   * How the trade ended: HORIZON (ran its course), STOP (the original stop broke), TRAILING_STOP (a stop tightened
+   * since entry broke), TAKE_PROFIT (half taken off at the target), THESIS_FLIP (Agent 11 turned against it),
+   * THESIS_DECAY (Agent 5's own latest call turned against it).
+   */
+  exitReason: "HORIZON" | "STOP" | "TRAILING_STOP" | "TAKE_PROFIT" | "THESIS_FLIP" | "THESIS_DECAY" | null;
 }
 
 /** Open positions aggregated per ticker, marked to market (unrealizedPct null if unpriced). */
@@ -1457,6 +1461,22 @@ export interface PaperTradeScoreboard {
   openUnrealizedPct: number | null;
   openByTicker: OpenPositionView[];
   recent: ClosedTradeView[];
+  management: ManagementView;
+}
+
+/**
+ * Whether watching open trades beats waiting for the horizon: of the early exits whose original horizon has
+ * passed (`measured`), what they returned (`avgRealizedPct`) vs what holding would have (`avgHoldPct`).
+ */
+export interface ManagementView {
+  openTotal: number;
+  openWithStop: number;
+  openTrailing: number;
+  exitsByReason: Record<string, number>;
+  earlyExits: number;
+  measured: number;
+  avgRealizedPct: number | null;
+  avgHoldPct: number | null;
 }
 
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>

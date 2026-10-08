@@ -61,7 +61,8 @@ export function PaperInvestorScoreboard() {
           </h3>
           <p className="mt-0.5 text-xs text-text-secondary">
             <Sensitive className="text-xs">${fmt(board.notionalPerTrade, 0)}</Sensitive> paper-traded on every
-            call, marked to market at the horizon — no input needed.
+            call, watched through the day (stops, trailing stops, profit-taking) and marked to market by its horizon — no
+            input needed.
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-[var(--hairline)] px-2 py-0.5 text-[10px] font-medium text-text-secondary">
@@ -92,6 +93,8 @@ export function PaperInvestorScoreboard() {
       </div>
 
       {!noneClosed && <Streak trades={board.recent} />}
+
+      <ActiveManagement m={board.management} />
 
       <div className="grid grid-cols-1 gap-4 border-t border-[var(--hairline)] pt-3 xl:grid-cols-2">
         {board.openByTicker.length > 0 ? (
@@ -131,7 +134,7 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
   return (
     <div className="min-w-0">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">Open book · held until horizon</p>
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-secondary">Open book · watched every 5 min</p>
         <p className="font-mono text-xs tabular-nums text-text-secondary">
           {board.openTrades} pos · <Sensitive className="text-xs">${fmt(board.openDeployed, 0)}</Sensitive> in
           {u != null && (
@@ -185,7 +188,23 @@ function OpenBook({ board, logos }: { board: PaperTradeScoreboard; logos: Record
   );
 }
 
-type ClosedFilter = "all" | "won" | "lost" | "stop" | "flip";
+type ClosedFilter = "all" | "won" | "lost" | "stop" | "profit" | "flip";
+
+const STOPPED = new Set(["STOP", "TRAILING_STOP"]);
+const TURNED = new Set(["THESIS_FLIP", "THESIS_DECAY"]);
+
+/** The label + explanation for an early exit. */
+const EXIT_TAG: Record<string, { label: string; title: string; cls: string }> = {
+  STOP: { label: "stopped out", title: "The protective stop set at entry was hit", cls: "bg-warning/15 text-warning" },
+  TRAILING_STOP: {
+    label: "trailing stop",
+    title: "A stop that had been raised as the trade moved in its favour was hit — locking in part of the gain",
+    cls: "bg-warning/15 text-warning",
+  },
+  TAKE_PROFIT: { label: "took profit", title: "Half the position was taken off at its sell target; the rest kept running", cls: "bg-gains/15 text-gains" },
+  THESIS_FLIP: { label: "Agent 11 flipped", title: "Agent 11 re-analysed the stock and turned against the position", cls: "bg-warning/15 text-warning" },
+  THESIS_DECAY: { label: "call reversed", title: "Agent 5's own latest call on the stock now points the other way", cls: "bg-warning/15 text-warning" },
+};
 type ClosedKey = "ticker" | "return" | "closed";
 
 /** Recently closed trades: filterable, sortable, paged; the Analyst's post-mortem opens per row. */
@@ -198,16 +217,18 @@ function ClosedBook({ trades, logos }: { trades: ClosedTradeView[]; logos: Recor
     all: trades.length,
     won: trades.filter((t) => t.won).length,
     lost: trades.filter((t) => !t.won).length,
-    stop: trades.filter((t) => t.exitReason === "STOP").length,
-    flip: trades.filter((t) => t.exitReason === "THESIS_FLIP").length,
+    stop: trades.filter((t) => STOPPED.has(t.exitReason ?? "")).length,
+    profit: trades.filter((t) => t.exitReason === "TAKE_PROFIT").length,
+    flip: trades.filter((t) => TURNED.has(t.exitReason ?? "")).length,
   };
   const rows = useMemo(() => {
     const keep = {
       all: () => true,
       won: (t: ClosedTradeView) => t.won,
       lost: (t: ClosedTradeView) => !t.won,
-      stop: (t: ClosedTradeView) => t.exitReason === "STOP",
-      flip: (t: ClosedTradeView) => t.exitReason === "THESIS_FLIP",
+      stop: (t: ClosedTradeView) => STOPPED.has(t.exitReason ?? ""),
+      profit: (t: ClosedTradeView) => t.exitReason === "TAKE_PROFIT",
+      flip: (t: ClosedTradeView) => TURNED.has(t.exitReason ?? ""),
     }[filter];
     const get = {
       ticker: (t: ClosedTradeView) => t.ticker,
@@ -235,7 +256,8 @@ function ClosedBook({ trades, logos }: { trades: ClosedTradeView[]; logos: Recor
             { value: "won", label: "Won", count: counts.won },
             { value: "lost", label: "Lost", count: counts.lost },
             { value: "stop", label: "Stopped", count: counts.stop },
-            { value: "flip", label: "Flipped", count: counts.flip },
+            { value: "profit", label: "Took profit", count: counts.profit },
+            { value: "flip", label: "Thesis turned", count: counts.flip },
           ]}
         />
       </div>
@@ -289,14 +311,9 @@ function ClosedBook({ trades, logos }: { trades: ClosedTradeView[]; logos: Recor
                         >
                           {t.won ? "WON" : "LOST"}
                         </span>
-                        {t.exitReason === "STOP" && (
-                          <span className="bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning" title="Agent 10's chart-based protective stop was hit before the horizon">
-                            stopped out
-                          </span>
-                        )}
-                        {t.exitReason === "THESIS_FLIP" && (
-                          <span className="bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning" title="Agent 11 re-analysed the stock and turned against the position">
-                            Agent 11 flipped
+                        {t.exitReason && EXIT_TAG[t.exitReason] && (
+                          <span className={`px-1.5 py-0.5 text-[10px] ${EXIT_TAG[t.exitReason].cls}`} title={EXIT_TAG[t.exitReason].title}>
+                            {EXIT_TAG[t.exitReason].label}
                           </span>
                         )}
                       </span>
@@ -399,4 +416,50 @@ function signed(n: number, digits = 1): string {
 
 function fmt(n: number, digits: number): string {
   return n.toLocaleString("en-CA", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/**
+ * Is watching the book paying off? Coverage of stops on the open book, how trades have ended, and — once early
+ * exits reach their original horizon — what they returned against what simply holding would have.
+ */
+function ActiveManagement({ m }: { m: PaperTradeScoreboard["management"] }) {
+  const early = Object.entries(m.exitsByReason).filter(([r]) => r !== "HORIZON");
+  const verdict =
+    m.measured === 0 || m.avgRealizedPct == null || m.avgHoldPct == null
+      ? null
+      : m.avgRealizedPct > m.avgHoldPct
+        ? { text: "managing is beating holding", color: "var(--color-gains)" }
+        : { text: "holding would have done better so far", color: "var(--color-losses)" };
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-[var(--hairline)] pt-3 font-mono text-[11px] text-text-secondary">
+      <p className="text-[10px] font-medium uppercase tracking-wider">Active management</p>
+      <p>
+        {m.openWithStop}/{m.openTotal} open positions protected by a stop · {m.openTrailing} trailing a gain
+      </p>
+      {early.length > 0 && (
+        <p>
+          Early exits:{" "}
+          {early.map(([reason, n], i) => (
+            <span key={reason}>
+              {i > 0 && " · "}
+              {n} {EXIT_TAG[reason]?.label ?? reason.toLowerCase()}
+            </span>
+          ))}
+        </p>
+      )}
+      <p>
+        {verdict ? (
+          <>
+            {m.measured} early exit{m.measured === 1 ? "" : "s"} measured: {signed(m.avgRealizedPct as number)}% realized vs{" "}
+            {signed(m.avgHoldPct as number)}% if held —{" "}
+            <span className="font-semibold" style={{ color: verdict.color }}>
+              {verdict.text}
+            </span>
+          </>
+        ) : (
+          "Managing vs holding: measured once early exits reach their original horizon."
+        )}
+      </p>
+    </div>
+  );
 }

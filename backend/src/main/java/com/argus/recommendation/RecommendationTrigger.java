@@ -176,6 +176,9 @@ public class RecommendationTrigger implements Agent {
 				sector.name(), "6h review");
 		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());
+		// Every call — WATCH included — is first checked against what the book already holds on this ticker:
+		// a call the other way exits those legs, a WATCH tightens their stops.
+		investor.reviewOpenAgainst(rec);
 		if (rec.getAction().actionable()) {
 			investor.open(rec); // only a call with a real edge earns a paper position to validate it
 		}

@@ -105,21 +105,151 @@ public class PaperInvestorService {
 	 */
 	static final java.time.Instant NEW_SYSTEM_SINCE = java.time.Instant.parse("2026-09-25T00:00:00Z");
 
+	/** Exit reasons that mean "the market proved the position wrong" — what the cooldown and breaker count. */
+	static final List<String> STOP_OUTS = List.of("STOP", "TRAILING_STOP");
+	/** After a stop-out, no re-entry on the same ticker and direction for this long. */
+	static final java.time.Duration REENTRY_COOLDOWN = java.time.Duration.ofDays(3);
+	/** This many stop-outs inside {@link #BREAKER_WINDOW} pause all new entries until the window clears. */
+	static final int BREAKER_STOP_OUTS = 3;
+	static final java.time.Duration BREAKER_WINDOW = java.time.Duration.ofHours(24);
+	/** An early exit's counterfactual is only taken within this long after its horizon, so it reflects that day's price. */
+	static final java.time.Duration COUNTERFACTUAL_WINDOW = java.time.Duration.ofDays(3);
+
 	/** Deep verdict must be at least this convincing to flip an open position. */
 	private static final int FLIP_MIN_CONVICTION = 60;
 
 	/** Agent 10's chart-derived stop ({@link StopLoss}) — the actual stop on this simulated position. */
 	BigDecimal stopFor(SignalDirection direction, String ticker, BigDecimal entry) {
-		ChartStudy chart = null;
+		return StopLoss.stopFor(direction, chartAt(ticker, entry), entry.doubleValue());
+	}
+
+	/** Agent 10's chart with its levels measured from {@code price} (today's) — null when unavailable. */
+	ChartStudy chartAt(String ticker, BigDecimal price) {
 		try {
 			// Levels measured from the entry (today's price): a stop from yesterday's levels could sit on the
 			// wrong side of a stock that already broke through them today.
-			chart = charts.studyFor(ticker, entry.doubleValue()).orElse(null);
+			return charts.studyFor(ticker, price.doubleValue()).orElse(null);
 		}
 		catch (RuntimeException ex) {
-			log.debug("Investor: chart unavailable for {} stop: {}", ticker, ex.getMessage());
+			log.debug("Investor: chart unavailable for {}: {}", ticker, ex.getMessage());
+			return null;
 		}
-		return StopLoss.stopFor(direction, chart, entry.doubleValue());
+	}
+
+	/**
+	 * Where half the position comes off: the same sell target the recommendation card shows (Agent 10's nearest
+	 * resistance for a long, support for a short). Null for a core hold (no fixed target — trail only), or when the
+	 * target isn't at least 1% beyond entry.
+	 */
+	BigDecimal targetFor(Recommendation rec, BigDecimal entry, ChartStudy chart) {
+		if (rec.getAction() == null) {
+			return null;
+		}
+		try {
+			String valuation = com.argus.learning.FeatureTokens.fromJson(rec.getFeatures()).stream()
+					.filter(t -> t.startsWith("val=")).map(t -> t.substring(4)).findFirst().orElse(null);
+			PriceGuidance.Guidance g = PriceGuidance.build(rec.getAction(), rec.getHoldDays() == null ? 0 : rec.getHoldDays(),
+					entry.doubleValue(), chart, deepAnalyses.viewFor(rec.getTicker()).orElse(null), valuation);
+			BigDecimal sell = g == null ? null : g.sellPrice();
+			if (sell == null) {
+				return null;
+			}
+			boolean bullish = rec.getDirection() == SignalDirection.BULLISH;
+			double gap = sell.doubleValue() / entry.doubleValue() - 1;
+			return (bullish ? gap >= 0.01 : gap <= -0.01) ? sell : null;
+		}
+		catch (RuntimeException ex) {
+			log.debug("Investor: no target for {}: {}", rec.getTicker(), ex.getMessage());
+			return null;
+		}
+	}
+
+	/** The target for an already-open current-system leg, from the recommendation that opened it; null otherwise. */
+	BigDecimal targetFor(SimulatedTrade trade) {
+		if (trade.getRecommendationId() == null || trade.getEntryAt().isBefore(NEW_SYSTEM_SINCE)) {
+			return null;
+		}
+		return recommendations.findById(trade.getRecommendationId())
+				.map(rec -> targetFor(rec, trade.getEntryPrice(), chartAt(trade.getTicker(), trade.getEntryPrice())))
+				.orElse(null);
+	}
+
+	// ---- active management (driven by PositionManager and each new Agent 5 call) ----
+
+	/** Close an open position ahead of its horizon, for {@code reason} (a stop, the target's half, thesis decay). */
+	public void closeEarly(SimulatedTrade trade, BigDecimal exit, String reason) {
+		closeOne(trade, exit, benchmark.latest().orElse(null), reason);
+	}
+
+	/** Take half off at the target: split the leg, close the half as TAKE_PROFIT, keep the rest with a tighter stop. */
+	public synchronized void takeHalf(SimulatedTrade trade, BigDecimal exit, BigDecimal restStop) {
+		if (trades.findById(trade.getId()).map(t -> t.getStatus() != SimulatedTrade.Status.OPEN || t.isScaledOut()).orElse(true)) {
+			return; // closed or already scaled out by a concurrent pass
+		}
+		SimulatedTrade half = trade.splitHalf();
+		if (restStop != null) {
+			trade.moveStop(restStop);
+		}
+		trades.save(trade);
+		closeOne(trades.save(half), exit, benchmark.latest().orElse(null), "TAKE_PROFIT");
+		log.info("Investor took half off {} {} at the {} target — the rest trails from {}", trade.getDirection(),
+				trade.getTicker(), exit, trade.getStopPrice());
+	}
+
+	/**
+	 * A new Agent 5 call on a ticker the book holds: a call the other way exits those legs (THESIS_DECAY), a WATCH
+	 * tightens their stops, an agreeing call leaves them alone. Runs before {@link #open} on every call.
+	 */
+	public void reviewOpenAgainst(Recommendation rec) {
+		Instant now = Instant.now();
+		for (SimulatedTrade trade : trades.findByTickerAndStatus(rec.getTicker(), SimulatedTrade.Status.OPEN)) {
+			try {
+				BigDecimal price = prices.latestPrice(trade.getTicker()).orElse(null);
+				if (price == null || price.signum() <= 0) {
+					continue;
+				}
+				boolean actionable = rec.isActionable() && rec.getAction() != null;
+				boolean opposite = actionable && rec.getDirection() != trade.getDirection();
+				Double atr = java.util.Optional.ofNullable(chartAt(trade.getTicker(), price)).map(ChartStudy::atrPct).orElse(null);
+				PositionRules.Decision d = PositionRules.onNewCall(PositionRules.of(trade), opposite, !actionable,
+						price.doubleValue(), atr, now);
+				if (d.action() == PositionRules.Action.EXIT) {
+					log.info("Investor: Agent 5 now calls {} {} — exiting the {} leg (thesis decay)", rec.getAction().label(),
+							rec.getTicker(), trade.getDirection());
+					closeEarly(trade, price, d.exitReason());
+				}
+				else if (d.stop() != null && !d.stop().equals(trade.getStopPrice() == null ? null : trade.getStopPrice().doubleValue())) {
+					trade.moveStop(money(d.stop()));
+					trades.save(trade);
+					log.info("Investor: Agent 5 now only watching {} — tightened the {} stop to {}", rec.getTicker(),
+							trade.getDirection(), trade.getStopPrice());
+				}
+			}
+			catch (RuntimeException ex) {
+				log.warn("Investor: reviewing open {} against the new call failed: {}", trade.getTicker(), ex.getMessage());
+			}
+		}
+	}
+
+	static BigDecimal money(double v) {
+		return BigDecimal.valueOf(v).setScale(6, java.math.RoundingMode.HALF_UP);
+	}
+
+	/**
+	 * For each early exit whose original horizon has just passed, record what holding would have returned — the
+	 * evidence for whether active management beats buy-and-wait. Only within a few days of the horizon, so the
+	 * counterfactual price is that day's, not a much later one.
+	 */
+	void recordHoldCounterfactuals(Instant now) {
+		for (SimulatedTrade t : trades.findByStatusAndHoldReturnPctIsNullAndExitReasonNot(SimulatedTrade.Status.CLOSED, "HORIZON")) {
+			if (now.isBefore(t.horizonAt()) || now.isAfter(t.horizonAt().plus(COUNTERFACTUAL_WINDOW))) {
+				continue;
+			}
+			prices.latestPrice(t.getTicker()).filter(p -> p.signum() > 0).ifPresent(p -> {
+				t.recordHoldCounterfactual(p);
+				trades.save(t);
+			});
+		}
 	}
 
 	/** Agent 11 has, since this trade opened, reached a confident verdict that opposes the position. */
@@ -264,8 +394,23 @@ public class PaperInvestorService {
 				log.info("Investor: lesson blocks {} {} — {}", rec.getDirection(), rec.getTicker(), fx.blockReason());
 				return List.of();
 			}
+			Instant now = Instant.now();
+			long recentStopOuts = trades.countByExitReasonInAndClosedAtAfter(STOP_OUTS, now.minus(BREAKER_WINDOW));
+			if (recentStopOuts >= BREAKER_STOP_OUTS) {
+				log.info("Investor: circuit breaker — {} stop-outs in the last 24h; not opening {} {}", recentStopOuts,
+						rec.getDirection(), rec.getTicker());
+				return List.of();
+			}
+			if (trades.existsByTickerAndDirectionAndExitReasonInAndClosedAtAfter(rec.getTicker(), rec.getDirection(), STOP_OUTS,
+					now.minus(REENTRY_COOLDOWN))) {
+				log.info("Investor: {} {} was stopped out in the last {} days — cooling down, not re-entering",
+						rec.getDirection(), rec.getTicker(), REENTRY_COOLDOWN.toDays());
+				return List.of();
+			}
 			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(fx.sizeMultiplier())).setScale(2, java.math.RoundingMode.HALF_UP);
-			BigDecimal stop = stopFor(rec.getDirection(), rec.getTicker(), entry);
+			ChartStudy entryChart = chartAt(rec.getTicker(), entry);
+			BigDecimal stop = StopLoss.stopFor(rec.getDirection(), entryChart, entry.doubleValue());
+			BigDecimal target = targetFor(rec, entry, entryChart);
 			if (sectorFull(rec)) {
 				log.info("Investor: {} book already holds {} {} names — not stacking {}",
 						sectors.sectorOf(rec.getTicker()).label(), maxOpenPerSectorDirection, rec.getDirection(),
@@ -287,6 +432,8 @@ public class PaperInvestorService {
 				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
 						tradeNotional, entry, horizon, spy);
 				leg.applyRisk(stop, fx.sizeMultiplier());
+				leg.setHighWater(entry);
+				leg.setTargetPrice(target);
 				opened.add(trades.save(leg));
 			}
 			if (opened.isEmpty()) {
@@ -330,7 +477,9 @@ public class PaperInvestorService {
 			}
 			// Three ways a position ends: it ran its horizon, the chart-based stop broke, or Agent 11
 			// re-analysed the stock and now argues the opposite with real conviction.
-			String reason = trade.isDue(now) ? "HORIZON" : trade.isStopHit(exit) ? "STOP" : thesisFlipped(trade) ? "THESIS_FLIP" : null;
+			String reason = trade.isDue(now) ? "HORIZON"
+					: trade.isStopHit(exit) ? (trade.isStopTrailed() ? "TRAILING_STOP" : "STOP")
+					: thesisFlipped(trade) ? "THESIS_FLIP" : null;
 			if (reason == null) {
 				continue;
 			}
@@ -341,6 +490,11 @@ public class PaperInvestorService {
 						trade.getId(), trade.getTicker(), ex.getMessage());
 			}
 		}
+		try {
+			recordHoldCounterfactuals(now);
+		} catch (RuntimeException ex) {
+			log.warn("Investor: hold-to-horizon counterfactuals failed: {}", ex.getMessage());
+		}
 	}
 
 	/**
@@ -348,7 +502,12 @@ public class PaperInvestorService {
 	 * its win/loss) and {@link GraduationService#recordOutcome} each persist in their own transaction;
 	 * the row is saved first so the scoreboard stays correct even if the graduation feed hiccups.
 	 */
-	private void closeOne(SimulatedTrade trade, BigDecimal exit, BigDecimal benchmarkExit, String reason) {
+	private synchronized void closeOne(SimulatedTrade trade, BigDecimal exit, BigDecimal benchmarkExit, String reason) {
+		// The hourly pass and the 5-minute PositionManager can reach the same trade: whoever is second must not
+		// close (and score) it again.
+		if (trade.getId() != null && trades.findById(trade.getId()).map(t -> t.getStatus() != SimulatedTrade.Status.OPEN).orElse(false)) {
+			return;
+		}
 		trade.close(exit, benchmarkExit, reason);
 		boolean won = Boolean.TRUE.equals(trade.getWon());
 		if (!won) {
@@ -451,7 +610,7 @@ public class PaperInvestorService {
 		List<ClosedTradeView> recentClosed = closed.stream().limit(15).map(ClosedTradeView::from).toList();
 		OpenBook openBook = openBook();
 		return new Scoreboard(openBook.count(), closed.size(), wins, winRatePct, notional, deployed, pnl,
-				bookReturnPct, openBook.deployed(), openBook.unrealizedPct(), openBook.byTicker(), recentClosed);
+				bookReturnPct, openBook.deployed(), openBook.unrealizedPct(), openBook.byTicker(), recentClosed, management());
 	}
 
 	/** The live open book: positions grouped by ticker, marked to market against current prices. */
@@ -519,7 +678,37 @@ public class PaperInvestorService {
 	public record Scoreboard(long openTrades, int closedTrades, int wins, Integer winRatePct,
 			BigDecimal notionalPerTrade, BigDecimal deployed, BigDecimal realizedPnl,
 			BigDecimal bookReturnPct, BigDecimal openDeployed, BigDecimal openUnrealizedPct,
-			List<OpenPositionView> openByTicker, List<ClosedTradeView> recent) {
+			List<OpenPositionView> openByTicker, List<ClosedTradeView> recent, ManagementView management) {
+	}
+
+	/**
+	 * Is active management earning its keep? {@code measured} early exits have reached their original horizon;
+	 * {@code avgRealizedPct} is what they actually returned, {@code avgHoldPct} what holding to the horizon would
+	 * have — managing helps when the first beats the second.
+	 */
+	public record ManagementView(int openTotal, int openWithStop, int openTrailing, java.util.Map<String, Integer> exitsByReason,
+			int earlyExits, int measured, BigDecimal avgRealizedPct, BigDecimal avgHoldPct) {
+	}
+
+	private ManagementView management() {
+		List<SimulatedTrade> open = trades.findByStatus(SimulatedTrade.Status.OPEN);
+		List<SimulatedTrade> closed = trades.findByStatus(SimulatedTrade.Status.CLOSED);
+		java.util.Map<String, Integer> byReason = new java.util.TreeMap<>();
+		closed.forEach(t -> byReason.merge(t.getExitReason(), 1, Integer::sum));
+		List<SimulatedTrade> early = closed.stream().filter(t -> !"HORIZON".equals(t.getExitReason())).toList();
+		List<SimulatedTrade> measured = early.stream().filter(t -> t.getHoldReturnPct() != null && t.getReturnPct() != null).toList();
+		return new ManagementView(open.size(), (int) open.stream().filter(t -> t.getStopPrice() != null).count(),
+				(int) open.stream().filter(SimulatedTrade::isStopTrailed).count(), byReason, early.size(), measured.size(),
+				average(measured.stream().map(SimulatedTrade::getReturnPct).toList()),
+				average(measured.stream().map(SimulatedTrade::getHoldReturnPct).toList()));
+	}
+
+	private static BigDecimal average(List<BigDecimal> values) {
+		if (values.isEmpty()) {
+			return null;
+		}
+		return values.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+				.divide(BigDecimal.valueOf(values.size()), 2, java.math.RoundingMode.HALF_UP);
 	}
 
 	/** An open position aggregated per ticker, marked to market ({@code unrealizedPct} null if unpriced). */

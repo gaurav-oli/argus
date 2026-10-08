@@ -93,7 +93,11 @@ public class SimulatedTrade {
 	@Column(name = "stop_price")
 	private BigDecimal stopPrice;
 
-	/** HORIZON (ran its full holding period), STOP (protective stop hit) or THESIS_FLIP (Agent 11 turned against it). */
+	/**
+	 * Why it closed: HORIZON (ran its full holding period), STOP (the original protective stop), TRAILING_STOP (a
+	 * stop that had been tightened since entry), TAKE_PROFIT (the half taken off at the target), THESIS_FLIP
+	 * (Agent 11 turned against it) or THESIS_DECAY (Agent 5's own latest call now points the other way).
+	 */
 	@Column(name = "exit_reason", nullable = false)
 	private String exitReason = "HORIZON";
 
@@ -104,6 +108,32 @@ public class SimulatedTrade {
 	/** How many later recommendations re-affirmed this open thesis instead of duplicating it. */
 	@Column(nullable = false)
 	private int reaffirmations;
+
+	/** The stop as first set (entry, or backfill for legacy trades); {@code stopPrice} only ever tightens from here. */
+	@Column(name = "initial_stop")
+	private BigDecimal initialStop;
+
+	/** Best price in the position's favour since entry (highest for a long, lowest for a short). */
+	@Column(name = "high_water")
+	private BigDecimal highWater;
+
+	/** Where half the position is taken off (a swing call's sell target); null for a core hold — trail only. */
+	@Column(name = "target_price")
+	private BigDecimal targetPrice;
+
+	@Column(name = "scaled_out", nullable = false)
+	private boolean scaledOut;
+
+	/** For the taken-off half of a scaled-out trade: the trade it came from. */
+	@Column(name = "parent_trade_id")
+	private Long parentTradeId;
+
+	/** For an early exit: the price at the original horizon, and what holding would have returned. */
+	@Column(name = "hold_exit_price")
+	private BigDecimal holdExitPrice;
+
+	@Column(name = "hold_return_pct")
+	private BigDecimal holdReturnPct;
 
 	protected SimulatedTrade() {
 		// JPA
@@ -157,8 +187,78 @@ public class SimulatedTrade {
 	/** Record the entry-time risk controls: the protective stop and the lesson-driven size multiplier. */
 	public void applyRisk(BigDecimal stopPrice, double sizeMultiplier) {
 		this.stopPrice = stopPrice;
+		this.initialStop = stopPrice;
 		this.sizeMultiplier = BigDecimal.valueOf(sizeMultiplier).setScale(3, RoundingMode.HALF_UP);
 	}
+
+	/** Give a legacy trade (opened before stops existed) its first stop. */
+	public void backfillStop(BigDecimal stop) {
+		this.stopPrice = stop;
+		this.initialStop = stop;
+	}
+
+	/** Move the stop — callers only ever pass a tighter one (see {@link PositionRules}). */
+	public void moveStop(BigDecimal stop) {
+		this.stopPrice = stop;
+	}
+
+	public void setHighWater(BigDecimal highWater) {
+		this.highWater = highWater;
+	}
+
+	public void setTargetPrice(BigDecimal targetPrice) {
+		this.targetPrice = targetPrice;
+	}
+
+	/** True when the stop has been tightened since it was first set — a stop-out is then a trailing stop. */
+	public boolean isStopTrailed() {
+		return stopPrice != null && initialStop != null && stopPrice.compareTo(initialStop) != 0;
+	}
+
+	/**
+	 * Take half the position off: halves this trade's notional and shares, marks it scaled out, and returns the
+	 * other half as a new open trade with the same entry, to be closed at once as TAKE_PROFIT.
+	 */
+	public SimulatedTrade splitHalf() {
+		SimulatedTrade half = new SimulatedTrade();
+		half.recommendationId = recommendationId;
+		half.ticker = ticker;
+		half.direction = direction;
+		half.entryPrice = entryPrice;
+		half.entryAt = entryAt;
+		half.horizonDays = horizonDays;
+		half.benchmarkEntry = benchmarkEntry;
+		half.sizeMultiplier = sizeMultiplier;
+		half.stopPrice = stopPrice;
+		half.initialStop = initialStop;
+		half.parentTradeId = id;
+		half.notional = notional.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
+		half.shares = shares.divide(BigDecimal.valueOf(2), 8, RoundingMode.HALF_UP);
+		this.notional = notional.subtract(half.notional);
+		this.shares = shares.subtract(half.shares);
+		this.scaledOut = true;
+		return half;
+	}
+
+	/** For an early exit whose original horizon has now passed: what holding to the horizon would have returned. */
+	public void recordHoldCounterfactual(BigDecimal priceAtHorizon) {
+		this.holdExitPrice = priceAtHorizon;
+		this.holdReturnPct = pctChange(entryPrice, priceAtHorizon).multiply(BigDecimal.valueOf(direction.sign()))
+				.setScale(4, RoundingMode.HALF_UP);
+	}
+
+	/** When the original horizon falls (for an open trade, when it is due; for an early exit, when its counterfactual is). */
+	public Instant horizonAt() {
+		return entryAt.plus(java.time.Duration.ofDays(horizonDays));
+	}
+
+	public BigDecimal getInitialStop() { return initialStop; }
+	public BigDecimal getHighWater() { return highWater; }
+	public BigDecimal getTargetPrice() { return targetPrice; }
+	public boolean isScaledOut() { return scaledOut; }
+	public Long getParentTradeId() { return parentTradeId; }
+	public BigDecimal getHoldExitPrice() { return holdExitPrice; }
+	public BigDecimal getHoldReturnPct() { return holdReturnPct; }
 
 	/** Whether {@code price} has crossed the protective stop against this position's direction. */
 	public boolean isStopHit(BigDecimal price) {
