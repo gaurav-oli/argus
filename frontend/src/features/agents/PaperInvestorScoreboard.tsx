@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
+import { OpenTradeReviewPanel } from "./OpenTradeReviewPanel";
 
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
@@ -36,6 +37,12 @@ export function PaperInvestorScoreboard() {
       .catch(() => {}) // keep the book on screen; a first-load failure stays null
       .finally(() => setLoaded(true)),
   );
+
+  const refreshBoard = useCallback(() => {
+    getPaperTrades()
+      .then(setBoard)
+      .catch(() => {});
+  }, []);
 
   const logos = useCompanyLogos(
     useMemo(
@@ -95,6 +102,7 @@ export function PaperInvestorScoreboard() {
       {!noneClosed && <Streak trades={board.recent} />}
 
       <ActiveManagement m={board.management} />
+      <OpenTradeReviewPanel onFinished={refreshBoard} />
 
       <div className="grid grid-cols-1 gap-4 border-t border-[var(--hairline)] pt-3 xl:grid-cols-2">
         {board.openByTicker.length > 0 ? (

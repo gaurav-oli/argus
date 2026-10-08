@@ -1508,6 +1508,41 @@ export const getUnreadAnnouncements = (): Promise<Announcement[]> => apiGet<Anno
 
 export const markAnnouncementRead = (id: number): Promise<void> => apiPost(`/api/announcements/${id}/read`);
 
+/** One ticker's outcome of an on-demand open-trade review. `call` is null when Agent 5 made none. */
+export interface OpenTradeReviewTicker {
+  ticker: string;
+  call: string | null;
+  conviction: number | null;
+  openBefore: number;
+  exited: string[];
+  stopsTightened: number;
+  newLegs: number;
+}
+
+/** Live status of an open-trade review: the pipeline step, progress, and every finished ticker so far. */
+export interface OpenTradeReviewJob {
+  id: number;
+  step: "LOADING" | "REVIEWING" | "SUMMARIZING" | "DONE" | "FROZEN" | "FAILED";
+  total: number;
+  done: number;
+  currentTicker: string | null;
+  currentStage: string | null;
+  results: OpenTradeReviewTicker[];
+  exited: number | null;
+  stopsTightened: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+}
+
+/** Admin only: start Agent 5 re-scoring every ticker the paper book holds (or get the review already running). */
+export const startOpenTradeReview = (): Promise<OpenTradeReviewJob> =>
+  apiPost<OpenTradeReviewJob>("/api/recommendations/open-trades/review");
+
+/** The running or most recent review; undefined (204) if none has run since the server started. */
+export const getOpenTradeReview = (): Promise<OpenTradeReviewJob | undefined> =>
+  apiGet<OpenTradeReviewJob | undefined>("/api/recommendations/open-trades/review");
+
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
   apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");
 
