@@ -25,6 +25,17 @@ public interface SimulatedTradeRepository extends JpaRepository<SimulatedTrade, 
 	 * first), even though the Investor was genuinely acting on that call too. */
 	boolean existsByTickerAndDirection(String ticker, SignalDirection direction);
 
+	/**
+	 * One era's book: {@code [closed, won, avg direction-adjusted return %, open]} for legs entered in
+	 * {@code [from, to)} — how Agent 5's old and current systems are told apart.
+	 */
+	@org.springframework.data.jpa.repository.Query(value = "select count(*) filter (where status = 'CLOSED'), "
+			+ "count(*) filter (where status = 'CLOSED' and won), avg(return_pct) filter (where status = 'CLOSED'), "
+			+ "count(*) filter (where status = 'OPEN') from simulated_trades where entry_at >= :from and entry_at < :to",
+			nativeQuery = true)
+	List<Object[]> eraStats(@org.springframework.data.repository.query.Param("from") java.time.Instant from,
+			@org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
 	/** Stop-outs (STOP / TRAILING_STOP) since {@code since} — the circuit breaker's count. */
 	long countByExitReasonInAndClosedAtAfter(java.util.Collection<String> reasons, java.time.Instant since);
 

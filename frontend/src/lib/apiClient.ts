@@ -1292,6 +1292,20 @@ export interface AccuracyView {
   declined: number;
   graduationState: string;
   graduationBadge: string | null;
+  /** The paper book split at `currentSystemSince` (yyyy-mm-dd), when conviction scoring and Agents 11-13 went live. */
+  oldSystem: EraStat;
+  currentSystem: EraStat;
+  currentSystemSince: string;
+}
+
+/** One era of the paper book. `winRatePct` / `avgReturnPct` are null until a trade has closed. */
+export interface EraStat {
+  closed: number;
+  wins: number;
+  winRatePct: number | null;
+  avgReturnPct: number | null;
+  open: number;
+  statisticallyMeaningful: boolean;
 }
 
 export const getAccuracy = (): Promise<AccuracyView> =>
@@ -1478,6 +1492,21 @@ export interface ManagementView {
   avgRealizedPct: number | null;
   avgHoldPct: number | null;
 }
+
+// ---- "What's new" announcements ----
+
+/** A shared "what's new" note; each person sees it once until they mark it read. */
+export interface Announcement {
+  id: number;
+  title: string;
+  points: string[];
+  publishedAt: string;
+}
+
+/** Notes this person hasn't read yet, newest first. */
+export const getUnreadAnnouncements = (): Promise<Announcement[]> => apiGet<Announcement[]>("/api/announcements/unread");
+
+export const markAnnouncementRead = (id: number): Promise<void> => apiPost(`/api/announcements/${id}/read`);
 
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
   apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");

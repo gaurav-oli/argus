@@ -5,6 +5,7 @@ import { RightPanel } from "@/components/shell/RightPanel";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TickerTape } from "@/components/terminal/TickerTape";
 import { SystemAlertBanner } from "@/components/shell/SystemAlertBanner";
+import { WhatsNewBanner } from "@/components/shell/WhatsNewBanner";
 import { TopBar } from "@/components/shell/TopBar";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { PanicProvider } from "@/features/panic/PanicProvider";
@@ -39,6 +40,7 @@ export default function DashboardLayout({
               <TopBar />
               <TickerTape />
               <SystemAlertBanner />
+              <WhatsNewBanner />
 
               <div className="flex min-h-0 flex-1">
                 <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>

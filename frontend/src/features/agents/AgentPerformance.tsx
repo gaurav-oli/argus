@@ -14,6 +14,7 @@ import {
   type CalibrationView,
   type RegretBucket,
   type RegretView,
+  type EraStat,
   type WindowStat,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,20 @@ function AccuracyCard({ a }: { a: AccuracyView }) {
         )}
       </SectionHead>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <EraTile
+          label="Old system"
+          sub={`trades opened before ${eraDate(a.currentSystemSince)}`}
+          e={a.oldSystem}
+        />
+        <EraTile
+          label="Current system"
+          sub={`since ${eraDate(a.currentSystemSince)} — conviction scoring, Agents 11–15`}
+          e={a.currentSystem}
+          highlight
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <WindowTile label="All time" w={a.all} />
         <WindowTile label="Last 30 days" w={a.last30d} />
@@ -91,6 +106,42 @@ function AccuracyCard({ a }: { a: AccuracyView }) {
         </span>
       </div>
     </MotionCard>
+  );
+}
+
+/** "Sep 25" from a yyyy-mm-dd date, without a timezone shift. */
+function eraDate(isoDate: string): string {
+  return new Date(`${isoDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
+ * One era of Agent 5's paper book. The old system's results stay visible as the baseline; the current system is
+ * judged only on trades it opened itself.
+ */
+function EraTile({ label, sub, e, highlight = false }: { label: string; sub: string; e: EraStat; highlight?: boolean }) {
+  const ret = e.avgReturnPct;
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${highlight ? "border-accent/40 bg-accent/[0.05]" : "border-[var(--hairline)] bg-[var(--hover-wash)]"}`}>
+      <p className={`text-[10px] font-medium uppercase tracking-wider ${highlight ? "text-accent" : "text-text-secondary"}`}>{label}</p>
+      <p className="text-[10px] text-text-secondary">{sub}</p>
+      <div className="mt-1.5 flex items-baseline gap-3">
+        <p className="font-display text-2xl font-bold tabular-nums text-text-primary">
+          {e.winRatePct === null ? "—" : `${e.winRatePct}%`}
+        </p>
+        {ret != null && (
+          <p className="font-mono text-xs tabular-nums" style={{ color: ret >= 0 ? "var(--color-gains)" : "var(--color-losses)" }}>
+            {ret >= 0 ? "+" : ""}
+            {ret.toFixed(2)}% avg / trade
+          </p>
+        )}
+      </div>
+      <p className="mt-0.5 text-xs text-text-secondary">
+        {e.closed === 0 ? "nothing closed yet" : `${e.wins}/${e.closed} won`} · {e.open} open
+      </p>
+      {e.closed > 0 && !e.statisticallyMeaningful && (
+        <p className="mt-1 text-[10px] italic text-text-secondary/80">not yet statistically meaningful</p>
+      )}
+    </div>
   );
 }
 

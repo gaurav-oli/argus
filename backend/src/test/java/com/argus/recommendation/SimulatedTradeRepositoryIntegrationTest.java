@@ -55,4 +55,20 @@ class SimulatedTradeRepositoryIntegrationTest {
 		assertEquals(1, trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual("AAPL", SignalDirection.BULLISH,
 				SimulatedTrade.Status.OPEN, PaperInvestorService.NEW_SYSTEM_SINCE).size());
 	}
+
+	@Test
+	void eraStatsSplitTheBookByEntryDate() {
+		SimulatedTrade old = openLeg("2026-09-14T18:00:00Z");
+		openLeg("2026-10-07T00:00:00Z");
+		jdbc.update("update simulated_trades set status = 'CLOSED', won = true, return_pct = 4.5 where id = ?", old.getId());
+
+		Object[] before = trades.eraStats(java.time.Instant.EPOCH, PaperInvestorService.NEW_SYSTEM_SINCE).get(0);
+		Object[] after = trades.eraStats(PaperInvestorService.NEW_SYSTEM_SINCE, java.time.Instant.now().plusSeconds(86_400)).get(0);
+
+		assertEquals(1L, ((Number) before[0]).longValue(), "one closed old-system leg");
+		assertEquals(1L, ((Number) before[1]).longValue(), "and it won");
+		assertEquals(0, new BigDecimal("4.5").compareTo(new BigDecimal(before[2].toString())));
+		assertEquals(0L, ((Number) after[0]).longValue(), "the current system has nothing closed yet");
+		assertEquals(1L, ((Number) after[3]).longValue(), "but one leg open");
+	}
 }

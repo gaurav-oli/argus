@@ -69,6 +69,7 @@ public class PerformanceService {
 		long wins10 = last10.stream().filter(PaperTrade::isWon).count();
 
 		GraduationSummary g = graduation.summary();
+		Instant cutover = PaperInvestorService.NEW_SYSTEM_SINCE;
 		return new AccuracyView(
 				window(total, wins),
 				window(total30, wins30),
@@ -77,7 +78,24 @@ public class PerformanceService {
 				decisions.countByDecision(Decision.TAKEN),
 				decisions.countByDecision(Decision.DECLINED),
 				g.state(),
-				g.badge());
+				g.badge(),
+				era(Instant.EPOCH, cutover),
+				era(cutover, Instant.now().plus(Duration.ofDays(1))),
+				cutover.atZone(java.time.ZoneOffset.UTC).toLocalDate());
+	}
+
+	/** The paper book for legs entered in {@code [from, to)}: closed / won / average return, and how many are still open. */
+	private EraStat era(Instant from, Instant to) {
+		List<Object[]> rows = simulatedTrades.eraStats(from, to);
+		if (rows.isEmpty()) {
+			return new EraStat(0, 0, null, null, 0, false);
+		}
+		Object[] r = rows.get(0);
+		long closed = ((Number) r[0]).longValue();
+		long won = ((Number) r[1]).longValue();
+		BigDecimal avg = r[2] == null ? null : new BigDecimal(r[2].toString()).setScale(2, java.math.RoundingMode.HALF_UP);
+		Integer pct = closed == 0 ? null : (int) Math.round(100.0 * won / closed);
+		return new EraStat(closed, won, pct, avg, ((Number) r[3]).longValue(), closed >= MEANINGFUL_TRADES);
 	}
 
 	private static WindowStat window(long trades, long wins) {
@@ -234,8 +252,18 @@ public class PerformanceService {
 	// ---- DTOs ----
 
 	/** Story 9.2. {@code avgGains} is deliberately omitted — outcomes carry no P&L (see class javadoc). */
+	/**
+	 * {@code oldSystem} / {@code currentSystem} split the paper book at {@code currentSystemSince} (when conviction
+	 * scoring and Agents 11-13 went live), so the current system is judged on its own trades, not the old coin flips.
+	 */
 	public record AccuracyView(WindowStat all, WindowStat last30d, WindowStat last10,
-			long totalIssued, long taken, long declined, String graduationState, String graduationBadge) {
+			long totalIssued, long taken, long declined, String graduationState, String graduationBadge,
+			EraStat oldSystem, EraStat currentSystem, java.time.LocalDate currentSystemSince) {
+	}
+
+	/** One era of the paper book. {@code winRatePct}/{@code avgReturnPct} are null until a trade has closed. */
+	public record EraStat(long closed, long wins, Integer winRatePct, BigDecimal avgReturnPct, long open,
+			boolean statisticallyMeaningful) {
 	}
 
 	/** Win rate over one window. {@code winRatePct} is null when there are no trades. */
