@@ -3,7 +3,6 @@ package com.argus.recommendation;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.CorrelationRisk;
-import com.argus.portfolio.LivePortfolioService;
 import com.argus.deepanalysis.DeepAnalysis;
 import com.argus.deepanalysis.DeepAnalysisService;
 import com.argus.deepanalysis.DeepVerdict;
@@ -13,6 +12,7 @@ import com.argus.learning.Lessons;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudy;
 import com.argus.technical.ChartStudyService;
+import com.argus.technical.LivePriceService;
 import com.argus.recommendation.TradeDecision.Decision;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -34,7 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
  * decides win/loss by the direction-adjusted return <em>in excess of SPY</em> (so the loop measures
  * signal, not market beta; absolute return when no benchmark was captured), and feeds the outcome into
  * the existing {@link GraduationService}. On a loss it asks the model for a short post-mortem. Prices
- * come from the live feed via {@link LivePortfolioService}; SPY via {@link BenchmarkPriceSource}.
+ * come from {@link LivePriceService} — the live feed for held names, a polled quote for every other tracked
+ * ticker (before, only held names had a price, so a call on any watchlist/discovered stock silently never
+ * opened a trade); SPY via {@link BenchmarkPriceSource}.
  */
 @Service
 public class PaperInvestorService {
@@ -47,7 +49,7 @@ public class PaperInvestorService {
 	private static final int MIN_COMMON_TRADING_DAYS = 20;
 
 	private final SimulatedTradeRepository trades;
-	private final LivePortfolioService prices;
+	private final LivePriceService prices;
 	private final BenchmarkPriceSource benchmark;
 	private final GraduationService graduation;
 	private final TradeConfirmationService confirmations;
@@ -64,7 +66,7 @@ public class PaperInvestorService {
 	private final DeepAnalysisService deepAnalyses;
 	private final RecommendationRepository recommendations;
 
-	public PaperInvestorService(SimulatedTradeRepository trades, LivePortfolioService prices,
+	public PaperInvestorService(SimulatedTradeRepository trades, LivePriceService prices,
 			BenchmarkPriceSource benchmark, GraduationService graduation,
 			TradeConfirmationService confirmations, ModelGateway gateway,
 			@Value("${argus.paper-investor.notional:100}") BigDecimal notional,
@@ -94,6 +96,14 @@ public class PaperInvestorService {
 	}
 
 	// ---- entry-time intelligence: lessons, size, and a chart-based protective stop ----
+
+	/**
+	 * When the current recommendation system went live (conviction scoring + Agents 11-13). A leg opened
+	 * before this by the old coin-flip system no longer blocks a new-system leg on the same thesis: the old
+	 * one runs to its own horizon and is scored on its own, so the two eras' results stay comparable. The
+	 * concentration caps still count every open leg — the book's real exposure doesn't care which era.
+	 */
+	static final java.time.Instant NEW_SYSTEM_SINCE = java.time.Instant.parse("2026-09-25T00:00:00Z");
 
 	/** Deep verdict must be at least this convincing to flip an open position. */
 	private static final int FLIP_MIN_CONVICTION = 60;
@@ -243,7 +253,7 @@ public class PaperInvestorService {
 			}
 			BigDecimal entry = prices.latestPrice(rec.getTicker()).orElse(null);
 			if (entry == null || entry.signum() <= 0) {
-				log.debug("Investor: no live price for {} — not opening a paper trade", rec.getTicker());
+				log.info("Investor: no live price for {} — not opening a paper trade", rec.getTicker());
 				return List.of();
 			}
 			BigDecimal spy = benchmark.latest().orElse(null);
@@ -270,8 +280,8 @@ public class PaperInvestorService {
 
 			List<SimulatedTrade> opened = new java.util.ArrayList<>();
 			for (int horizon : horizonsFor(rec)) {
-				if (trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
-						rec.getTicker(), rec.getDirection(), horizon, SimulatedTrade.Status.OPEN)) {
+				if (trades.existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(
+						rec.getTicker(), rec.getDirection(), horizon, SimulatedTrade.Status.OPEN, NEW_SYSTEM_SINCE)) {
 					continue; // this leg of the thesis is already on the book
 				}
 				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
@@ -280,8 +290,8 @@ public class PaperInvestorService {
 				opened.add(trades.save(leg));
 			}
 			if (opened.isEmpty()) {
-				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatus(
-						rec.getTicker(), rec.getDirection(), SimulatedTrade.Status.OPEN);
+				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual(
+						rec.getTicker(), rec.getDirection(), SimulatedTrade.Status.OPEN, NEW_SYSTEM_SINCE);
 				existing.forEach(SimulatedTrade::reaffirm);
 				trades.saveAll(existing);
 				log.info("Investor: {} {} thesis already open ({} legs) — re-affirmed",

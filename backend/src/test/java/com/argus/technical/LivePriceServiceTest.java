@@ -53,6 +53,19 @@ class LivePriceServiceTest {
 	}
 
 	@Test
+	void aWatchlistNameGetsABookablePriceNotJustHoldings() {
+		when(universe.knownTickers()).thenReturn(Set.of("SKHY"));
+		when(feed.latestPrice(anyString())).thenReturn(Optional.empty());
+		when(feed.latestPrice("AAPL")).thenReturn(Optional.of(new BigDecimal("333.01")));
+		when(yahoo.fetch("SKHY", "5d")).thenReturn(Optional.of(quote("SKHY", 187.41)));
+		service.refresh();
+
+		assertEquals(new BigDecimal("333.01"), service.latestPrice("AAPL").orElseThrow(), "the stream's exact decimal");
+		assertEquals(0, new BigDecimal("187.41").compareTo(service.latestPrice("SKHY").orElseThrow()),
+				"an unheld name is priced from the polled quote — before, it had no price and never traded");
+	}
+
+	@Test
 	void pollsOnlyAroundUsMarketHours() {
 		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T15:00:00Z")));  // Tue 11:00 ET
 		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T20:30:00Z")));  // Tue 16:30 ET, before candles land

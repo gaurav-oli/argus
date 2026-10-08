@@ -73,6 +73,15 @@ public class LivePriceService {
 		return q != null && q.at().isAfter(Instant.now().minus(MAX_AGE)) ? Optional.of(q.price()) : Optional.empty();
 	}
 
+	/** {@link #livePrice} as the feed's exact decimal when streamed — for code that books prices (the paper investor). */
+	public Optional<BigDecimal> latestPrice(String ticker) {
+		if (ticker == null) {
+			return Optional.empty();
+		}
+		Optional<BigDecimal> streamed = feed.latestPrice(ticker.trim().toUpperCase(java.util.Locale.ROOT));
+		return streamed.isPresent() ? streamed : livePrice(ticker).map(BigDecimal::valueOf);
+	}
+
 	@Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
 	public void refresh() {
 		if (!enabled || (!quotes.isEmpty() && !inWindow(Instant.now()))) {

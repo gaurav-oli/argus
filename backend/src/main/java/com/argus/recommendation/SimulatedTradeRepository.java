@@ -25,11 +25,11 @@ public interface SimulatedTradeRepository extends JpaRepository<SimulatedTrade, 
 	 * first), even though the Investor was genuinely acting on that call too. */
 	boolean existsByTickerAndDirection(String ticker, SignalDirection direction);
 
-	/** Thesis-level dedup: is this (ticker, direction, horizon) leg already on the open book? */
-	boolean existsByTickerAndDirectionAndHorizonDaysAndStatus(String ticker, SignalDirection direction,
-			int horizonDays, SimulatedTrade.Status status);
+	/** Thesis-level dedup — is this (ticker, direction, horizon) leg already on the open book? — limited to legs opened on/after {@code since} (see PaperInvestorService.NEW_SYSTEM_SINCE). */
+	boolean existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(String ticker,
+			SignalDirection direction, int horizonDays, SimulatedTrade.Status status, java.time.Instant since);
 
-	/** The open legs of a thesis, for re-affirmation when a repeat recommendation arrives. */
-	List<SimulatedTrade> findByTickerAndDirectionAndStatus(String ticker, SignalDirection direction,
-			SimulatedTrade.Status status);
+	/** The open legs of a thesis opened on/after {@code since}, for re-affirmation. */
+	List<SimulatedTrade> findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual(String ticker,
+			SignalDirection direction, SimulatedTrade.Status status, java.time.Instant since);
 }

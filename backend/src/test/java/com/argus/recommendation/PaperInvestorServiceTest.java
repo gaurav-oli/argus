@@ -21,9 +21,9 @@ import com.argus.learning.LessonEffect;
 import com.argus.learning.Lessons;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
-import com.argus.portfolio.LivePortfolioService;
 import com.argus.technical.ChartStudy;
 import com.argus.technical.ChartStudyService;
+import com.argus.technical.LivePriceService;
 import com.argus.technical.PriceCandle;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -42,7 +42,7 @@ import org.junit.jupiter.api.Test;
 class PaperInvestorServiceTest {
 
 	private final SimulatedTradeRepository trades = mock(SimulatedTradeRepository.class);
-	private final LivePortfolioService prices = mock(LivePortfolioService.class);
+	private final LivePriceService prices = mock(LivePriceService.class);
 	private final BenchmarkPriceSource benchmark = mock(BenchmarkPriceSource.class);
 	private final GraduationService graduation = mock(GraduationService.class);
 	private final TradeConfirmationService confirmations = mock(TradeConfirmationService.class);
@@ -153,8 +153,8 @@ class PaperInvestorServiceTest {
 		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
 		when(benchmark.latest()).thenReturn(Optional.empty());
 		// 7d leg already open; 30/90 free.
-		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
-				"AAPL", SignalDirection.BULLISH, 7, SimulatedTrade.Status.OPEN)).thenReturn(true);
+		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(
+				"AAPL", SignalDirection.BULLISH, 7, SimulatedTrade.Status.OPEN, PaperInvestorService.NEW_SYSTEM_SINCE)).thenReturn(true);
 		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
 
 		List<SimulatedTrade> opened = staggeredInvestor().open(rec("AAPL", SignalDirection.BULLISH, 8L));
@@ -167,12 +167,12 @@ class PaperInvestorServiceTest {
 		when(trades.existsByRecommendationId(9L)).thenReturn(false);
 		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
 		when(benchmark.latest()).thenReturn(Optional.empty());
-		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
-				eq("AAPL"), eq(SignalDirection.BULLISH), anyInt(), eq(SimulatedTrade.Status.OPEN)))
+		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(
+				eq("AAPL"), eq(SignalDirection.BULLISH), anyInt(), eq(SimulatedTrade.Status.OPEN), eq(PaperInvestorService.NEW_SYSTEM_SINCE)))
 				.thenReturn(true);
 		SimulatedTrade leg = new SimulatedTrade(1L, "AAPL", SignalDirection.BULLISH, bd(100), bd(50), 7, null);
-		when(trades.findByTickerAndDirectionAndStatus("AAPL", SignalDirection.BULLISH,
-				SimulatedTrade.Status.OPEN)).thenReturn(List.of(leg));
+		when(trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual("AAPL", SignalDirection.BULLISH,
+				SimulatedTrade.Status.OPEN, PaperInvestorService.NEW_SYSTEM_SINCE)).thenReturn(List.of(leg));
 
 		List<SimulatedTrade> opened = staggeredInvestor().open(rec("AAPL", SignalDirection.BULLISH, 9L));
 
@@ -241,12 +241,12 @@ class PaperInvestorServiceTest {
 		when(trades.existsByRecommendationId(9L)).thenReturn(false);
 		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(50)));
 		when(benchmark.latest()).thenReturn(Optional.empty());
-		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatus(
-				eq("AAPL"), eq(SignalDirection.BULLISH), anyInt(), eq(SimulatedTrade.Status.OPEN)))
+		when(trades.existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(
+				eq("AAPL"), eq(SignalDirection.BULLISH), anyInt(), eq(SimulatedTrade.Status.OPEN), eq(PaperInvestorService.NEW_SYSTEM_SINCE)))
 				.thenReturn(true);
 		SimulatedTrade leg = new SimulatedTrade(1L, "AAPL", SignalDirection.BULLISH, bd(100), bd(50), 7, null);
-		when(trades.findByTickerAndDirectionAndStatus("AAPL", SignalDirection.BULLISH,
-				SimulatedTrade.Status.OPEN)).thenReturn(List.of(leg));
+		when(trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual("AAPL", SignalDirection.BULLISH,
+				SimulatedTrade.Status.OPEN, PaperInvestorService.NEW_SYSTEM_SINCE)).thenReturn(List.of(leg));
 
 		staggeredInvestor().open(rec("AAPL", SignalDirection.BULLISH, 9L));
 
