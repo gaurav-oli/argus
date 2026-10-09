@@ -610,6 +610,34 @@ body {
 .dz-bit-rise { animation-name: dz-bit-rise; }
 .dz-bit-fall { animation-name: dz-bit-fall; }
 
+/* ---- Argie, the pixel mascot (components/brand/Argie.tsx) ---- */
+.argie { image-rendering: pixelated; }
+.argie-body { transform-box: fill-box; transform-origin: 50% 100%; }
+.argie-celebrate .argie-body { animation: argie-bounce 0.9s cubic-bezier(0.3, 0.7, 0.4, 1) infinite; }
+.argie-happy .argie-body { animation: argie-bob 2s ease-in-out infinite; }
+.argie-watching .argie-body { animation: argie-breathe 3s ease-in-out infinite; }
+.argie-worried .argie-body { animation: argie-shiver 0.35s steps(2) infinite; }
+.argie-sad .argie-body { animation: argie-slump 3s ease-in-out infinite; }
+.argie-napping .argie-body { animation: argie-breathe 4s ease-in-out infinite; }
+.argie-lid { opacity: 0; animation: argie-blink 4.5s linear infinite; }
+.argie-tear { animation: argie-tear 1.6s ease-in infinite; }
+.argie-arm { transform-box: fill-box; transform-origin: 0% 100%; animation: argie-wave 0.5s ease-in-out infinite; }
+.argie-confetti { animation: argie-fall 1.8s linear infinite; text-shadow: 0 0 6px currentColor; }
+.argie-cloud { image-rendering: pixelated; animation: argie-bob 3s ease-in-out infinite; }
+.argie-drop { animation: argie-drip 1s linear infinite; }
+.argie-z { animation: argie-zzz 2.4s ease-out infinite; }
+@keyframes argie-bounce { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-14%); } 45% { transform: translateY(-16%); } 60% { transform: translateY(0); } 70% { transform: translateY(-3%); } }
+@keyframes argie-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4%); } }
+@keyframes argie-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.97); } }
+@keyframes argie-shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2%); } 75% { transform: translateX(2%); } }
+@keyframes argie-slump { 0%, 100% { transform: translateY(2%) scaleY(0.98); } 50% { transform: translateY(4%) scaleY(0.96); } }
+@keyframes argie-blink { 0%, 92%, 100% { opacity: 0; } 94%, 97% { opacity: 1; } }
+@keyframes argie-tear { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(5px); opacity: 0; } }
+@keyframes argie-wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-18deg); } }
+@keyframes argie-fall { from { transform: translateY(-10px); opacity: 0; } 15% { opacity: 1; } to { transform: translateY(130px) rotate(var(--r)); opacity: 0; } }
+@keyframes argie-drip { from { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(34px); opacity: 0; } }
+@keyframes argie-zzz { from { transform: translate(0, 0); opacity: 0; } 30% { opacity: 1; } to { transform: translate(10px, -22px); opacity: 0; } }
+
 /* Respect the OS "reduce motion" setting — kills the skeleton pulse, theme
  * cross-fade, and all transitions/animations for motion-sensitive users. */
 @media (prefers-reduced-motion: reduce) {

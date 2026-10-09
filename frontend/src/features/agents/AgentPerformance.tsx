@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Argie } from "@/components/brand/Argie";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -17,6 +18,7 @@ import {
   type EraStat,
   type WindowStat,
 } from "@/lib/apiClient";
+import { MOOD_LABEL, accuracyLine, moodForWinRate } from "@/lib/argie";
 import { cn } from "@/lib/utils";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 
@@ -73,6 +75,8 @@ function AccuracyCard({ a }: { a: AccuracyView }) {
           </span>
         )}
       </SectionHead>
+
+      <ArgieMood w={a.last30d} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <EraTile
@@ -141,6 +145,36 @@ function EraTile({ label, sub, e, highlight = false }: { label: string; sub: str
       {e.closed > 0 && !e.statisticallyMeaningful && (
         <p className="mt-1 text-[10px] italic text-text-secondary/80">not yet statistically meaningful</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Argie reacting to the last 30 days of resolved calls — the window that actually moves. The mood is
+ * always written out next to the sprite (CELEBRATING / HAPPY / WATCHING / WORRIED / SAD / NAPPING) with
+ * a line saying why, so the picture is never the only thing carrying the meaning. Fewer than 10 calls
+ * and Argie naps rather than reacting to noise (lib/argie).
+ */
+function ArgieMood({ w }: { w: WindowStat }) {
+  const mood = moodForWinRate(w.winRatePct, w.trades);
+  const tone =
+    mood === "celebrate" || mood === "happy"
+      ? "var(--color-gains)"
+      : mood === "worried"
+        ? "var(--color-warning)"
+        : mood === "sad"
+          ? "var(--color-losses)"
+          : "var(--color-text-secondary)";
+  return (
+    <div className="flex items-center gap-4 border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-2" aria-live="polite">
+      <Argie mood={mood} size={88} />
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">Argie · last 30 days</p>
+        <p className="font-display text-3xl uppercase leading-none tracking-[0.06em]" style={{ color: tone }}>
+          {MOOD_LABEL[mood]}
+        </p>
+        <p className="mt-1 text-xs leading-snug text-text-secondary">{accuracyLine(mood, w.wins, w.trades)}</p>
+      </div>
     </div>
   );
 }

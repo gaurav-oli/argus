@@ -136,3 +136,27 @@ covered by `npm test` (16 tests, Node's built-in runner, no new dependencies).
 > That component is no longer mounted anywhere (it predates the Intelligence rebuild), so the bar
 > now lives in the ticker detail instead. `RecommendationCards` is dead code and could be deleted.
 
+## Argie, the pixel mascot
+
+Argie is a little Argus Panoptes: one big eye and a crown of eye-stalks, drawn as pixel art in the
+Terminal Noir palette. The sprite is in `lib/argie.ts` and the component in
+`components/brand/Argie.tsx`.
+
+On the **Agent 5 accuracy** card, Argie reacts to the **last 30 days**. **The mood is always
+written out** next to the sprite, with a line saying why, so the picture never carries the meaning
+on its own:
+
+| Mood | Win rate (last 30 days) | Motion |
+|---|---|---|
+| CELEBRATING | 65% or more | jumps, 0/1 confetti |
+| HAPPY | 55–64% | bobs and waves |
+| WATCHING | 48–54% | breathes, eye open |
+| WORRIED | 40–47% | shivers, sweat drop |
+| SAD | under 40% | heavy eyelid, tear, rain cloud |
+| NAPPING | fewer than 10 resolved calls | zzz; too few calls to react to |
+
+The rule for using Argie elsewhere: only where a mood replaces reading a state, and **never next to
+a buy/sell call or a probability**, so it can't nudge a trade emotionally. Candidate placements are
+in the Argus Monsters demo: the investor streak, empty states, long model calls, backup success,
+budget warnings, the connection-error screen, Brier, the morning greeting and the sign-in boot.
+

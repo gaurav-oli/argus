@@ -423,6 +423,13 @@ Design notes: `docs/design-terminal-noir.md`.
 - [ ] Happy with it → merge `design/terminal-noir` into `main`. Not happy →
       `git checkout main && docker compose --profile deploy up -d --build` returns to the old look.
 
+- [ ] **Argie on the Agent 5 accuracy card:**
+  - [ ] The mood strip shows the sprite, its mood word (CELEBRATING / HAPPY / WATCHING / WORRIED /
+        SAD / NAPPING) and a one-line reason that matches the "Last 30 days" tile.
+  - [ ] With fewer than 10 resolved calls in 30 days, Argie naps.
+  - [ ] The eye blinks occasionally. Confetti (celebrating), rain (sad) and zzz (napping) show.
+  - [ ] Nothing moves with Reduce Motion on.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._
