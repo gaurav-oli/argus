@@ -1596,6 +1596,37 @@ export const setGuardEnabled = (enabled: boolean): Promise<void> => apiPost("/ap
 export const confirmBrokerStop = (ticker: string, account: string): Promise<void> =>
   apiPost("/api/guard/stops/confirm", { ticker, account });
 
+/** One paper trade, buy to sell (open trades carry the live price and unrealized return). */
+export interface LedgerRow {
+  id: number;
+  ticker: string;
+  direction: "BULLISH" | "BEARISH";
+  /** CURRENT: opened on/after 2026-09-25 by the current system; OLD: the earlier system. */
+  system: "CURRENT" | "OLD";
+  status: "OPEN" | "CLOSED";
+  openedAt: string;
+  entryPrice: number;
+  shares: number;
+  amount: number;
+  stopPrice: number | null;
+  targetPrice: number | null;
+  closedAt: string | null;
+  exitPrice: number | null;
+  exitReason: string | null;
+  heldDays: number | null;
+  returnPct: number | null;
+  pnl: number | null;
+  vsSpyPct: number | null;
+  won: boolean | null;
+  scaleIn: boolean;
+  takeProfitHalf: boolean;
+  currentPrice: number | null;
+  unrealizedPct: number | null;
+  review: string | null;
+}
+
+export const getTradeLedger = (): Promise<LedgerRow[]> => apiGet<LedgerRow[]>("/api/recommendations/paper-trades/ledger");
+
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
   apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");
 

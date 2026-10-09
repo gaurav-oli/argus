@@ -1,5 +1,7 @@
 package com.argus.recommendation;
 
+import java.util.List;
+
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +47,12 @@ public class PerformanceController {
 	}
 
 	/** The Investor persona's autonomous paper-trading scoreboard: the $ book, its return, win rate. */
+	/** The Investor's full trade journal: every paper trade, buy to sell. */
+	@GetMapping("/paper-trades/ledger")
+	public List<PaperInvestorService.LedgerRow> ledger() {
+		return investor.ledger();
+	}
+
 	@GetMapping("/paper-trades")
 	public PaperInvestorService.Scoreboard paperTrades() {
 		return investor.scoreboard();

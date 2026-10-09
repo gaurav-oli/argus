@@ -172,4 +172,20 @@ class ChangeWatcherIntegrationTest {
 
 		assertFalse(nextScan(Duration.ofMinutes(31)).containsKey("AMD"), "the same surge doesn't fire twice in a day");
 	}
+
+	@Test
+	void bearishBreakingNewsLocksProfitOnAnOpenWinnerBeforeTheReReview() {
+		jdbc.update("insert into simulated_trades (ticker, direction, entry_price, entry_at, horizon_days, status, stop_price, notional, shares) "
+				+ "values ('MU', 'BULLISH', 100, now() - interval '2 days', 30, 'OPEN', 92, 100, 1)");
+		when(prices.latestPrice("MU")).thenReturn(Optional.of(new java.math.BigDecimal("110")));
+		jdbc.update("insert into breaking_alert (headline, tickers, reason, impact, created_at, duplicate, sentiment_label) "
+				+ "values ('Micron hit with export ban', '{MU}', 'x', 0.9, now(), false, 'BEARISH')");
+
+		nextScan(Duration.ofMinutes(2));
+
+		assertEquals(0, new java.math.BigDecimal("105.00").compareTo(
+				jdbc.queryForObject("select stop_price from simulated_trades where ticker = 'MU'", java.math.BigDecimal.class)),
+				"half of the +10 profit locked");
+		verify(trigger).trigger(eq("MU"), startsWith("event: breaking news"));
+	}
 }

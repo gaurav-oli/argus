@@ -45,6 +45,11 @@ import org.springframework.stereotype.Component;
  *       {@value #MARKET_SHOCK_VIX_PCT}% on the day) re-reviews every ticker with an open trade.</li>
  * </ul>
  *
+ * <p>Each event also carries a direction where it has one (a bearish breaking alert, a negative headline, a macro
+ * story bad for the ticker's sector, a sharp drop, a market shock, a souring crowd). An event adverse to an open
+ * trade that is in profit first locks part of that profit ({@link PaperInvestorService#lockProfitOnAdverseEvent}) —
+ * whatever the re-review then concludes.
+ *
  * Guardrails: each ticker is re-reviewed at most once per {@link #COOLDOWN}, at most {@value #MAX_PER_SCAN} per
  * scan, and a price shock only fires again the same day if the move grows by half again. A frozen Agent 5 makes
  * no calls, so nothing here can trade while frozen. The trade-level guards (24h minimum hold, re-entry cooldown,
@@ -78,6 +83,7 @@ public class ChangeWatcher {
 	private final ChartStudyService charts;
 	private final MarketRegimeService regimes;
 	private final com.argus.regime.SectorClassifier sectors;
+	private final PaperInvestorService investor;
 	/** ticker → (day, recent mention count) of its last social trigger. */
 	private final Map<String, Map.Entry<LocalDate, Long>> socialSurges = new ConcurrentHashMap<>();
 
@@ -93,8 +99,10 @@ public class ChangeWatcher {
 	private final Set<String> marketShocksSeen = ConcurrentHashMap.newKeySet();
 
 	public ChangeWatcher(JdbcTemplate jdbc, RecommendationTrigger trigger, KnownUniverse universe, LivePriceService prices,
-			ChartStudyService charts, MarketRegimeService regimes, com.argus.regime.SectorClassifier sectors) {
+			ChartStudyService charts, MarketRegimeService regimes, com.argus.regime.SectorClassifier sectors,
+			PaperInvestorService investor) {
 		this.sectors = sectors;
+		this.investor = investor;
 		this.jdbc = jdbc;
 		this.trigger = trigger;
 		this.universe = universe;
@@ -135,13 +143,18 @@ public class ChangeWatcher {
 		lastScan = now;
 		Set<String> tracked = tracked();
 		Map<String, String> changed = new LinkedHashMap<>();
+		Map<String, Integer> polarity = new java.util.HashMap<>(); // ticker → net direction of its events (+ good, − bad)
 
-		jdbc.query("select distinct unnest(tickers), headline from breaking_alert where created_at > ? and not duplicate",
-				rs -> { note(changed, tracked, rs.getString(1), "breaking news: " + rs.getString(2)); }, ts(since));
+		jdbc.query("select distinct unnest(tickers), headline, sentiment_label from breaking_alert where created_at > ? and not duplicate",
+				rs -> {
+					note(changed, tracked, rs.getString(1), "breaking news: " + rs.getString(2));
+					lean(polarity, tracked, rs.getString(1), "BEARISH".equals(rs.getString(3)) ? -1 : "BULLISH".equals(rs.getString(3)) ? 1 : 0);
+				}, ts(since));
 		jdbc.query("select distinct unnest(tickers), headline, sentiment_score from news_articles where analyzed_at > ? "
 				+ "and abs(sentiment_score) >= ?", rs -> {
 					note(changed, tracked, rs.getString(1), (rs.getDouble(3) > 0 ? "strongly positive" : "strongly negative")
 							+ " news: " + rs.getString(2));
+					lean(polarity, tracked, rs.getString(1), rs.getDouble(3) > 0 ? 1 : -1);
 				}, ts(since), STRONG_SENTIMENT);
 		jdbc.query("select ticker, transaction_type, insider_name from sec_filings where ingested_at > ?",
 				rs -> { note(changed, tracked, rs.getString(1), "insider " + lower(rs.getString(2)) + " by " + rs.getString(3)); },
@@ -160,10 +173,22 @@ public class ChangeWatcher {
 				rs -> { note(changed, tracked, rs.getString(1), "new Agent 11 verdict: " + lower(rs.getString(2))); }, ts(since));
 		jdbc.query("select ticker, thesis_reason from deep_analysis where thesis_status = 'AT_RISK' and thesis_checked_at > ?",
 				rs -> { note(changed, tracked, rs.getString(1), "thesis at risk: " + rs.getString(2)); }, ts(since));
-		macro(changed, tracked, since);
-		socialSurges(changed, tracked, now);
-		priceShocks(changed, tracked, now);
-		marketShock(changed, now);
+		macro(changed, polarity, tracked, since);
+		socialSurges(changed, polarity, tracked, now);
+		priceShocks(changed, polarity, tracked, now);
+		marketShock(changed, polarity, now);
+
+		// Protect open profit first: an adverse event locks part of it, whatever the re-review then decides.
+		for (Map.Entry<String, Integer> e : polarity.entrySet()) {
+			if (e.getValue() != 0) {
+				try {
+					investor.lockProfitOnAdverseEvent(e.getKey(), Integer.signum(e.getValue()), changed.getOrDefault(e.getKey(), "event"));
+				}
+				catch (RuntimeException ex) {
+					log.warn("Change watcher: profit lock on {} failed: {}", e.getKey(), ex.toString());
+				}
+			}
+		}
 
 		int reviewed = 0;
 		for (Map.Entry<String, String> e : changed.entrySet()) {
@@ -189,29 +214,37 @@ public class ChangeWatcher {
 	}
 
 	/** A strong macro/geopolitical story reaches the tracked tickers whose sector is exposed to its theme. */
-	private void macro(Map<String, String> changed, Set<String> tracked, Instant since) {
-		java.util.List<String> headlines = new java.util.ArrayList<>(jdbc.queryForList(
-				"select headline from news_articles where analyzed_at > ? and 'MACRO' = any(tickers) and abs(sentiment_score) >= ?",
-				String.class, ts(since), MACRO_SENTIMENT));
-		headlines.addAll(jdbc.queryForList("select headline from breaking_alert where created_at > ? and not duplicate "
-				+ "and coalesce(cardinality(tickers), 0) = 0", String.class, ts(since)));
-		for (String headline : headlines) {
+	private void macro(Map<String, String> changed, Map<String, Integer> polarity, Set<String> tracked, Instant since) {
+		// headline → market-wide sentiment (+ good for markets, − bad, 0 unknown)
+		Map<String, Integer> headlines = new LinkedHashMap<>();
+		jdbc.query("select headline, sentiment_score from news_articles where analyzed_at > ? and 'MACRO' = any(tickers) "
+				+ "and abs(sentiment_score) >= ?", rs -> { headlines.put(rs.getString(1), rs.getDouble(2) > 0 ? 1 : -1); },
+				ts(since), MACRO_SENTIMENT);
+		jdbc.query("select headline, sentiment_label from breaking_alert where created_at > ? and not duplicate "
+				+ "and coalesce(cardinality(tickers), 0) = 0", rs -> {
+					headlines.put(rs.getString(1), "BEARISH".equals(rs.getString(2)) ? -1 : "BULLISH".equals(rs.getString(2)) ? 1 : 0);
+				}, ts(since));
+		for (Map.Entry<String, Integer> item : headlines.entrySet()) {
+			String headline = item.getKey();
 			java.util.List<com.argus.regime.MacroTheme> themes = com.argus.regime.MacroTheme.classify(headline);
 			if (themes.isEmpty()) {
 				continue;
 			}
 			String label = themes.stream().map(com.argus.regime.MacroTheme::label).collect(java.util.stream.Collectors.joining(", "));
 			for (String t : tracked) {
-				double exposure = Math.abs(com.argus.regime.MacroTheme.meanSensitivity(themes, sectors.sectorOf(t)));
-				if (exposure >= MACRO_EXPOSURE) {
+				double sensitivity = com.argus.regime.MacroTheme.meanSensitivity(themes, sectors.sectorOf(t));
+				if (Math.abs(sensitivity) >= MACRO_EXPOSURE) {
 					note(changed, tracked, t, "macro (" + label + "): " + headline);
+					// A sector moves with the story when sensitivity > 0 (bad news → it falls), against it when < 0
+					// (an oil-supply shock that hurts the market lifts energy).
+					lean(polarity, tracked, t, item.getValue() * (int) Math.signum(sensitivity));
 				}
 			}
 		}
 	}
 
 	/** An unusual burst of social chatter, or a sharp swing in its mood, against the ticker's own week. */
-	private void socialSurges(Map<String, String> changed, Set<String> tracked, Instant now) {
+	private void socialSurges(Map<String, String> changed, Map<String, Integer> polarity, Set<String> tracked, Instant now) {
 		LocalDate today = now.atZone(NEW_YORK).toLocalDate();
 		String sql = "select ticker,"
 				+ " count(*) filter (where posted_at > ?::timestamptz - interval '1 hour'),"
@@ -236,6 +269,7 @@ public class ChangeWatcher {
 			else if (recent >= SOCIAL_MOOD_MIN && recentMood != null && usualMood != null
 					&& Math.abs(recentMood - usualMood) >= SOCIAL_MOOD_SWING) {
 				why = String.format(Locale.ROOT, "social mood swing: %+.2f vs %+.2f usual", recentMood, usualMood);
+				lean(polarity, tracked, t, recentMood > usualMood ? 1 : -1);
 			}
 			if (why == null) {
 				return;
@@ -249,7 +283,7 @@ public class ChangeWatcher {
 		}, ts(now), ts(now), ts(now), ts(now), ts(now), ts(now));
 	}
 
-	private void priceShocks(Map<String, String> changed, Set<String> tracked, Instant now) {
+	private void priceShocks(Map<String, String> changed, Map<String, Integer> polarity, Set<String> tracked, Instant now) {
 		LocalDate today = now.atZone(NEW_YORK).toLocalDate();
 		for (String t : tracked) {
 			Double price = prices.livePrice(t).orElse(null);
@@ -268,10 +302,11 @@ public class ChangeWatcher {
 			}
 			priceShocks.put(t, Map.entry(today, Math.abs(move)));
 			note(changed, tracked, t, String.format(Locale.ROOT, "price %+.1f%% today", move));
+			lean(polarity, tracked, t, move > 0 ? 1 : -1);
 		}
 	}
 
-	private void marketShock(Map<String, String> changed, Instant now) {
+	private void marketShock(Map<String, String> changed, Map<String, Integer> polarity, Instant now) {
 		MarketRegime r;
 		try {
 			r = regimes.current();
@@ -292,6 +327,7 @@ public class ChangeWatcher {
 		}
 		for (String t : jdbc.queryForList("select distinct ticker from simulated_trades where status = 'OPEN'", String.class)) {
 			changed.putIfAbsent(t, why);
+			polarity.merge(t, -1, Integer::sum); // a broad selloff or fear spike is bad news for every long
 		}
 	}
 
@@ -299,6 +335,17 @@ public class ChangeWatcher {
 		Set<String> t = new HashSet<>(universe.knownTickers());
 		t.addAll(jdbc.queryForList("select distinct ticker from simulated_trades where status = 'OPEN'", String.class));
 		return t;
+	}
+
+	/** Add an event's direction (+1 good, −1 bad, 0 none) to a tracked ticker's net lean. */
+	private static void lean(Map<String, Integer> polarity, Set<String> tracked, String ticker, int direction) {
+		if (ticker == null || direction == 0) {
+			return;
+		}
+		String t = ticker.trim().toUpperCase(Locale.ROOT);
+		if (tracked.contains(t)) {
+			polarity.merge(t, direction, Integer::sum);
+		}
 	}
 
 	private static void note(Map<String, String> changed, Set<String> tracked, String ticker, String why) {

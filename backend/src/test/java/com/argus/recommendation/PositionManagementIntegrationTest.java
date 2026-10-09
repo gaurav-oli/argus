@@ -222,4 +222,50 @@ class PositionManagementIntegrationTest {
 
 		assertTrue(investor.open(buyCall(85)).isEmpty(), "a rising conviction on a losing position is not a reason to add");
 	}
+
+	@Test
+	void theLedgerShowsEachTradeBuyToSell() {
+		SimulatedTrade won = longAapl(92.0, null, 9);
+		jdbc.update("update simulated_trades set status = 'CLOSED', exit_price = 110.46, return_pct = 10.46, won = true, "
+				+ "exit_reason = 'HORIZON', closed_at = entry_at + interval '7 days' where id = ?", won.getId());
+		SimulatedTrade open = longAapl(92.0, null, 1);
+		price("AAPL", "104");
+
+		List<PaperInvestorService.LedgerRow> ledger = investor.ledger();
+
+		PaperInvestorService.LedgerRow closed = ledger.stream().filter(r -> r.id() == won.getId()).findFirst().orElseThrow();
+		assertEquals("CURRENT", closed.system());
+		assertEquals(0, new BigDecimal("100").compareTo(closed.entryPrice()));
+		assertEquals(0, new BigDecimal("1").compareTo(closed.shares()), "$100 at $100 = 1 share");
+		assertEquals(0, new BigDecimal("110.46").compareTo(closed.exitPrice()));
+		assertEquals(7L, closed.heldDays());
+		assertEquals(0, new BigDecimal("10.46").compareTo(closed.pnl()));
+		assertEquals("HORIZON", closed.exitReason());
+
+		PaperInvestorService.LedgerRow live = ledger.stream().filter(r -> r.id() == open.getId()).findFirst().orElseThrow();
+		assertEquals("OPEN", live.status());
+		assertEquals(0, new BigDecimal("4.00").compareTo(live.unrealizedPct()));
+		assertEquals(open.getId(), ledger.get(0).id(), "newest first");
+	}
+
+	@Test
+	void badNewsLocksHalfOfAWinnersProfitEvenOnDayOne() {
+		SimulatedTrade t = longAapl(92.0, 110.0, 0); // inside the 24h minimum hold
+		price("AAPL", "104");
+
+		assertEquals(0, investor.lockProfitOnAdverseEvent("AAPL", 1, "good news"), "good news doesn't touch a long");
+		assertEquals(1, investor.lockProfitOnAdverseEvent("AAPL", -1, "bad news"));
+
+		assertEquals(0, new BigDecimal("102.00").compareTo(reload(t).getStopPrice()), "half of the +4 profit kept");
+		assertEquals(0, investor.lockProfitOnAdverseEvent("AAPL", -1, "more bad news"), "never loosens or re-moves");
+	}
+
+	@Test
+	void badNewsLeavesALosingTradeToItsRegularStop() {
+		SimulatedTrade t = longAapl(92.0, 110.0, 3);
+		price("AAPL", "98");
+
+		assertEquals(0, investor.lockProfitOnAdverseEvent("AAPL", -1, "bad news"));
+		assertEquals(0, new BigDecimal("92").compareTo(reload(t).getStopPrice()));
+	}
 }

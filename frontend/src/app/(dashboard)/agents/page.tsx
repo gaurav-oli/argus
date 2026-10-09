@@ -9,6 +9,7 @@ import { ResearchAgentSection } from "@/features/agents/ResearchAgentSection";
 import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 import { TradeJournal } from "@/features/agents/TradeJournal";
+import { TradeLedger } from "@/features/agents/TradeLedger";
 
 /**
  * Agents — the live AI fleet (Epic 9, Story 9.1) plus Agent 5's performance record (Stories 9.2–9.4):
@@ -35,6 +36,7 @@ export default function AgentsPage() {
         </p>
         <div className="flex flex-col gap-4">
           <PaperInvestorScoreboard />
+          <TradeLedger />
           <AgentPerformance />
           <TradeJournal />
           <LogicReview />

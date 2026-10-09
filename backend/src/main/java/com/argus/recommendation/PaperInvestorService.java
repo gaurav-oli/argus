@@ -164,6 +164,53 @@ public class PaperInvestorService {
 		}
 	}
 
+	/** On an adverse event, the stop moves to keep at least this share of an open trade's current profit. */
+	static final double PROFIT_LOCK_SHARE = 0.5;
+
+	/**
+	 * A clearly adverse event (bad news for a long, good news for a short — see {@code ChangeWatcher}) hit {@code ticker}:
+	 * every open trade on it that is in profit has its stop moved to keep at least {@value #PROFIT_LOCK_SHARE} of that
+	 * profit, whatever Agent 5 then concludes. A trade can still be up +3% and inside its normal daily noise, so the
+	 * trailing rules haven't locked anything yet; without this, a "still BUY" re-review let bad news turn it into a loss.
+	 * Protective, so it ignores the 24h minimum hold. Returns how many stops moved.
+	 */
+	public int lockProfitOnAdverseEvent(String ticker, int eventPolarity, String why) {
+		if (eventPolarity == 0) {
+			return 0;
+		}
+		int moved = 0;
+		for (SimulatedTrade t : trades.findByTickerAndStatus(ticker, SimulatedTrade.Status.OPEN)) {
+			boolean bullish = t.getDirection() == SignalDirection.BULLISH;
+			if (bullish == (eventPolarity > 0)) {
+				continue; // the event favours this position
+			}
+			BigDecimal live = prices.latestPrice(ticker).orElse(null);
+			if (live == null || live.signum() <= 0) {
+				continue;
+			}
+			double price = live.doubleValue();
+			double entry = t.getEntryPrice().doubleValue();
+			double gain = bullish ? price - entry : entry - price;
+			if (gain <= 0) {
+				continue; // nothing to protect — the regular stop already governs a losing trade
+			}
+			double lock = bullish ? entry + PROFIT_LOCK_SHARE * gain : entry - PROFIT_LOCK_SHARE * gain;
+			ChartStudy chart = chartAt(ticker, live);
+			double atr = (chart == null || chart.atrPct() == null || chart.atrPct() <= 0 ? PositionRules.DEFAULT_ATR_PCT : chart.atrPct()) / 100;
+			Double current = t.getStopPrice() == null ? null : t.getStopPrice().doubleValue();
+			Double next = PositionRules.tighten(bullish, current, lock, price, atr);
+			if (next == null || (current != null && money(next).compareTo(t.getStopPrice()) == 0)) {
+				continue;
+			}
+			t.moveStop(money(next));
+			trades.save(t);
+			moved++;
+			log.info("Investor: {} — locked part of the {} {} profit: stop {} → {} (entry {}, price {})", why, t.getDirection(),
+					ticker, current, t.getStopPrice(), t.getEntryPrice(), live);
+		}
+		return moved;
+	}
+
 	/** Scale-in rules: the position must be this many ATRs in profit, and conviction must have risen by this much. */
 	static final double SCALE_IN_PROFIT_ATRS = 1.0;
 	static final int SCALE_IN_CONVICTION_RISE = 10;
@@ -660,6 +707,42 @@ public class PaperInvestorService {
 		OpenBook openBook = openBook();
 		return new Scoreboard(openBook.count(), closed.size(), wins, winRatePct, notional, deployed, pnl,
 				bookReturnPct, openBook.deployed(), openBook.unrealizedPct(), openBook.byTicker(), recentClosed, management());
+	}
+
+	/**
+	 * One paper trade, buy to sell: when and at what price it opened, how many shares for how much, when, at what price
+	 * and why it closed, how long it was held, and what it made. Open trades carry the live price and unrealized result.
+	 * {@code system} is CURRENT for trades opened on/after {@link #NEW_SYSTEM_SINCE}, else OLD.
+	 */
+	public record LedgerRow(long id, String ticker, String direction, String system, String status, Instant openedAt,
+			BigDecimal entryPrice, BigDecimal shares, BigDecimal amount, BigDecimal stopPrice, BigDecimal targetPrice,
+			Instant closedAt, BigDecimal exitPrice, String exitReason, Long heldDays, BigDecimal returnPct, BigDecimal pnl,
+			BigDecimal vsSpyPct, Boolean won, boolean scaleIn, boolean takeProfitHalf, BigDecimal currentPrice,
+			BigDecimal unrealizedPct, String review) {
+	}
+
+	/** Every paper trade, newest first — the Investor's full trade journal. */
+	@Transactional(readOnly = true)
+	public List<LedgerRow> ledger() {
+		java.util.Map<String, BigDecimal> live = new java.util.HashMap<>();
+		return trades.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "entryAt", "id"))
+				.stream().map(t -> {
+					boolean open = t.getStatus() == SimulatedTrade.Status.OPEN;
+					BigDecimal current = open ? live.computeIfAbsent(t.getTicker(), k -> prices.latestPrice(k).orElse(null)) : null;
+					BigDecimal unrealized = current == null ? null
+							: current.subtract(t.getEntryPrice()).divide(t.getEntryPrice(), 6, java.math.RoundingMode.HALF_UP)
+									.multiply(BigDecimal.valueOf(100L * t.getDirection().sign())).setScale(2, java.math.RoundingMode.HALF_UP);
+					BigDecimal pnl = t.getReturnPct() == null ? null
+							: t.getNotional().multiply(t.getReturnPct()).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+					Instant end = open ? Instant.now() : t.getClosedAt();
+					return new LedgerRow(t.getId(), t.getTicker(), t.getDirection().name(),
+							t.getEntryAt().isBefore(NEW_SYSTEM_SINCE) ? "OLD" : "CURRENT", t.getStatus().name(), t.getEntryAt(),
+							t.getEntryPrice(), t.getShares(), t.getNotional(), t.getStopPrice(), t.getTargetPrice(), t.getClosedAt(),
+							t.getExitPrice(), open ? null : t.getExitReason(),
+							end == null ? null : java.time.Duration.between(t.getEntryAt(), end).toDays(), t.getReturnPct(), pnl,
+							t.getExcessReturnPct(), t.getWon(), t.isScaleIn(), t.getParentTradeId() != null, current, unrealized,
+							t.getReview());
+				}).toList();
 	}
 
 	/** The live open book: positions grouped by ticker, marked to market against current prices. */
