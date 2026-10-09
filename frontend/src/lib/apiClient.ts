@@ -1543,6 +1543,59 @@ export const startOpenTradeReview = (): Promise<OpenTradeReviewJob> =>
 export const getOpenTradeReview = (): Promise<OpenTradeReviewJob | undefined> =>
   apiGet<OpenTradeReviewJob | undefined>("/api/recommendations/open-trades/review");
 
+// ---- Real-holdings protection (HoldingGuard) ----
+
+export interface GuardedHolding {
+  ticker: string;
+  account: string;
+  price: number | null;
+  stop: number;
+  startPrice: number;
+  brokerStop: number | null;
+  brokerConfirmedAt: string | null;
+  stopChangedAt: string | null;
+  /** The recommended stop differs from what you confirmed setting at your broker. */
+  needsBrokerUpdate: boolean;
+}
+
+export interface GuardAlert {
+  id: number;
+  ticker: string;
+  account: string;
+  kind: "STOP_BROKEN" | "STOP_RAISED" | "CALL_REVERSED" | "THESIS_AT_RISK";
+  recommendation: "SELL" | "TIGHTEN";
+  detail: string;
+  price: number | null;
+  stop: number | null;
+  status: "OPEN" | "DECIDED";
+  createdAt: string;
+  /** When Argus decides for you if you haven't. */
+  decideAt: string;
+  decidedBy: "USER" | "ARGUS" | null;
+  decision: "SELL" | "TIGHTEN" | "HOLD" | null;
+  decidedAt: string | null;
+  /** Price change in the week after the decision (negative after a SELL = it saved money). */
+  outcomePct: number | null;
+}
+
+export interface GuardView {
+  /** Protection is opt-in per person. */
+  enabled: boolean;
+  holdings: GuardedHolding[];
+  open: GuardAlert[];
+  history: GuardAlert[];
+}
+
+export const getGuard = (): Promise<GuardView> => apiGet<GuardView>("/api/guard");
+
+export const decideGuardAlert = (id: number, decision: "SELL" | "TIGHTEN" | "HOLD"): Promise<void> =>
+  apiPost(`/api/guard/alerts/${id}/decide`, { decision });
+
+export const setGuardEnabled = (enabled: boolean): Promise<void> => apiPost("/api/guard/enabled", { enabled });
+
+export const confirmBrokerStop = (ticker: string, account: string): Promise<void> =>
+  apiPost("/api/guard/stops/confirm", { ticker, account });
+
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
   apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");
 

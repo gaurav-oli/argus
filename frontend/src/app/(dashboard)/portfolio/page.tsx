@@ -8,6 +8,7 @@ import { HoldingsTable } from "@/features/portfolio/HoldingsTable";
 import { ImportStatementDialog } from "@/features/portfolio/ImportStatementDialog";
 import { PortfolioOverview } from "@/features/portfolio/PortfolioOverview";
 import { PortfolioValue } from "@/features/portfolio/PortfolioValue";
+import { ProtectionPanel } from "@/features/portfolio/ProtectionPanel";
 import { getCash, getPortfolioValue } from "@/lib/apiClient";
 import { subscribeToTopic } from "@/lib/wsClient";
 import { useEffect, useState } from "react";
@@ -98,6 +99,9 @@ export default function PortfolioPage() {
             <PortfolioOverview />
           </MotionCard>
           <MotionCard index={2} className="md:col-span-6" interactive={false}>
+            <ProtectionPanel />
+          </MotionCard>
+          <MotionCard index={3} className="md:col-span-6" interactive={false}>
             <HoldingsTable />
           </MotionCard>
         </div>
