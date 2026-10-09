@@ -91,8 +91,22 @@ argus:
       enabled: ${ARGUS_NEWS_GDELT_ENABLED:true}
     rss:
       feeds:
+        # Markets
         - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
         - https://www.cnbc.com/id/100003114/device/rss/rss.html
+        # World & geopolitics — macro/political stories move every holding at once (MacroRelevanceTagger,
+        # MacroTheme); with only two US business feeds Argus was blind to most of the world.
+        - https://feeds.bbci.co.uk/news/world/rss.xml
+        - https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+        - https://www.theguardian.com/world/rss
+        - https://www.aljazeera.com/xml/rss/all.xml
+        - https://www.cnbc.com/id/100727362/device/rss/rss.html
+        - https://feeds.npr.org/1004/rss.xml
+        - https://www.cbc.ca/webfeed/rss/rss-world
+        # Central banks — rate decisions and statements, straight from the source
+        - https://www.federalreserve.gov/feeds/press_all.xml
+        - https://www.ecb.europa.eu/rss/press.html
+        - https://www.bankofcanada.ca/content_type/press-releases/feed/
   # Claude Haiku escalation/fallback (Story 7.3, FR-32). Key-gated: with no ANTHROPIC_API_KEY the
   # gateway's HaikuFallback is "unavailable" (escalation → 503) and Argus runs fully local. An empty
   # default is deliberate — it must read blank (not falsely "configured") when the env var is unset.

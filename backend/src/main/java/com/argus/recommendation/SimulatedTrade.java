@@ -124,6 +124,10 @@ public class SimulatedTrade {
 	@Column(name = "scaled_out", nullable = false)
 	private boolean scaledOut;
 
+	/** An add-on to a winning position (see PaperInvestorService.scaleIn) — never added to again. */
+	@Column(name = "scale_in", nullable = false)
+	private boolean scaleIn;
+
 	/** For the taken-off half of a scaled-out trade: the trade it came from. */
 	@Column(name = "parent_trade_id")
 	private Long parentTradeId;
@@ -256,6 +260,11 @@ public class SimulatedTrade {
 	public BigDecimal getHighWater() { return highWater; }
 	public BigDecimal getTargetPrice() { return targetPrice; }
 	public boolean isScaledOut() { return scaledOut; }
+	public boolean isScaleIn() { return scaleIn; }
+
+	public void markScaleIn() {
+		this.scaleIn = true;
+	}
 	public Long getParentTradeId() { return parentTradeId; }
 	public BigDecimal getHoldExitPrice() { return holdExitPrice; }
 	public BigDecimal getHoldReturnPct() { return holdReturnPct; }

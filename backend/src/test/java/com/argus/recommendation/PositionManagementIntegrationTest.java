@@ -181,4 +181,45 @@ class PositionManagementIntegrationTest {
 				values (?, ?, 0.3, 0.7, 0.6, 'PENDING', ?, now()) returning id""", Long.class, ticker, direction, action);
 		return recommendations.findById(id).orElseThrow();
 	}
+
+	/** A current-system BUY call on AAPL with this conviction, held 30 days. */
+	private Recommendation buyCall(int conviction) {
+		Long id = jdbc.queryForObject("""
+				insert into recommendations (ticker, direction, bull_probability, bear_probability, confidence, status, action,
+				  conviction_score, hold_days, created_at)
+				values ('AAPL', 'BULLISH', 0.7, 0.3, 0.6, 'PENDING', 'BUY', ?, 30, now()) returning id""", Long.class, conviction);
+		return recommendations.findById(id).orElseThrow();
+	}
+
+	/** The original current-system leg: bought at 100 on a conviction-60 call, three days ago. */
+	private SimulatedTrade originalLeg() {
+		Recommendation first = buyCall(60);
+		SimulatedTrade t = longAapl(92.0, 115.0, 3);
+		jdbc.update("update simulated_trades set recommendation_id = ? where id = ?", first.getId(), t.getId());
+		return reload(t);
+	}
+
+	@Test
+	void aWinnerIsAddedToOnceWhenConvictionRises() {
+		originalLeg();
+		price("AAPL", "105"); // +5%: more than 1 × the 3% default ATR in profit
+
+		List<SimulatedTrade> added = investor.open(buyCall(78));
+
+		assertEquals(1, added.size());
+		SimulatedTrade add = added.get(0);
+		assertTrue(add.isScaleIn());
+		assertEquals(0, new BigDecimal("50.00").compareTo(add.getNotional()), "half size");
+		assertEquals(0, new BigDecimal("92").compareTo(add.getStopPrice()), "shares the position's stop");
+
+		assertTrue(investor.open(buyCall(90)).isEmpty(), "only once per position");
+	}
+
+	@Test
+	void neverAveragesDownIntoALoser() {
+		originalLeg();
+		price("AAPL", "97"); // underwater
+
+		assertTrue(investor.open(buyCall(85)).isEmpty(), "a rising conviction on a losing position is not a reason to add");
+	}
 }

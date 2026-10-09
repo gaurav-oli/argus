@@ -113,6 +113,40 @@ public class YahooChartClient {
 		}
 	}
 
+	/**
+	 * The latest trade including pre-market and after-hours — the last 1-minute bar of today's extended session —
+	 * where {@link #fetch}'s {@code livePrice} is only the regular session's. Empty on any failure.
+	 */
+	public Optional<BigDecimal> extendedPrice(String symbol) {
+		try {
+			String url = BASE + URLEncoder.encode(symbol, StandardCharsets.UTF_8) + "?range=1d&interval=1m&includePrePost=true";
+			HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create(url))
+					.timeout(Duration.ofSeconds(10)).header("User-Agent", "Mozilla/5.0").GET().build(),
+					HttpResponse.BodyHandlers.ofString());
+			return res.statusCode() == 200 ? lastClose(res.body()) : Optional.empty();
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			return Optional.empty();
+		}
+		catch (Exception ex) {
+			log.debug("Yahoo extended price {} failed: {}", symbol, ex.getMessage());
+			return Optional.empty();
+		}
+	}
+
+	/** Package-visible for tests: the last non-null close in a chart response. */
+	static Optional<BigDecimal> lastClose(String body) {
+		JsonNode closes = JSON.readTree(body).path("chart").path("result").path(0).path("indicators").path("quote").path(0)
+				.path("close");
+		for (int i = closes.size() - 1; i >= 0; i--) {
+			if (closes.path(i).isNumber() && closes.path(i).asDouble() > 0) {
+				return Optional.of(new BigDecimal(closes.path(i).asString()));
+			}
+		}
+		return Optional.empty();
+	}
+
 	/** Package-visible for tests: parse a chart response body. */
 	static Optional<Series> parse(String symbol, String body) {
 		JsonNode result = JSON.readTree(body).path("chart").path("result").path(0);

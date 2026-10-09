@@ -34,7 +34,11 @@ public record NewsIngestionProperties(
 	 */
 	public record Gdelt(
 			@DefaultValue("true") boolean enabled,
-			@DefaultValue("(stock OR earnings OR \"stock market\")") String query,
+			// Markets AND the world: the old query (stock OR earnings OR "stock market") never asked GDELT for the
+			// geopolitical and macro stories that move whole sectors at once.
+			@DefaultValue("(stock OR earnings OR \"stock market\" OR tariff OR tariffs OR sanctions OR war OR ceasefire OR invasion "
+					+ "OR \"central bank\" OR \"interest rate\" OR inflation OR OPEC OR \"oil prices\" OR election OR \"trade deal\" "
+					+ "OR \"supply chain\" OR recession) sourcelang:english") String query,
 			@DefaultValue("75") int maxRecords) {
 	}
 

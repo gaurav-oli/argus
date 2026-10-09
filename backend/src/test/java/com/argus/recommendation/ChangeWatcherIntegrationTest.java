@@ -63,7 +63,8 @@ class ChangeWatcherIntegrationTest {
 		jdbc.update("delete from breaking_alert");
 		jdbc.update("delete from news_articles");
 		jdbc.update("delete from simulated_trades");
-		jdbc.update("insert into watchlist (ticker, source, active) values ('MU', 'MANUAL', true), ('AMD', 'MANUAL', true)");
+		jdbc.update("delete from social_posts");
+		jdbc.update("insert into watchlist (ticker, source, active) values ('MU', 'MANUAL', true), ('AMD', 'MANUAL', true), ('WMT', 'MANUAL', true)");
 		when(prices.livePrice(anyString())).thenReturn(Optional.empty());
 		when(regimes.current()).thenReturn(MarketRegime.unavailable());
 		clock = Instant.now();
@@ -141,5 +142,34 @@ class ChangeWatcherIntegrationTest {
 
 		assertFalse(nextScan(Duration.ofMinutes(31)).containsKey("NBIS"), "once per day per shock");
 		verify(trigger, never()).trigger(eq("MU"), anyString());
+	}
+
+	@Test
+	void aGeopoliticalStoryReachesTheExposedSectorsOnly() {
+		jdbc.update("insert into news_articles (source, external_id, url, headline, published_at, tickers, ingested_at, sentiment_score, analyzed_at) "
+				+ "values ('rss', 'm1', 'u-macro', 'US announces sweeping new tariffs on Chinese semiconductors', now(), '{MACRO}', now(), -0.74, now())");
+
+		Map<String, String> changed = nextScan(Duration.ofMinutes(2));
+
+		assertTrue(changed.get("MU").startsWith("macro (trade & tariffs"), "chipmakers are exposed to a tariff story: " + changed);
+		assertTrue(changed.containsKey("AMD"));
+		assertFalse(changed.containsKey("WMT"), "consumer staples are only mildly exposed — no re-review");
+	}
+
+	@Test
+	void aSocialSurgeAgainstTheTickersOwnWeekTriggersOnce() {
+		for (int i = 0; i < 20; i++) {
+			jdbc.update("insert into social_posts (ticker, source, external_id, body, posted_at, sentiment_score) values ('AMD', 'test', ?, 'x', now() - interval '10 minutes', 0.3)",
+					"recent-" + i);
+		}
+		for (int i = 0; i < 30; i++) {
+			jdbc.update("insert into social_posts (ticker, source, external_id, body, posted_at, sentiment_score) values ('AMD', 'test', ?, 'x', now() - interval '3 days', 0.2)",
+					"old-" + i);
+		}
+
+		Map<String, String> changed = nextScan(Duration.ofMinutes(2));
+		assertTrue(changed.get("AMD").startsWith("social surge: 20 posts in the last hour"), String.valueOf(changed));
+
+		assertFalse(nextScan(Duration.ofMinutes(31)).containsKey("AMD"), "the same surge doesn't fire twice in a day");
 	}
 }

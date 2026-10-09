@@ -49,7 +49,9 @@ public class GdeltNewsSource implements NewsSource {
 
 	private final String query;
 	private final int maxRecords;
-	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	// GDELT's TLS handshake routinely takes ~10s (measured 9.5s on 2026-10-08). The old 5s connect timeout failed
+	// every single fetch from 2026-06-27 on — three months with no world news from GDELT, unnoticed.
+	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
 	private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
 	private volatile Instant backoffUntil = Instant.EPOCH;
 
@@ -74,7 +76,7 @@ public class GdeltNewsSource implements NewsSource {
 			String q = URLEncoder.encode(query, StandardCharsets.UTF_8);
 			URI uri = URI.create("https://api.gdeltproject.org/api/v2/doc/doc?query=" + q
 					+ "&mode=ArtList&format=json&sort=DateDesc&maxrecords=" + maxRecords);
-			HttpRequest req = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build();
+			HttpRequest req = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30)).GET().build();
 			HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
 			if (res.statusCode() != 200) {
 				log.warn("GDELT returned HTTP {}", res.statusCode());

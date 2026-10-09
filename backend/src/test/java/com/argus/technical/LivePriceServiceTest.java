@@ -34,8 +34,27 @@ class LivePriceServiceTest {
 		return new YahooChartClient.Series(symbol, "USD", BigDecimal.valueOf(price), LocalDate.now(), List.of());
 	}
 
+	/** Tue 2026-10-06 11:00 ET — inside the regular session. */
+	private static final java.time.Clock REGULAR = java.time.Clock.fixed(Instant.parse("2026-10-06T15:00:00Z"), java.time.ZoneOffset.UTC);
+	/** Tue 2026-10-06 18:00 ET — after-hours. */
+	private static final java.time.Clock AFTER_HOURS = java.time.Clock.fixed(Instant.parse("2026-10-06T22:00:00Z"), java.time.ZoneOffset.UTC);
+
+	@Test
+	void afterHoursAFreshExtendedQuoteBeatsTheStreamWhichSitsAtTheClose() {
+		service.useClock(AFTER_HOURS);
+		when(universe.knownTickers()).thenReturn(Set.of("AAPL"));
+		when(feed.latestPrice("AAPL")).thenReturn(Optional.of(new BigDecimal("333.01"))); // frozen at the close
+		when(yahoo.extendedPrice("AAPL")).thenReturn(Optional.of(new BigDecimal("318.40"))); // after-hours drop
+
+		service.refresh();
+
+		assertEquals(318.40, service.livePrice("AAPL").orElseThrow(), "the stop must see the after-hours move");
+		assertEquals(0, new BigDecimal("318.40").compareTo(service.latestPrice("AAPL").orElseThrow()));
+	}
+
 	@Test
 	void pollsOnlyTickersTheStreamDoesNotPriceAndPrefersTheStream() {
+		service.useClock(REGULAR);
 		when(universe.knownTickers()).thenReturn(Set.of("AAPL", "SKHY", "DOL"));
 		when(feed.latestPrice(anyString())).thenReturn(Optional.empty());
 		when(feed.latestPrice("AAPL")).thenReturn(Optional.of(new BigDecimal("333.01")));
@@ -54,6 +73,7 @@ class LivePriceServiceTest {
 
 	@Test
 	void aWatchlistNameGetsABookablePriceNotJustHoldings() {
+		service.useClock(REGULAR);
 		when(universe.knownTickers()).thenReturn(Set.of("SKHY"));
 		when(feed.latestPrice(anyString())).thenReturn(Optional.empty());
 		when(feed.latestPrice("AAPL")).thenReturn(Optional.of(new BigDecimal("333.01")));
@@ -69,7 +89,9 @@ class LivePriceServiceTest {
 	void pollsOnlyAroundUsMarketHours() {
 		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T15:00:00Z")));  // Tue 11:00 ET
 		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T20:30:00Z")));  // Tue 16:30 ET, before candles land
-		assertFalse(LivePriceService.inWindow(Instant.parse("2026-10-06T23:00:00Z"))); // Tue 19:00 ET
+		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T23:00:00Z")));  // Tue 19:00 ET, after-hours
+		assertTrue(LivePriceService.inWindow(Instant.parse("2026-10-06T08:30:00Z")));  // Tue 04:30 ET, pre-market
+		assertFalse(LivePriceService.inWindow(Instant.parse("2026-10-07T00:30:00Z"))); // Tue 20:30 ET, session over
 		assertFalse(LivePriceService.inWindow(Instant.parse("2026-10-10T15:00:00Z"))); // Saturday
 	}
 }

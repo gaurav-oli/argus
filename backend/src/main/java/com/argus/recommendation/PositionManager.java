@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Watches every open paper position through the trading day instead of leaving it until its horizon: every
- * five minutes while the US market is open it applies {@link PositionRules} — hard and trailing stops,
+ * five minutes across the US extended session (04:00-20:00 ET, pre-market and after-hours included) it applies {@link PositionRules} — hard and trailing stops,
  * breakeven, half off at the target, earnings tightening — at the live price, with Agent 10's levels
  * measured from that price. A position that has no stop yet (opened before stops existed) is given one
  * from today's price first. Each change is logged; exits go through the investor like any other close.
@@ -47,7 +47,8 @@ public class PositionManager {
 	@Scheduled(fixedDelay = 300_000, initialDelay = 150_000)
 	public void scheduledPass() {
 		Instant now = Instant.now();
-		if (enabled && clock.isRegularHours(now)) {
+		// Pre-market and after-hours too: overnight news moves prices before the open, and a stop should react then.
+		if (enabled && clock.isExtendedHours(now)) {
 			manageAll(now);
 		}
 	}

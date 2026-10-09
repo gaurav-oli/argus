@@ -164,6 +164,49 @@ public class PaperInvestorService {
 		}
 	}
 
+	/** Scale-in rules: the position must be this many ATRs in profit, and conviction must have risen by this much. */
+	static final double SCALE_IN_PROFIT_ATRS = 1.0;
+	static final int SCALE_IN_CONVICTION_RISE = 10;
+	static final int SCALE_IN_MIN_CONVICTION = 70;
+
+	/**
+	 * Add to a winner, like a disciplined trader: once per thesis, half size, only when the position is already at
+	 * least {@value #SCALE_IN_PROFIT_ATRS} ATR in profit (never averaging down) and Agent 5's conviction has risen by
+	 * {@value #SCALE_IN_CONVICTION_RISE}+ to at least {@value #SCALE_IN_MIN_CONVICTION}. The add-on shares the
+	 * position's current stop and target, so it is protected from the moment it opens. Returns the new leg or null.
+	 */
+	SimulatedTrade scaleIn(Recommendation rec, List<SimulatedTrade> existing, BigDecimal price, ChartStudy chart,
+			BigDecimal baseNotional, BigDecimal spy) {
+		if (existing.isEmpty() || existing.stream().anyMatch(SimulatedTrade::isScaleIn) || rec.getConvictionScore() == null
+				|| rec.getConvictionScore() < SCALE_IN_MIN_CONVICTION) {
+			return null;
+		}
+		SimulatedTrade first = existing.stream().min(java.util.Comparator.comparing(SimulatedTrade::getEntryAt)).orElseThrow();
+		Integer before = first.getRecommendationId() == null ? null
+				: recommendations.findById(first.getRecommendationId()).map(Recommendation::getConvictionScore).orElse(null);
+		if (before == null || rec.getConvictionScore() < before + SCALE_IN_CONVICTION_RISE) {
+			return null;
+		}
+		double atr = (chart == null || chart.atrPct() == null || chart.atrPct() <= 0 ? PositionRules.DEFAULT_ATR_PCT : chart.atrPct()) / 100;
+		boolean bullish = rec.getDirection() == SignalDirection.BULLISH;
+		double gain = bullish ? price.doubleValue() / first.getEntryPrice().doubleValue() - 1
+				: 1 - price.doubleValue() / first.getEntryPrice().doubleValue();
+		if (gain < SCALE_IN_PROFIT_ATRS * atr) {
+			return null; // only add to a winner — never average down
+		}
+		SimulatedTrade add = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
+				baseNotional.divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP), price, first.getHorizonDays(), spy);
+		add.applyRisk(first.getStopPrice() != null ? first.getStopPrice() : StopLoss.stopFor(rec.getDirection(), chart, price.doubleValue()), 1.0);
+		add.setHighWater(price);
+		add.setTargetPrice(first.getTargetPrice());
+		add.markScaleIn();
+		SimulatedTrade saved = trades.save(add);
+		log.info("Investor scaled in to {} {}: conviction {} → {}, position +{}% — added ${} at {} (stop {})", rec.getDirection(),
+				rec.getTicker(), before, rec.getConvictionScore(), String.format(java.util.Locale.ROOT, "%.1f", gain * 100),
+				add.getNotional(), price, add.getStopPrice());
+		return saved;
+	}
+
 	/** The target for an already-open current-system leg, from the recommendation that opened it; null otherwise. */
 	BigDecimal targetFor(SimulatedTrade trade) {
 		if (trade.getRecommendationId() == null || trade.getEntryAt().isBefore(NEW_SYSTEM_SINCE)) {
@@ -439,6 +482,11 @@ public class PaperInvestorService {
 			if (opened.isEmpty()) {
 				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual(
 						rec.getTicker(), rec.getDirection(), SimulatedTrade.Status.OPEN, NEW_SYSTEM_SINCE);
+				SimulatedTrade added = scaleIn(rec, existing, entry, entryChart, tradeNotional, spy);
+				if (added != null) {
+					confirmations.recordAgentDecision(rec.getId(), Decision.TAKEN);
+					return List.of(added);
+				}
 				existing.forEach(SimulatedTrade::reaffirm);
 				trades.saveAll(existing);
 				log.info("Investor: {} {} thesis already open ({} legs) — re-affirmed",

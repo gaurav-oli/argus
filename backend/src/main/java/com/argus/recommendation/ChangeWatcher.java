@@ -35,6 +35,12 @@ import org.springframework.stereotype.Component;
  *       usual daily range, against yesterday's close;</li>
  *   <li><b>Events</b> — an earnings result (Agent 7), an insider trade (Agent 4), a new company filing (Agent 14);</li>
  *   <li><b>Analysis</b> — a new Agent 11 verdict, or its thesis tracker flagging the thesis at risk;</li>
+ *   <li><b>Macro &amp; geopolitics</b> — a strongly scored macro story, or a breaking alert naming no ticker, is
+ *       classified by {@link com.argus.regime.MacroTheme} (rates, oil, tariffs, conflict…); every tracked ticker
+ *       whose sector is strongly exposed to that theme ({@value #MACRO_EXPOSURE}+) is re-reviewed — a tariff story
+ *       reaches the chipmakers, not the utilities;</li>
+ *   <li><b>Social</b> — a surge in mentions ({@value #SOCIAL_SURGE_MULTIPLE}× the usual hourly rate, at least
+ *       {@value #SOCIAL_SURGE_MIN} posts in the last hour) or a sharp swing in the crowd's mood;</li>
  *   <li><b>Market</b> — a broad shock (S&amp;P 500 down {@value #MARKET_SHOCK_SPY_PCT}% or VIX up
  *       {@value #MARKET_SHOCK_VIX_PCT}% on the day) re-reviews every ticker with an open trade.</li>
  * </ul>
@@ -58,6 +64,12 @@ public class ChangeWatcher {
 	static final double PRICE_SHOCK_ATRS = 2.0;
 	static final double MARKET_SHOCK_SPY_PCT = -2.0;
 	static final double MARKET_SHOCK_VIX_PCT = 15.0;
+	static final double MACRO_SENTIMENT = 0.5;
+	static final double MACRO_EXPOSURE = 0.6;
+	static final int SOCIAL_SURGE_MIN = 15;
+	static final double SOCIAL_SURGE_MULTIPLE = 3.0;
+	static final int SOCIAL_MOOD_MIN = 10;
+	static final double SOCIAL_MOOD_SWING = 0.4;
 
 	private final JdbcTemplate jdbc;
 	private final RecommendationTrigger trigger;
@@ -65,6 +77,9 @@ public class ChangeWatcher {
 	private final LivePriceService prices;
 	private final ChartStudyService charts;
 	private final MarketRegimeService regimes;
+	private final com.argus.regime.SectorClassifier sectors;
+	/** ticker → (day, recent mention count) of its last social trigger. */
+	private final Map<String, Map.Entry<LocalDate, Long>> socialSurges = new ConcurrentHashMap<>();
 
 	/** Off in tests so no scan re-reviews tickers against the shared test database. */
 	@Value("${argus.change-watcher.enabled:true}")
@@ -78,7 +93,8 @@ public class ChangeWatcher {
 	private final Set<String> marketShocksSeen = ConcurrentHashMap.newKeySet();
 
 	public ChangeWatcher(JdbcTemplate jdbc, RecommendationTrigger trigger, KnownUniverse universe, LivePriceService prices,
-			ChartStudyService charts, MarketRegimeService regimes) {
+			ChartStudyService charts, MarketRegimeService regimes, com.argus.regime.SectorClassifier sectors) {
+		this.sectors = sectors;
 		this.jdbc = jdbc;
 		this.trigger = trigger;
 		this.universe = universe;
@@ -94,6 +110,7 @@ public class ChangeWatcher {
 		priceShocks.clear();
 		earningsSeen.clear();
 		marketShocksSeen.clear();
+		socialSurges.clear();
 	}
 
 	@Scheduled(fixedDelay = 120_000, initialDelay = 180_000)
@@ -143,6 +160,8 @@ public class ChangeWatcher {
 				rs -> { note(changed, tracked, rs.getString(1), "new Agent 11 verdict: " + lower(rs.getString(2))); }, ts(since));
 		jdbc.query("select ticker, thesis_reason from deep_analysis where thesis_status = 'AT_RISK' and thesis_checked_at > ?",
 				rs -> { note(changed, tracked, rs.getString(1), "thesis at risk: " + rs.getString(2)); }, ts(since));
+		macro(changed, tracked, since);
+		socialSurges(changed, tracked, now);
 		priceShocks(changed, tracked, now);
 		marketShock(changed, now);
 
@@ -167,6 +186,67 @@ public class ChangeWatcher {
 			}
 		}
 		return changed;
+	}
+
+	/** A strong macro/geopolitical story reaches the tracked tickers whose sector is exposed to its theme. */
+	private void macro(Map<String, String> changed, Set<String> tracked, Instant since) {
+		java.util.List<String> headlines = new java.util.ArrayList<>(jdbc.queryForList(
+				"select headline from news_articles where analyzed_at > ? and 'MACRO' = any(tickers) and abs(sentiment_score) >= ?",
+				String.class, ts(since), MACRO_SENTIMENT));
+		headlines.addAll(jdbc.queryForList("select headline from breaking_alert where created_at > ? and not duplicate "
+				+ "and coalesce(cardinality(tickers), 0) = 0", String.class, ts(since)));
+		for (String headline : headlines) {
+			java.util.List<com.argus.regime.MacroTheme> themes = com.argus.regime.MacroTheme.classify(headline);
+			if (themes.isEmpty()) {
+				continue;
+			}
+			String label = themes.stream().map(com.argus.regime.MacroTheme::label).collect(java.util.stream.Collectors.joining(", "));
+			for (String t : tracked) {
+				double exposure = Math.abs(com.argus.regime.MacroTheme.meanSensitivity(themes, sectors.sectorOf(t)));
+				if (exposure >= MACRO_EXPOSURE) {
+					note(changed, tracked, t, "macro (" + label + "): " + headline);
+				}
+			}
+		}
+	}
+
+	/** An unusual burst of social chatter, or a sharp swing in its mood, against the ticker's own week. */
+	private void socialSurges(Map<String, String> changed, Set<String> tracked, Instant now) {
+		LocalDate today = now.atZone(NEW_YORK).toLocalDate();
+		String sql = "select ticker,"
+				+ " count(*) filter (where posted_at > ?::timestamptz - interval '1 hour'),"
+				+ " count(*) filter (where posted_at <= ?::timestamptz - interval '1 hour') / 167.0,"
+				+ " avg(sentiment_score) filter (where posted_at > ?::timestamptz - interval '1 hour'),"
+				+ " avg(sentiment_score) filter (where posted_at <= ?::timestamptz - interval '1 hour')"
+				+ " from social_posts where posted_at > ?::timestamptz - interval '7 days' and posted_at <= ?::timestamptz"
+				+ " group by ticker";
+		jdbc.query(sql, rs -> {
+			String t = rs.getString(1) == null ? null : rs.getString(1).toUpperCase(Locale.ROOT);
+			if (t == null || !tracked.contains(t)) {
+				return;
+			}
+			long recent = rs.getLong(2);
+			double perHour = rs.getDouble(3);
+			Double recentMood = rs.getObject(4) == null ? null : rs.getDouble(4);
+			Double usualMood = rs.getObject(5) == null ? null : rs.getDouble(5);
+			String why = null;
+			if (recent >= SOCIAL_SURGE_MIN && recent >= SOCIAL_SURGE_MULTIPLE * Math.max(perHour, 1.0)) {
+				why = String.format(Locale.ROOT, "social surge: %d posts in the last hour vs ~%.0f usual", recent, perHour);
+			}
+			else if (recent >= SOCIAL_MOOD_MIN && recentMood != null && usualMood != null
+					&& Math.abs(recentMood - usualMood) >= SOCIAL_MOOD_SWING) {
+				why = String.format(Locale.ROOT, "social mood swing: %+.2f vs %+.2f usual", recentMood, usualMood);
+			}
+			if (why == null) {
+				return;
+			}
+			Map.Entry<LocalDate, Long> prev = socialSurges.get(t);
+			if (prev != null && prev.getKey().equals(today) && recent < prev.getValue() * 2) {
+				return; // already reacted today; only again if the chatter doubles
+			}
+			socialSurges.put(t, Map.entry(today, recent));
+			note(changed, tracked, t, why);
+		}, ts(now), ts(now), ts(now), ts(now), ts(now), ts(now));
 	}
 
 	private void priceShocks(Map<String, String> changed, Set<String> tracked, Instant now) {

@@ -62,6 +62,11 @@ public class FreshnessService {
 		// an hours one, or a perfectly healthy quiet period reads as "stuck" every single week.
 		List<SourceFreshness> sources = List.of(
 				freshness("news", "News (Agent 1)", news::latestIngestedAt, AgentCadence.NEWS.staleAfter(), now),
+				// Each news source on its own too: GDELT (the world-news source) was dead for three months while
+				// the combined "news" line stayed fresh from the others.
+				freshness("news-gdelt", "World news: GDELT", () -> latestFromSource("gdelt"), Duration.ofHours(12), now),
+				freshness("news-rss", "News feeds (world, markets, central banks)", () -> latestFromSource("rss"), Duration.ofHours(6), now),
+				freshness("news-finnhub", "Market news: Finnhub", () -> latestFromSource("finnhub"), Duration.ofHours(6), now),
 				freshness("social", "Social (Agent 2)", social::latestIngestedAt, AgentCadence.SOCIAL.staleAfter(), now),
 				freshness("internet", "Internet (Agent 3)", web::latestIngestedAt, AgentCadence.INTERNET.staleAfter(), now),
 				freshness("filings", "SEC filings (Agent 4)", sec::latestIngestedAt, AgentCadence.FILINGS.staleAfter(), now),
@@ -87,6 +92,11 @@ public class FreshnessService {
 		return jdbc.query("select min(fetched_at) from fundamentals_snapshot where ticker = any(?)",
 				ps -> ps.setArray(1, ps.getConnection().createArrayOf("text", tracked.toArray())),
 				rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null);
+	}
+
+	private Instant latestFromSource(String source) {
+		return jdbc.query("select max(ingested_at) from news_articles where source = ?",
+				rs -> rs.next() && rs.getTimestamp(1) != null ? rs.getTimestamp(1).toInstant() : null, source);
 	}
 
 	/** Across everyone — this runs with no signed-in user, where the per-user briefing finder sees nothing. */
