@@ -61,3 +61,15 @@ describe("argieSprite", () => {
     assert.deepEqual(argieSprite("worried"), argieSprite("worried"));
   });
 });
+
+describe("streakLine", async () => {
+  const { streakLine, STREAK_WINDOW } = await import("./argie.ts");
+  it("explains every mood in terms of the last closed trades", () => {
+    assert.equal(STREAK_WINDOW, 10);
+    assert.match(streakLine("celebrate", 8, 10), /8 of the last 10 paper trades won/);
+    assert.match(streakLine("sad", 2, 10), /losing run/);
+    assert.match(streakLine("napping", 0, 0), /No closed paper trades yet/);
+    assert.match(streakLine("napping", 3, 3), /Only 3 closed paper trades/);
+    assert.match(streakLine("napping", 1, 1), /Only 1 closed paper trade so far/);
+  });
+});

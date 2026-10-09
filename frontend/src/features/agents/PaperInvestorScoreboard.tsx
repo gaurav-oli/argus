@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { OpenTradeReviewPanel } from "./OpenTradeReviewPanel";
 
+import { Argie } from "@/components/brand/Argie";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { MotionCard } from "@/components/ui/MotionCard";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -13,6 +14,7 @@ import {
   type OpenPositionView,
   type PaperTradeScoreboard,
 } from "@/lib/apiClient";
+import { MOOD_LABEL, STREAK_WINDOW, moodForWinRate, streakLine } from "@/lib/argie";
 import { cn } from "@/lib/utils";
 import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
 import { useCompanyLogos } from "@/lib/useCompanyLogos";
@@ -353,23 +355,54 @@ function ClosedBook({ trades, logos }: { trades: ClosedTradeView[]; logos: Recor
   );
 }
 
-/** The last closed trades as a ▲▼ strip, newest on the right: the record at a glance. */
+/**
+ * The last closed trades as a ▲▼ strip, newest on the right, with Argie reacting to the most recent
+ * ten (lib/argie): the mood is written out (CELEBRATING / HAPPY / WATCHING / WORRIED / SAD / NAPPING)
+ * with a line saying why, and Argie naps until there are ten closed trades to judge.
+ */
 function Streak({ trades }: { trades: ClosedTradeView[] }) {
   const ordered = [...trades].sort((a, b) => a.closedAt.localeCompare(b.closedAt)).slice(-30);
   const wins = ordered.filter((t) => t.won).length;
+  const recent = ordered.slice(-STREAK_WINDOW);
+  const recentWins = recent.filter((t) => t.won).length;
+  const mood = moodForWinRate(recent.length ? (recentWins / recent.length) * 100 : null, recent.length);
+  const moodTone =
+    mood === "celebrate" || mood === "happy"
+      ? "var(--color-gains)"
+      : mood === "worried"
+        ? "var(--color-warning)"
+        : mood === "sad"
+          ? "var(--color-losses)"
+          : "var(--color-text-secondary)";
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
-      <span className="text-[10px] uppercase tracking-wider text-text-secondary">Last {ordered.length}</span>
-      <span role="img" aria-label={`${wins} won, ${ordered.length - wins} lost, oldest first`} className="tracking-[0.15em]">
-        {ordered.map((t, i) => (
-          <span key={i} aria-hidden style={{ color: t.won ? "var(--color-gains)" : "var(--color-losses)" }}>
-            {t.won ? "▲" : "▼"}
+    <div className="flex items-center gap-3 border border-[var(--hairline)] bg-[var(--hover-wash)] px-3 py-2">
+      <Argie mood={mood} size={64} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <span className="font-display text-2xl uppercase leading-none tracking-[0.06em]" style={{ color: moodTone }}>
+            {MOOD_LABEL[mood]}
           </span>
-        ))}
-      </span>
-      <span className="text-text-secondary">
-        {wins}–{ordered.length - wins}
-      </span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-text-secondary">
+            Argie · last {Math.min(STREAK_WINDOW, recent.length) || STREAK_WINDOW} trades
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs leading-snug text-text-secondary" aria-live="polite">
+          {streakLine(mood, recentWins, recent.length)}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
+          <span className="text-[10px] uppercase tracking-wider text-text-secondary">Last {ordered.length}</span>
+          <span role="img" aria-label={`${wins} won, ${ordered.length - wins} lost, oldest first`} className="tracking-[0.15em]">
+            {ordered.map((t, i) => (
+              <span key={i} aria-hidden style={{ color: t.won ? "var(--color-gains)" : "var(--color-losses)" }}>
+                {t.won ? "▲" : "▼"}
+              </span>
+            ))}
+          </span>
+          <span className="text-text-secondary">
+            {wins}–{ordered.length - wins}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

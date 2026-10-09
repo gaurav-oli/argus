@@ -53,6 +53,29 @@ export function accuracyLine(mood: ArgieMood, wins: number, calls: number): stri
   }
 }
 
+/** How many of the most recent closed trades the track-record streak's mood looks at. */
+export const STREAK_WINDOW = 10;
+
+/** One plain-English line explaining Argie's mood about the Investor's recent closed trades. */
+export function streakLine(mood: ArgieMood, wins: number, trades: number): string {
+  switch (mood) {
+    case "celebrate":
+      return `${wins} of the last ${trades} paper trades won. A hot streak — the odds are still odds.`;
+    case "happy":
+      return `${wins} of the last ${trades} paper trades won. More wins than losses, and holding.`;
+    case "watching":
+      return `${wins} of the last ${trades} paper trades won — about even. Watching closely.`;
+    case "worried":
+      return `${wins} of the last ${trades} paper trades won. More losses creeping in; the post-mortems below say why.`;
+    case "sad":
+      return `${wins} of the last ${trades} paper trades won. A losing run — each loss gets an Analyst post-mortem, which is how it learns.`;
+    case "napping":
+      return trades === 0
+        ? "No closed paper trades yet — nothing to react to."
+        : `Only ${trades} closed paper trade${trades === 1 ? "" : "s"} so far — too few to mean anything. Argie wakes up at ${MIN_CALLS_FOR_A_MOOD}.`;
+  }
+}
+
 /** Palette keys → colours (Terminal Noir). */
 export const ARGIE_COLORS = {
   O: "#1a1408", // outline / features
