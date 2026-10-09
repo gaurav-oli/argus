@@ -158,7 +158,7 @@ public class HoldingGuard {
 		if (d.action() == PositionRules.Action.EXIT) {
 			raise(h, "STOP_BROKEN", "SELL", String.format(Locale.ROOT,
 					"%s at %.2f has fallen through its protective stop of %.2f.", h.ticker(), price, stop),
-					price, stop, "STOP_BROKEN:" + h.account() + ":" + h.ticker() + ":" + money(stop), now);
+					price, stop, "STOP_BROKEN:" + h.ticker() + ":" + money(stop), now);
 		}
 		else if (d.stop() != null && d.stop() > stop * (1 + MEANINGFUL_STOP_MOVE)) {
 			jdbc.update("update holding_guard set stop_price = ?, stop_changed_at = ? where user_id = ? and ticker = ? and account = ?",
@@ -166,46 +166,69 @@ public class HoldingGuard {
 			raise(h, "STOP_RAISED", "TIGHTEN", String.format(Locale.ROOT,
 					"%s is up to %.2f — raise its stop from %.2f to %.2f%s to protect the gain.", h.ticker(), price, stop, d.stop(),
 					earningsSoon ? " (earnings ahead)" : ""), price, d.stop(),
-					"STOP_RAISED:" + h.account() + ":" + h.ticker() + ":" + money(d.stop()), now);
+					"STOP_RAISED:" + h.ticker() + ":" + day, now); // told at most once a day per holding
 		}
 
-		// Agent 5's own view of the stock: a fresh AVOID on something the person holds.
+		// Agent 5's own view of the stock: an AVOID on something the person holds. One alert per run of AVOID calls —
+		// keyed by the call that started the run, not the latest one: Agent 5 re-reviews a stock many times a day, and
+		// keying on each new call re-alerted (and re-decided, and re-emailed) the same unchanged opinion (NKE, 2026-10-09).
 		recommendations.findFirstByTickerOrderByCreatedAtDescIdDesc(h.ticker())
 				.filter(r -> r.getCreatedAt().isAfter(now.minus(Duration.ofDays(1))))
 				.filter(r -> r.getAction() == RecommendationAction.AVOID || r.getAction() == RecommendationAction.STRONG_AVOID)
 				.ifPresent(r -> raise(h, "CALL_REVERSED", conviction(r) >= SELL_CONVICTION ? "SELL" : "TIGHTEN",
 						String.format(Locale.ROOT, "Agent 5 now calls %s %s (conviction %d)%s.", h.ticker(), r.getAction().label(),
 								conviction(r), r.getThesis() == null ? "" : ": " + r.getThesis()),
-						price, stop, "CALL:" + h.account() + ":" + h.ticker() + ":" + r.getId(), now));
+						price, stop, "CALL:" + h.ticker() + ":" + avoidRunStart(h.ticker(), r.getId()), now));
 
-		// Agent 11's thesis tracker: the deep analysis behind the stock has been undermined.
+		// Agent 11's thesis tracker: the deep analysis behind the stock has been undermined — once per flagged analysis.
 		deepAnalyses.viewFor(h.ticker()).filter(v -> v.atRisk())
 				.ifPresent(v -> raise(h, "THESIS_AT_RISK", "TIGHTEN",
 						h.ticker() + "'s deep-analysis thesis is at risk" + (v.atRiskReason() == null ? "." : ": " + v.atRiskReason()),
-						price, stop, "THESIS:" + h.account() + ":" + h.ticker() + ":" + day, now));
+						price, stop, "THESIS:" + h.ticker() + ":"
+								+ deepAnalyses.latestDone(h.ticker()).map(a -> String.valueOf(a.getId())).orElse(day), now));
+	}
+
+	/**
+	 * The id of the call that began the ticker's current unbroken run of AVOID / STRONG_AVOID calls (WATCH or a buy in
+	 * between ends a run) — so a repeated AVOID is one alert, and only a fresh reversal raises another.
+	 */
+	long avoidRunStart(String ticker, long latestId) {
+		Long start = jdbc.query("select min(r.id) from recommendations r where r.ticker = ? and r.id <= ? "
+				+ "and r.action in ('AVOID', 'STRONG_AVOID') and r.created_at > coalesce((select max(p.created_at) "
+				+ "from recommendations p where p.ticker = ? and p.id <= ? "
+				+ "and (p.action is null or p.action not in ('AVOID', 'STRONG_AVOID'))), '-infinity'::timestamptz)",
+				rs -> rs.next() ? rs.getObject(1, Long.class) : null, ticker, latestId, ticker, latestId);
+		return start == null ? latestId : start;
 	}
 
 	private static int conviction(Recommendation r) {
 		return r.getConvictionScore() == null ? 0 : r.getConvictionScore();
 	}
 
-	/** Record and push an alert, once per dedupe key, and only while no other alert of its kind is open for the holding. */
+	/**
+	 * Record and push an alert — one per STOCK (every account holding it is listed on the one alert; AMZN held in five
+	 * accounts used to alert five times), once per dedupe key, and only while no other alert of its kind is open for it.
+	 * A SELL says Argus decides in 15 minutes; a TIGHTEN is informational — one push, settled quietly.
+	 */
 	void raise(Holding h, String kind, String recommendation, String detail, double price, Double stop, String key, Instant now) {
-		Integer open = jdbc.queryForObject("select count(*) from guard_alert where user_id = ? and ticker = ? and account = ? "
-				+ "and kind = ? and status = 'OPEN'", Integer.class, h.userId(), h.ticker(), h.account(), kind);
+		Integer open = jdbc.queryForObject("select count(*) from guard_alert where user_id = ? and ticker = ? and kind = ? "
+				+ "and status = 'OPEN'", Integer.class, h.userId(), h.ticker(), kind);
 		if (open != null && open > 0) {
 			return;
 		}
+		String accounts = String.join(", ", jdbc.queryForList("select account from holding_guard where user_id = ? and ticker = ? "
+				+ "and account <> '' order by account", String.class, h.userId(), h.ticker()));
 		int inserted = jdbc.update("""
 				insert into guard_alert (user_id, ticker, account, kind, recommendation, detail, price, stop_price, dedupe_key, created_at)
 				values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) on conflict (user_id, dedupe_key) do nothing""",
-				h.userId(), h.ticker(), h.account(), kind, recommendation, detail, money(price), stop == null ? null : money(stop),
-				key, java.sql.Timestamp.from(now));
+				h.userId(), h.ticker(), accounts.isEmpty() ? h.account() : accounts, kind, recommendation, detail, money(price),
+				stop == null ? null : money(stop), key, java.sql.Timestamp.from(now));
 		if (inserted == 0) {
 			return;
 		}
 		log.info("Holding guard: {} {} for user {} — recommends {}", kind, h.ticker(), h.userId(), recommendation);
-		notifyPush(h.userId(), title(recommendation, h.ticker()), detail + " Tap to decide — Argus decides in 15 minutes if you don't.");
+		notifyPush(h.userId(), title(recommendation, h.ticker()), detail + ("SELL".equals(recommendation)
+				? " Tap to decide — Argus decides in 15 minutes if you don't." : " Update it at your broker when you can."));
 	}
 
 	// ---- escalation: remind, then decide ----
@@ -230,7 +253,7 @@ public class HoldingGuard {
 				decideForThem(id, userId, ticker, recommendation, (String) a.get("account"), (String) a.get("detail"),
 						(BigDecimal) a.get("stop_price"), now);
 			}
-			else if (age.compareTo(REMIND_AFTER) >= 0 && level < 1) {
+			else if (age.compareTo(REMIND_AFTER) >= 0 && level < 1 && "SELL".equals(recommendation)) {
 				jdbc.update("update guard_alert set escalation_level = 1 where id = ? and status = 'OPEN'", id);
 				notifyPush(userId, "Reminder: " + title(recommendation, ticker),
 						a.get("detail") + " Argus decides in 10 minutes if you don't.");
@@ -248,11 +271,13 @@ public class HoldingGuard {
 		if (updated == 0) {
 			return; // the person answered in the meantime
 		}
+		if (!"SELL".equals(recommendation)) {
+			// A TIGHTEN is informational: recorded quietly — the new stop is on the Protection panel; no CRITICAL push or email.
+			log.info("Holding guard: no response in {} min — recorded TIGHTEN on {} quietly", DECIDE_AFTER.toMinutes(), ticker);
+			return;
+		}
 		String where = account == null || account.isBlank() ? "" : " in " + account;
-		String action = "SELL".equals(recommendation)
-				? "Argus decided: SELL " + ticker + where + ". Sell it at your broker now, or let your standing stop order do it."
-				: String.format(Locale.ROOT, "Argus decided: TIGHTEN %s%s. Move your broker stop to %s.", ticker, where,
-						stop == null ? "the new stop shown in Argus" : stop.setScale(2, RoundingMode.HALF_UP).toPlainString());
+		String action = "Argus decided: SELL " + ticker + where + ". Sell it at your broker now, or let your standing stop order do it.";
 		log.info("Holding guard: no response in {} min — {}", DECIDE_AFTER.toMinutes(), action);
 		notifyPush(userId, "🛡 " + action, detail);
 		notifyEmail(userId, action, detail);

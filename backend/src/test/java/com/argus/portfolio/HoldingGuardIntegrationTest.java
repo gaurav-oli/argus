@@ -196,4 +196,61 @@ class HoldingGuardIntegrationTest {
 		assertEquals(0, jdbc.queryForObject("select count(*) from guard_alert where user_id = ?", Integer.class, userId));
 		verify(push, never()).sendToUser(anyLong(), anyString(), anyString(), anyString());
 	}
+
+	private void call(String action, int conviction) {
+		jdbc.update("insert into recommendations (ticker, direction, bull_probability, bear_probability, confidence, status, action, "
+				+ "conviction_score, created_at) values ('TSLA', 'BEARISH', 0.2, 0.8, 0.7, 'PENDING', ?, ?, now())", action, conviction);
+	}
+
+	@Test
+	void theSameAvoidCallRepeatedAllDayIsOneAlertNotOneEach() {
+		price("400");
+		guard.scan(t0);
+		call("STRONG_AVOID", 83);
+		guard.scan(t0.plusSeconds(300));
+		long first = ((Number) onlyAlert().get("id")).longValue();
+		guard.decideByUser(userId, first, "HOLD");
+
+		for (int i = 0; i < 6; i++) { // Agent 5 re-reviews the stock again and again — the opinion doesn't change
+			call("STRONG_AVOID", 82 + i);
+			guard.scan(t0.plusSeconds(600 + i * 60));
+		}
+		assertEquals(1, jdbc.queryForObject("select count(*) from guard_alert where user_id = ? and kind = 'CALL_REVERSED'", Integer.class, userId));
+
+		call("WATCH", 30); // the call softens…
+		call("AVOID", 70); // …then turns against the holding again: that IS new
+		guard.scan(t0.plusSeconds(1200));
+		assertEquals(2, jdbc.queryForObject("select count(*) from guard_alert where user_id = ? and kind = 'CALL_REVERSED'", Integer.class, userId));
+		jdbc.update("delete from recommendations where ticker = 'TSLA'");
+	}
+
+	@Test
+	void aStockHeldInSeveralAccountsIsOneAlertListingThemAll() {
+		jdbc.update("insert into positions (ticker, shares, cost_basis, user_id, account) values ('TSLA', 10, 3000, ?, 'RRSP'), "
+				+ "('TSLA', 5, 1500, ?, 'Cash')", userId, userId);
+		price("400");
+		guard.scan(t0);
+		price("355");
+		guard.scan(t0.plusSeconds(300));
+
+		assertEquals(1, jdbc.queryForObject("select count(*) from guard_alert where user_id = ?", Integer.class, userId));
+		assertEquals("Cash, RRSP, TFSA", onlyAlert().get("account"));
+		verify(push, times(1)).sendToUser(eq(userId), startsWith("⚠ Consider selling TSLA"), anyString(), anyString());
+	}
+
+	@Test
+	void aRaiseYourStopAlertIsOnePushAndIsSettledQuietly() {
+		price("400");
+		guard.scan(t0);
+		price("440");
+		guard.scan(t0.plus(Duration.ofDays(2)));
+		Instant created = ((java.sql.Timestamp) onlyAlert().get("created_at")).toInstant();
+
+		guard.escalate(created.plus(Duration.ofMinutes(6)));
+		guard.escalate(created.plus(Duration.ofMinutes(16)));
+
+		assertEquals("DECIDED", onlyAlert().get("status"));
+		verify(push, times(1)).sendToUser(eq(userId), anyString(), anyString(), anyString()); // just the alert itself
+		verify(email, never()).send(anyString(), anyString(), anyString());
+	}
 }
