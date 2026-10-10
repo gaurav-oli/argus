@@ -38,12 +38,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B7 | `93c6f2f` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
 | S-C1 | `40de6af` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
 | S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
+| S-C3 | see `feat(S-C3)` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
 
-Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) is complete.
+Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-C3 — Per-user AI / import soft quotas** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-D1 — Optional human Agree/Disagree overlay** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -169,7 +170,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | done |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | done |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | done |
-| 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | in-progress |
+| 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | not-started |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | not-started |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
@@ -509,14 +510,29 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-C3 — Per-user AI / import soft quotas
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P2
 - **Finding:** M1
 - **Goal:** One invitee cannot burn the household Haiku/Gemma budget alone.
 - **Acceptance:** Soft daily caps on Ask-AI / research / deep / LLM import; 429 or friendly error when exceeded; admin exempt or higher cap.
 - **Hints:** Redis counters; `escalate` already bypasses BIG semaphore — consider aligning.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code).
+  - **Mechanism:** `cost/UsageQuota` with `QuotaProperties` (`argus.quota.*`, `ARGUS_QUOTA_*`, passed through docker-compose and documented in `.env.example`).
+    - Redis `INCR` counters per person, kind and Toronto day, expiring after 2 days.
+    - `consume(kind)` runs at the top of each metered endpoint. Over the cap it throws 429 with "You've used today's N … It resets at midnight (Toronto time)" and the refused call is not counted.
+    - No signed-in person (a background job) means no metering. If Redis is down it fails open.
+    - The admin is exempt by default; otherwise the admin gets `admin-multiplier`× each cap.
+  - **Metered endpoints:**
+    - Ask-AI: `POST /api/recommendations/{id}/chat` and the portfolio chat (40).
+    - `POST /api/research/jobs` (5).
+    - `POST /api/deep-analysis/{t}/run` (10).
+    - `POST /api/recommendations/{id}/debate` (10).
+    - Statement upload in `auto` / `llm` mode (10). The heuristic parse makes no model call and isn't metered.
+  - **UI:**
+    - Profile → "AI use today" shows used / cap bars via `GET /api/quota`.
+    - Chat, research and import already showed the server message. Deep analysis "Analyze now" (panel and card) now shows the 429 message instead of a generic error.
+  - **Tests:** `UsageQuotaIntegrationTest` (3: a friend is stopped with a friendly 429 and the refused call isn't counted, admin exempt and a 0 cap means unlimited, background jobs aren't metered). The existing chat, research, import and controller tests still pass with metering on. The full backend suite passes, 1214/1214.
+- **Notes:** The deep "explain like I'm new" endpoint isn't metered: its text is cached once per analysis, so its spend is bounded by the number of analyses. The `escalate()` / BIG-semaphore alignment from the hints was left as is, because it's a concurrency concern, not a per-person one; it's still listed in `docs/multi-user.md` §5.10.
 
 ---
 
@@ -603,7 +619,7 @@ Use for evidence; **stories above are the work queue.**
 | H3 | High | Shared journal/watchlist/prefs | S-C1 (**done**) |
 | H4 | High | Chrome positioning | S-D2 |
 | H5 | High | Haiku fallbacks bypass budget | ~~S-A5~~ done |
-| M1 | Medium | No per-user AI quotas | S-C3 |
+| M1 | Medium | No per-user AI quotas | S-C3 (**done**) |
 | M2 | Medium | Userless sessions authenticate | ~~S-A6~~ done |
 | M3 | Medium | Streams spine only 3 agents | (backlog — document hybrid; no story yet) |
 | M4 | Medium | PDF magic / push unsub IDOR | ~~S-A6~~ done |

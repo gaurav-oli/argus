@@ -6,6 +6,7 @@ import { SessionManager } from "@/features/auth/SessionManager";
 import { SessionTimeoutSetting } from "@/features/auth/SessionTimeoutSetting";
 import { NotificationsSetting } from "@/features/notifications/NotificationsSetting";
 import { InvestorProfileSetting } from "@/features/profile/InvestorProfileSetting";
+import { AiAllowance } from "@/features/profile/AiAllowance";
 import { PanicSettings } from "@/features/panic/PanicSettings";
 import { DemoModeSetting } from "@/features/privacy/DemoModeSetting";
 
@@ -58,6 +59,19 @@ export default function ProfilePage() {
 
         <SettingsCard
           index={3}
+          title="AI use today"
+          desc="Everyone on Argus shares one AI budget, so each person gets a fair daily share."
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
+            </svg>
+          }
+        >
+          <AiAllowance />
+        </SettingsCard>
+
+        <SettingsCard
+          index={4}
           title="Safety"
           desc="Panic mode and emergency controls."
           icon={
@@ -71,7 +85,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={4}
+          index={5}
           title="Active sessions"
           desc="Devices currently signed in to Argus."
           icon={
@@ -85,7 +99,7 @@ export default function ProfilePage() {
         </SettingsCard>
 
         <SettingsCard
-          index={5}
+          index={6}
           title="Demo Mode"
           desc="Hide your real portfolio when showing Argus to someone else."
           icon={
@@ -101,7 +115,7 @@ export default function ProfilePage() {
 
         {/* Renders nothing at all (no card, no title) for anyone but the admin — self-gating on the
             backend's 403, so a friend never even sees that this section exists. */}
-        <AdminUserStats index={6} />
+        <AdminUserStats index={7} />
 
         <div className="mt-2 flex justify-end">
           <LogoutButton />

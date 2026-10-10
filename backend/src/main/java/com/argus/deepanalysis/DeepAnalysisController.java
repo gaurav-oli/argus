@@ -1,5 +1,6 @@
 package com.argus.deepanalysis;
 
+import com.argus.cost.UsageQuota;
 import com.argus.common.NotFoundException;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,8 +27,11 @@ public class DeepAnalysisController {
 	private final DeepScorecardService scorecard;
 	private final DeepPlainExplanationService plainExplanations;
 
+	private final UsageQuota quota;
+
 	public DeepAnalysisController(DeepAnalysisService service, DeepAnalysisRunner runner, DeepAnalysisRepository repository,
-			DeepScorecardService scorecard, DeepPlainExplanationService plainExplanations) {
+			DeepScorecardService scorecard, DeepPlainExplanationService plainExplanations, UsageQuota quota) {
+		this.quota = quota;
 		this.service = service;
 		this.runner = runner;
 		this.repository = repository;
@@ -134,6 +138,7 @@ public class DeepAnalysisController {
 	/** "Analyze now" — queues a run and returns immediately; poll {@code /queue} or this ticker for progress. */
 	@PostMapping("/{ticker}/run")
 	public RunStatus run(@PathVariable String ticker) {
+		quota.consume(UsageQuota.Kind.DEEP_ANALYSIS); // S-C3
 		DeepAnalysis run = runner.enqueue(ticker, "MANUAL");
 		return new RunStatus(run.getId(), run.getTicker(), run.getStatus().name(), run.getStage());
 	}

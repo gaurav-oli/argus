@@ -190,10 +190,25 @@ Every Haiku path in `DefaultModelGateway` goes through `paidFallback`, which che
 `CostGovernor.allowPaidCall()`. At ≥95% budget, escalate uses local BIG; generateBig fallbacks
 (timeout / blank / primary failure) refuse paid calls instead of silently billing.
 
-### 5.10 Medium — No per-user AI / import quotas (M1)
+### 5.10 Medium — No per-user AI / import quotas (M1) — **fixed (S-C3, 2026-10-10)**
 
-Ask-AI, debate, research, deep-analysis, and LLM import paths are session-gated only. Shared
-monthly Haiku budget. `escalate()` also bypasses the BIG-tier concurrency semaphore.
+`cost/UsageQuota` puts soft daily caps on each person. Counters live in Redis and reset at midnight
+Toronto time. Defaults per day:
+
+| Path | Cap |
+|---|---|
+| Ask-AI (recommendation and portfolio chat) | 40 |
+| Research jobs | 5 |
+| "Analyze now" deep analyses | 10 |
+| Debates | 10 |
+| AI-parsed imports (`auto` / `llm`) | 10 |
+
+- Over a cap, the request gets a 429 with a friendly "resets at midnight" message. A refused call doesn't count against the cap.
+- The admin is exempt by default.
+- Caps are set with `ARGUS_QUOTA_*` (see `.env.example`).
+- Profile → "AI use today" shows each person's usage.
+- If Redis is down the quota fails open; the Cost Governor's monthly budget still applies.
+- Still open: `escalate()` bypasses the BIG-tier concurrency semaphore. That is unchanged (see the S-C3 notes in the plan).
 
 ### 5.11 Medium — Push unsubscribe IDOR + weak PDF check (M4) — **fixed (S-A6)**
 

@@ -506,6 +506,13 @@ Migration **V91**. Use two accounts: you (admin) and a friend, or a second invit
   - [ ] Your Take/Decline doesn't appear in the friend's journal. Both of you still see the Investor's decisions.
   - [ ] Opening someone else's decision id by URL returns 404.
 
+## 22. Per-person AI quotas (S-C3, same branch)  ⏳ TODO on the Mini
+No migration. The new optional `ARGUS_QUOTA_*` env vars default to sensible caps.
+- [ ] **Profile → AI use today:** you (admin) see "No daily caps apply". A friend sees five bars at 0 / cap.
+- [ ] Signed in as the friend, run "Analyze now" until it's refused. The 11th says "You've used today's 10 deep
+      analyses…" and their bar is full. Your own account is unaffected.
+- [ ] After midnight Toronto time the friend's counters are back to 0.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

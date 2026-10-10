@@ -245,8 +245,8 @@ export function DeepAnalysisForTicker({ ticker }: { ticker: string }) {
     try {
       await runDeepAnalysis(ticker);
       load();
-    } catch {
-      setError("Couldn't queue the analysis.");
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 429 ? err.message : "Couldn't queue the analysis.");
     }
   }
 

@@ -1,5 +1,6 @@
 package com.argus.research;
 
+import com.argus.cost.UsageQuota;
 import com.argus.common.NotFoundException;
 import com.argus.research.ResearchAgentService.ResearchJobView;
 import java.util.List;
@@ -21,14 +22,18 @@ public class ResearchController {
 	private final ResearchAgentService agent;
 	private final ResearchJobRepository jobs;
 
-	public ResearchController(ResearchAgentService agent, ResearchJobRepository jobs) {
+	private final UsageQuota quota;
+
+	public ResearchController(ResearchAgentService agent, ResearchJobRepository jobs, UsageQuota quota) {
 		this.agent = agent;
 		this.jobs = jobs;
+		this.quota = quota;
 	}
 
 	/** Start a research pass on {@code ticker}; returns immediately with the job in PLANNING state. */
 	@PostMapping("/jobs")
 	public ResearchJobView start(@RequestBody StartRequest body) {
+		quota.consume(UsageQuota.Kind.RESEARCH); // S-C3
 		return ResearchJobView.from(agent.startJob(body.ticker()));
 	}
 

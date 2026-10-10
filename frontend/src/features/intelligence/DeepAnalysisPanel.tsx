@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ApiError,
   getDeepAnalyses,
   getDeepQueue,
   getDeepScorecard,
@@ -57,8 +58,9 @@ export function DeepAnalysisPanel() {
       await runDeepAnalysis(clean);
       setTicker("");
       refresh();
-    } catch {
-      setError(`Couldn't queue ${clean} — is that a valid ticker?`);
+    } catch (err) {
+      // S-C3: a 429 carries the friendly "used today's N deep analyses" message.
+      setError(err instanceof ApiError && err.status === 429 ? err.message : `Couldn't queue ${clean} — is that a valid ticker?`);
     }
   }
 

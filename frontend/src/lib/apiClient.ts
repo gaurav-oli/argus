@@ -1487,6 +1487,18 @@ export interface SandboxStrategy {
 
 export const getStrategySandbox = (): Promise<SandboxStrategy[]> => apiGet<SandboxStrategy[]>("/api/strategies/sandbox");
 
+// ---- S-C3: per-person daily AI / import quotas ----
+
+export interface QuotaUsage {
+  kind: "ASK_AI" | "RESEARCH" | "DEEP_ANALYSIS" | "DEBATE" | "IMPORT";
+  label: string;
+  used: number;
+  /** 0 = no cap (quotas off, or the admin, who is exempt by default). */
+  cap: number;
+}
+
+export const getQuota = (): Promise<Record<string, QuotaUsage>> => apiGet<Record<string, QuotaUsage>>("/api/quota");
+
 /** The lesson for one closed paper trade; rejects (404) until the 5-minute lessons pass has written it. */
 export const getLessonForTrade = (tradeId: number): Promise<TradeLesson> =>
   apiGet<TradeLesson>(`/api/learning/lessons/trade/${tradeId}`);

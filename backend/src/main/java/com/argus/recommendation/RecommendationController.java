@@ -1,5 +1,6 @@
 package com.argus.recommendation;
 
+import com.argus.cost.UsageQuota;
 import com.argus.recommendation.TradeDecision.Decision;
 import com.argus.security.CurrentUserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,12 +40,13 @@ public class RecommendationController {
 	private final com.argus.technical.LivePriceService prices;
 	private final CurrentUserService currentUser;
 	private final TradeDecisionRepository decisions;
+	private final UsageQuota quota;
 
 	public RecommendationController(RecommendationService recommendations,
 			TradeConfirmationService confirmation, GraduationService graduation,
 			RecommendationDebateService debates, com.argus.technical.ChartStudyService charts,
 			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.technical.LivePriceService prices,
-			CurrentUserService currentUser, TradeDecisionRepository decisions) {
+			CurrentUserService currentUser, TradeDecisionRepository decisions, UsageQuota quota) {
 		this.recommendations = recommendations;
 		this.confirmation = confirmation;
 		this.graduation = graduation;
@@ -54,6 +56,7 @@ public class RecommendationController {
 		this.prices = prices;
 		this.currentUser = currentUser;
 		this.decisions = decisions;
+		this.quota = quota;
 	}
 
 	@GetMapping
@@ -120,6 +123,7 @@ public class RecommendationController {
 	@PostMapping("/{id}/debate")
 	public DebateView runDebate(@PathVariable Long id) {
 		recommendations.diagnostic(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+		quota.consume(UsageQuota.Kind.DEBATE); // S-C3
 		return debates.debate(id).map(DebateView::from)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE));
 	}

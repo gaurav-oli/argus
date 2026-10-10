@@ -1,5 +1,6 @@
 package com.argus.portfolio;
 
+import com.argus.cost.UsageQuota;
 import com.argus.common.BadRequestException;
 import com.argus.common.PayloadTooLargeException;
 import com.argus.security.CurrentUserContext;
@@ -41,8 +42,11 @@ public class PortfolioImportController {
 	 */
 	private final long maxFileBytes;
 
+	private final UsageQuota quota;
+
 	public PortfolioImportController(PortfolioImportService service, StatementImportRunner runner,
-			@Value("${argus.portfolio.import.max-file-bytes:15728640}") long maxFileBytes) {
+			@Value("${argus.portfolio.import.max-file-bytes:15728640}") long maxFileBytes, UsageQuota quota) {
+		this.quota = quota;
 		this.service = service;
 		this.runner = runner;
 		this.maxFileBytes = maxFileBytes;
@@ -72,6 +76,9 @@ public class PortfolioImportController {
 		}
 		String name = originalName(file);
 		byte[] bytes = readBytes(file);
+		if ("auto".equalsIgnoreCase(mode) || "llm".equalsIgnoreCase(mode)) {
+			quota.consume(UsageQuota.Kind.IMPORT); // S-C3: only the model-backed parses are metered
+		}
 		if ("auto".equalsIgnoreCase(mode)) {
 			runner.submit(CurrentUserContext.get(), name, bytes, institution);
 			return ResponseEntity.accepted().body(new ImportAccepted("processing",

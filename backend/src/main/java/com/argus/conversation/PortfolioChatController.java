@@ -1,5 +1,6 @@
 package com.argus.conversation;
 
+import com.argus.cost.UsageQuota;
 import java.util.List;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,14 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class PortfolioChatController {
 
 	private final ConversationService conversation;
+	private final UsageQuota quota;
 
-	public PortfolioChatController(ConversationService conversation) {
+	public PortfolioChatController(ConversationService conversation, UsageQuota quota) {
 		this.conversation = conversation;
+		this.quota = quota;
 	}
 
 	@PostMapping("/chat")
 	public ChatMessage chat(@RequestBody ChatRequest request) {
 		List<ChatMessage> messages = ChatValidation.validate(request.messagesOrEmpty());
+		quota.consume(UsageQuota.Kind.ASK_AI); // S-C3
 		return new ChatMessage("assistant", conversation.askAboutPortfolio(messages, request.deeperRequested()));
 	}
 }

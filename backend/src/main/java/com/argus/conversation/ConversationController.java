@@ -1,5 +1,6 @@
 package com.argus.conversation;
 
+import com.argus.cost.UsageQuota;
 import com.argus.recommendation.Recommendation;
 import com.argus.recommendation.RecommendationService;
 import java.util.List;
@@ -23,10 +24,12 @@ public class ConversationController {
 
 	private final RecommendationService recommendations;
 	private final ConversationService conversation;
+	private final UsageQuota quota;
 
-	public ConversationController(RecommendationService recommendations, ConversationService conversation) {
+	public ConversationController(RecommendationService recommendations, ConversationService conversation, UsageQuota quota) {
 		this.recommendations = recommendations;
 		this.conversation = conversation;
+		this.quota = quota;
 	}
 
 	@PostMapping("/{id}/chat")
@@ -34,6 +37,7 @@ public class ConversationController {
 		List<ChatMessage> messages = ChatValidation.validate(request.messagesOrEmpty());
 		Recommendation rec = recommendations.diagnostic(id)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+		quota.consume(UsageQuota.Kind.ASK_AI); // S-C3
 		String answer = conversation.askAboutRecommendation(rec, messages, request.deeperRequested());
 		return new ChatMessage("assistant", answer);
 	}

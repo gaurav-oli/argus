@@ -91,6 +91,18 @@ argus:
     min-closed-trades: ${ARGUS_TRUST_BAR_MIN_CLOSED_TRADES:50}
     min-win-rate-pct: ${ARGUS_TRUST_BAR_MIN_WIN_RATE_PCT:55}
     max-brier: ${ARGUS_TRUST_BAR_MAX_BRIER:0.22}
+  # S-C3: soft daily caps per person on the paths that spend the shared model budget (0 = no cap).
+  # Over the cap → 429 with a friendly "resets at midnight" message. The admin is exempt unless
+  # admin-exempt=false, in which case they get admin-multiplier × each cap.
+  quota:
+    enabled: ${ARGUS_QUOTA_ENABLED:true}
+    ask-ai: ${ARGUS_QUOTA_ASK_AI:40}
+    research: ${ARGUS_QUOTA_RESEARCH:5}
+    deep-analysis: ${ARGUS_QUOTA_DEEP_ANALYSIS:10}
+    debate: ${ARGUS_QUOTA_DEBATE:10}
+    imports: ${ARGUS_QUOTA_IMPORTS:10}
+    admin-exempt: ${ARGUS_QUOTA_ADMIN_EXEMPT:true}
+    admin-multiplier: ${ARGUS_QUOTA_ADMIN_MULTIPLIER:5}
   # Agent 1 news ingestion (Story 4.1, FR-8). Cadence-gated: ≤5 min in regular hours, ≤15 min off-hours.
   # Finnhub is key-gated (argus.finnhub.api-key); GDELT + RSS are free/keyless and on by default.
   news:
