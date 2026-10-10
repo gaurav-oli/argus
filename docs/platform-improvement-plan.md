@@ -33,13 +33,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 | S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
 | S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
-| S-B5 | see `feat(S-B5)` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
+| S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 
 Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B5` done.
 
 ### Next story for the next agent
 
-**→ S-B6 — Per-stock / per-style strategy fit** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-B6 — Per-stock / per-style strategy fit** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -161,7 +161,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
-| 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
+| 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | in-progress |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
@@ -398,7 +398,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B6 — Per-stock / per-style strategy fit
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P2
 - **Goal:** Track which playbooks win on which kinds of names (vol regime, sector, large vs high-beta, etc.).
 - **Acceptance:**
