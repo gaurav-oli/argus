@@ -134,7 +134,10 @@ covered by `npm test` (16 tests, Node's built-in runner, no new dependencies).
 
 > Note: an earlier pass put the ASCII odds bar in `features/recommendations/RecommendationCards.tsx`.
 > That component is no longer mounted anywhere (it predates the Intelligence rebuild), so the bar
-> now lives in the ticker detail instead. `RecommendationCards` is dead code and could be deleted.
+> now lives in the ticker detail instead. `RecommendationCards` also owned human Take/Decline,
+> debate, and personas — orphaning it broke the discipline loop. **Do not delete until that UX is
+> remounted on Intelligence** (platform review finding **C4** —
+> [`platform-review-2026-10.md`](platform-review-2026-10.md)).
 
 ## Argie, the pixel mascot
 

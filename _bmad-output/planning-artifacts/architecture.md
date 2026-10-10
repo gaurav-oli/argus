@@ -14,6 +14,25 @@ date: '2026-06-15'
 
 # Architecture Decision Document — Argus
 
+## Living amendments (October 2026) — code is source of truth
+
+The body below is the June 2026 design record. Where it disagrees with the running system, **prefer
+the code** and these amendments. Hardening backlog:
+[`docs/platform-review-2026-10.md`](../../docs/platform-review-2026-10.md) and
+[`docs/multi-user.md`](../../docs/multi-user.md).
+
+| Topic | June 2026 doc | Current reality |
+|---|---|---|
+| Access / network | Tailscale-only, **never Funnel** (NFR) | **Superseded:** invite-only multi-user over **Tailscale Funnel** public HTTPS (`docs/deploy-runbook.md`) |
+| Auth | PIN + WebAuthn / passkeys | Google Sign-In + `invited_email` allowlist; PIN/WebAuthn removed (V73) |
+| Data stores | Postgres + Mongo + Redis | **Postgres 18 (pgvector) + Redis 8 only** — Mongo dropped |
+| Tenancy | Single-user | Portfolio tables `@TenantId`; market intel shared; journal/watchlist/prefs still global (gaps) |
+| Agent bus | Redis Streams for the agent spine | `AgentRuntime` + Streams for a **subset** (`NewsSentimentAgent`, `RecommendationTrigger`, `DemoAgent`); most Agents 1–15 are `@Scheduled` services |
+| Cost Governor | Auto-switch to local at budget | `escalate()` gated; **`generateBig()` Haiku fallbacks not yet gated** (review H5) |
+| Package `security/` | PIN/Argon2, panic, session-kill | Google OAuth, Redis sessions, invite admin, panic, session-kill (session list still unscoped — C1) |
+
+---
+
 _This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
 
 ## Project Context Analysis

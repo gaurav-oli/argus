@@ -37,9 +37,10 @@ First login only: 3 skippable onboarding questions (style, horizon, goal) → in
 - The OAuth flow is hand-rolled (`security/GoogleOAuthService`, `GoogleAuthController`), not Spring
   Security OAuth2.
 - **Session cookie** `ARGUS_SESSION`: HttpOnly, Secure, SameSite=Strict. The idle timeout defaults to
-  15 min and slides with each request. **Every** non-public request goes through `SessionAuthFilter`,
-  which fails closed.
-- **Public (no-session) paths:**
+  15 min and slides with each request. **Every** non-public `/api/**` request goes through
+  `SessionAuthFilter`, which fails closed. **WebSocket `/ws` is not covered by that filter** — see
+  §5.0 (critical gap while Funnel exposes `/ws`).
+- **Public (no-session) REST paths:**
   - `GET /api/auth/status`
   - `GET /api/auth/google/login`
   - `GET /api/login/oauth2/code/google`
@@ -100,36 +101,98 @@ Isolation uses Hibernate `@TenantId` on `user_id`:
 
 ## 5. Known gaps (security-relevant now that the app is public via Funnel)
 
-These were inherited from the single-user design and found during the October 2026 review. They are
-not fixed yet.
+Inherited from the single-user / tailnet-only design; still open as of the October 2026 platform
+review. Full checklist with IDs (C1–L4), product gaps, and sequencing:
+**[`docs/platform-review-2026-10.md`](platform-review-2026-10.md)**. Strike items here when fixed
+and mark the matching ID done in that file.
 
-1. **Session list and revoke are not scoped to a user.**
-   - `GET /api/auth/sessions` lists *every* user's sessions, and `DELETE /api/auth/sessions/{handle}`
-     revokes *any* of them.
-   - Cause: `SessionStore.list` / `revokeByHandle` scan all `argus:session:*` keys, and
-     `AuthController` does no owner check.
-2. **Global settings can be changed by any user.**
-   - The session timeout (`PUT /api/settings/session-timeout`) changes the TTL of everyone's live
-     sessions.
-   - Demo Mode (`/api/settings/demo-mode`) flips for everyone.
-   - Neither is admin-gated.
-3. **Ops actions are not admin-gated:**
-   - `POST /api/ops/backup/trigger`
-   - cleanup `/preview` and `/run`
-   - logic-review `/run`
-   - tuning `/recompute`
-   - graduation `/resume`
-4. **Broadcast pushes go to every user's devices.** `NotificationService` (`sendToAll`), the cleanup
-   scheduler, the weekly digest, breaking-news alerts and `PushController /test` all broadcast. A
-   ticker-specific alert driven by one person's holdings can therefore hint at what they hold.
-5. **Shared journal, watchlist and notification preferences.** One user's Take/Decline decision
-   appears in everyone's Trade Journal.
-6. **Background jobs see config defaults, not the person.** `CanadianContextService` falls back to
-   `argus.investor.*` when there is no user on the thread.
-7. **The admin email is hardcoded in migrations.** V68 seeds it and V69–V72 backfill to it. V70 and
-   V71 fail on a fresh database that already has portfolio or briefing rows and lacks that admin user.
-8. **A leftover pre-Google session** (with no `userId`) makes `/api/auth/status` report
-   `authenticated=true` with `user=null`.
+### 5.0 Critical — WebSocket portfolio queue (C2)
+
+`SessionAuthFilter` only registers for `/api/*`. `/ws` is Funnel-public. Handshake allows a
+connection with **no** Principal (`SessionPrincipalHandshakeHandler`). The simple broker exposes
+`/queue` with **no** STOMP `ChannelInterceptor`. Live portfolio uses
+`convertAndSendToUser(userId, "/queue/portfolio", …)`, which clients can address as
+`/queue/portfolio-user{id}` with sequential `userId`s — **without a valid session**.
+
+Until fixed: require an authenticated handshake with `userId`, and deny client SUBSCRIBE to raw
+`/queue/**` (only rewritten user destinations for the Principal).
+
+### 5.1 Critical — Session list / revoke not scoped (C1)
+
+- `GET /api/auth/sessions` lists *every* user's sessions; `DELETE /api/auth/sessions/{handle}`
+  revokes *any* of them.
+- Cause: `SessionStore.list` / `revokeByHandle` scan all `argus:session:*` keys; `AuthController`
+  does no owner check. Comments still say “this person’s” sessions.
+
+### 5.2 High — Global settings writable by any user (H1)
+
+- Session timeout (`PUT /api/settings/session-timeout`) changes TTL for everyone’s live sessions.
+- Demo Mode (`/api/settings/demo-mode`) flips for everyone.
+- Neither is admin-gated.
+
+### 5.3 Critical — Ops mutators not admin-gated (C3)
+
+Any signed-in user can call:
+
+- `POST /api/ops/backup/trigger`
+- cleanup `/preview` and `/run`
+- logic-review `/run`
+- tuning `/recompute`
+- graduation `/resume`
+
+(Contrast: admin invites correctly use `requireAdmin`.)
+
+### 5.4 High — Broadcast pushes can leak holdings signals (H2)
+
+`NotificationService` fans out with `sendToAll` after shared preference checks. Also: cleanup
+scheduler, weekly digest, breaking-news alerts, `PushController /test`. HoldingGuard correctly uses
+`sendToUser` — keep that pattern for portfolio-derived alerts.
+
+### 5.5 High — Shared journal, watchlist, notification preferences (H3)
+
+One user’s Take/Decline appears in everyone’s Trade Journal. Watchlist CRUD is global (any user can
+add/delete tickers for the instance). Notification prefs are a singleton.
+
+### 5.6 Medium — Background jobs see config defaults (M7)
+
+`CanadianContextService` falls back to `argus.investor.*` when there is no user on the thread.
+Jobs that need a person should always `CurrentUserContext.runAs(...)`.
+
+### 5.7 Low — Admin email hardcoded in migrations (L2)
+
+V68 seeds it and V69–V72 backfill to it. V70 and V71 fail on a fresh database that already has
+portfolio or briefing rows and lacks that admin user. Prefer env/Flyway placeholders; avoid
+committing a personal address.
+
+### 5.8 Medium — Userless sessions still authenticate (M2)
+
+`SessionStore.validate` only checks that the Redis key exists, not that `userId` is set. Filter
+sets `CurrentUserContext` to null but still allows the request. `/api/auth/status` can report
+`authenticated=true` with `user=null`. Those sessions can still hit shared/global endpoints.
+
+### 5.9 High — Cost Governor hole on Haiku fallbacks (H5)
+
+`escalate()` respects `CostGovernor.allowPaidCall()`. `generateBig()` still calls Haiku on
+timeout / blank / primary failure **without** that check — so the 95% “auto-switch to local”
+posture is incomplete under Ollama blips.
+
+### 5.10 Medium — No per-user AI / import quotas (M1)
+
+Ask-AI, debate, research, deep-analysis, and LLM import paths are session-gated only. Shared
+monthly Haiku budget. `escalate()` also bypasses the BIG-tier concurrency semaphore.
+
+### 5.11 Medium — Push unsubscribe IDOR + weak PDF check (M4)
+
+- `PushController` unsubscribe deletes by push endpoint with no ownership check.
+- Statement upload `isPdf` accepts content-type **or** `.pdf` filename — no `%PDF` magic bytes
+  (15MB cap still applies).
+
+### 5.12 Product (not authz) — Take/Decline UI orphaned (C4)
+
+`RecommendationCards` (Take/Decline, debate, personas) is unmounted after the Intelligence
+rebuild; `decideRecommendation` is only called from that dead component. Trade Journal copy still
+promises “by you” decisions, but the live path is largely the Investor auto-paper book. See
+`design-terminal-noir.md` and `platform-review-2026-10.md`.
 
 ## 6. Leftovers from the single-user era
 
