@@ -37,7 +37,7 @@ Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2`, `S-B3` done.
 
 ### Next story for the next agent
 
-**→ S-B4 — Pattern library consulted before next paper trade** — status `not-started`. Waiting for the owner's go-ahead.
+**→ S-B4 — Pattern library consulted before next paper trade** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -157,7 +157,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
-| 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
+| 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | in-progress |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
@@ -332,7 +332,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B4 — Pattern library consulted before next paper trade
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P1
 - **Depends on:** S-B3 (patterns need lessons/outcomes)
 - **Goal:** Before opening a paper trade, agent looks up similar past setups and adjusts action (skip, size, stop, proceed).
