@@ -491,6 +491,21 @@ Migration **V90** adds `strategy_sandbox` and `strategy_shadow_call`. There are 
 - [ ] After the next 20:15 ET pass, it has open shadow calls (`select count(*) from strategy_shadow_call`).
 - [ ] A shadow strategy does **not** show on any ticker's Strategies tab until it is promoted.
 
+## 21. Per-user journal, watchlist, prefs (S-C1, same branch)  ⏳ TODO on the Mini
+Migration **V91**. Use two accounts: you (admin) and a friend, or a second invited Google account.
+- [ ] **Upgrade:** your existing watchlist picks, notification settings and Take/Decline history are all still
+      there for you.
+- [ ] **Watchlist:**
+  - [ ] The friend adds a ticker. You don't see it in your list, but it shows up in agent coverage after the next
+        cycle.
+  - [ ] The friend sees no "Find trending" button and no ✕ on discovered names. You (admin) see both.
+- [ ] **Notifications:**
+  - [ ] The friend turns breaking-news pushes off. Your phone still gets the next market alert; theirs doesn't.
+  - [ ] Your own settings are unchanged.
+- [ ] **Trade Journal:**
+  - [ ] Your Take/Decline doesn't appear in the friend's journal. Both of you still see the Investor's decisions.
+  - [ ] Opening someone else's decision id by URL returns 404.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

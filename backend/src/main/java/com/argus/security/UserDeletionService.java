@@ -22,7 +22,9 @@ public class UserDeletionService {
 	static final List<String> USER_TABLES = List.of(
 			"corporate_actions", "position_lots", "position_audit", "positions", "portfolio_value_history",
 			"portfolio_imports", "cash_balances", "account_meta", "health_score", "briefings",
-			"push_subscriptions", "investor_profile", "breaking_alert_read", "user_activity_day", "announcement_read", "guard_alert", "holding_guard");
+			"push_subscriptions", "investor_profile", "breaking_alert_read", "user_activity_day", "announcement_read", "guard_alert", "holding_guard",
+			// S-C1: personal decisions, watchlist picks and notification preferences
+			"trade_decisions", "watchlist", "user_notification_prefs");
 
 	private final JdbcTemplate jdbc;
 

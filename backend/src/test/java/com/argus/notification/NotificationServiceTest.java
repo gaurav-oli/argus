@@ -36,6 +36,7 @@ class NotificationServiceTest {
 		when(dedup.accept(any(), any(), anyDouble(), any())).thenReturn(true);
 		// Preferences allow everything by default (these tests predate prefs and assert routing behaviour).
 		when(prefs.allow(any(), any(), anyBoolean())).thenReturn(true);
+		when(prefs.allowFor(any(), any(), any(), anyBoolean())).thenReturn(true);
 		when(positions.userIdsHoldingTicker(anyString())).thenReturn(List.of(42L));
 	}
 
@@ -47,7 +48,7 @@ class NotificationServiceTest {
 
 		assertEquals(NotificationOutcome.PUSHED, out);
 		verify(push).sendToUser(eq(42L), eq("danger"), eq("body"), eq("/intelligence"), eq(true));
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 	}
 
 	@Test
@@ -57,7 +58,7 @@ class NotificationServiceTest {
 
 		assertEquals(NotificationOutcome.PUSHED, out);
 		verify(push).sendToUser(eq(42L), eq("buy"), eq("body"), eq("/recs"), eq(false));
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 	}
 
 	@Test
@@ -65,7 +66,31 @@ class NotificationServiceTest {
 		NotificationOutcome out = service.notify(Notification.of(UrgencyTier.CRITICAL, "platform", "body", "/ops"));
 
 		assertEquals(NotificationOutcome.PUSHED, out);
-		verify(push).sendToAll("platform", "body", "/ops", true);
+		verify(push).sendToAll(eq("platform"), eq("body"), eq("/ops"), eq(true), any());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
+	}
+
+	@Test
+	void eachHoldersOwnPreferencesDecide() {
+		when(positions.userIdsHoldingTicker("AAPL")).thenReturn(List.of(42L, 43L));
+		when(prefs.allowFor(eq(43L), any(), any(), anyBoolean())).thenReturn(false); // 43 muted AAPL
+
+		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.IMPORTANT, "AAPL", "BULLISH",
+				0.80, 0.10, "buy", "body", "/recs"));
+
+		assertEquals(NotificationOutcome.PUSHED, out);
+		verify(push).sendToUser(eq(42L), eq("buy"), eq("body"), eq("/recs"), eq(false));
+		verify(push, never()).sendToUser(eq(43L), anyString(), anyString(), anyString(), anyBoolean());
+	}
+
+	@Test
+	void suppressedWhenEveryHolderOptedOut() {
+		when(prefs.allowFor(any(), any(), any(), anyBoolean())).thenReturn(false);
+
+		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.IMPORTANT, "AAPL", "BULLISH",
+				0.80, 0.10, "buy", "body", "/recs"));
+
+		assertEquals(NotificationOutcome.SUPPRESSED_PREFS, out);
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
@@ -77,7 +102,7 @@ class NotificationServiceTest {
 				0.99, 0.50, "danger", "body", "/intelligence"));
 
 		assertEquals(NotificationOutcome.PUSHED, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
@@ -87,7 +112,7 @@ class NotificationServiceTest {
 				0.40, 0.10, "buy", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.SUPPRESSED_GATE, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
@@ -97,7 +122,7 @@ class NotificationServiceTest {
 				0.90, 0.001, "buy", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.SUPPRESSED_GATE, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
@@ -107,7 +132,7 @@ class NotificationServiceTest {
 				0.90, 0.20, "fyi", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.DEFERRED_BRIEFING, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		// The follow-up: the deferred item is now actually persisted for the next briefing to carry.
 		org.mockito.ArgumentCaptor<DeferredNotification> saved =
 				org.mockito.ArgumentCaptor.forClass(DeferredNotification.class);
@@ -122,7 +147,7 @@ class NotificationServiceTest {
 				0.90, 0.20, "fyi", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.DEFERRED_DIGEST, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		org.mockito.ArgumentCaptor<DeferredNotification> saved =
 				org.mockito.ArgumentCaptor.forClass(DeferredNotification.class);
 		verify(deferred).save(saved.capture());
@@ -137,7 +162,7 @@ class NotificationServiceTest {
 				0.99, 0.50, "dup", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.SUPPRESSED_DEDUP, out);
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 }

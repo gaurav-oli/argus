@@ -78,15 +78,19 @@ Isolation uses Hibernate `@TenantId` on `user_id`:
 | Private (per user) | Shared (global) |
 |---|---|
 | positions, lots, position audit, cash, account meta, corporate actions, imports, value history, health score (V70) | recommendations, signals, debates, persona verdicts |
-| morning briefings (V71) | **trade journal / decisions** (`trade_decisions`) |
+| morning briefings (V71) | the paper Investor's (AGENT) decisions in `trade_decisions` |
 | investor profile + onboarding (V72) | paper trades, simulated trades, graduation, calibration, adaptive tuning, learned rules |
 | live-portfolio WebSocket (`publishToUser`) | news, social, SEC, filings, fundamentals, candles, FX, calendar, strategies, deep analysis |
-| push for briefing + import results (`sendToUser`) | **watchlist**, **notification preferences**, deferred notifications |
+| push for briefing + import results (`sendToUser`) | discovered watchlist entries, deferred notifications |
+| your own Take/Decline decisions in the Trade Journal (V91, `user_id`) | agent coverage = holdings ∪ everyone's watchlist picks |
+| your manual watchlist picks (V91, `user_id`) | |
+| notification preferences (V91, `user_notification_prefs`) | |
 | Ask-AI portfolio context (built from that user's live snapshot; no chat history stored) | `app_settings`: **session timeout** and **Demo Mode** |
 | | cost / budget events (one shared Haiku budget) |
 
 `push_subscriptions.user_id` is a plain column, not `@TenantId`. Pushes sent with `sendToAll` reach
-**everyone's** devices (see §5).
+everyone's devices. Since S-C1 every producer passes a recipient filter, so each device only gets a push its
+owner's preferences allow (see §5.5).
 
 ## 4. Admin
 
@@ -140,10 +144,21 @@ Ticker-linked `NotificationService` alerts and holdings-impact breaking news go 
 `PositionRepository.userIdsHoldingTicker` via `sendToUser`. `/api/push/test` pings the caller only.
 True market-wide paths (macro/crisis breaking, weekly digest, monthly cleanup) still use `sendToAll`.
 
-### 5.5 High — Shared journal, watchlist, notification preferences (H3)
+### 5.5 High — Shared journal, watchlist, notification preferences (H3) — **fixed (S-C1, 2026-10-10)**
 
-One user’s Take/Decline appears in everyone’s Trade Journal. Watchlist CRUD is global (any user can
-add/delete tickers for the instance). Notification prefs are a singleton.
+V91 makes all three per-user. Existing data went to the admin.
+
+- **Trade Journal:**
+  - A person's Take/Decline is stored with their `user_id`. They see the shared Investor (AGENT) decisions plus only their own; someone else's decision reads as not found.
+  - A human decision no longer rewrites the shared recommendation's status.
+  - It also no longer blocks the Investor from recording its own decision.
+- **Watchlist:**
+  - Manual picks have a `user_id`. Each person sees their own picks plus the shared discoveries, and can remove only their own.
+  - Re-running discovery or dropping a discovered name needs admin.
+  - Agent coverage stays the union of everyone's picks, because the research is shared.
+- **Notification preferences:**
+  - Stored one row per person in `user_notification_prefs`. The old singleton seeded everyone who existed at upgrade.
+  - Each push checks the recipient's own preferences. Broadcasts (`PushService.sendToAll` with a recipient filter) skip the devices of people who turned that category off, muted the ticker, or are in quiet hours.
 
 ### 5.6 Medium — Background jobs see config defaults (M7)
 

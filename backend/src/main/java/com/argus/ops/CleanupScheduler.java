@@ -34,9 +34,8 @@ public class CleanupScheduler {
 	public void monthlyCleanup() {
 		try {
 			CleanupService.CleanupReport report = cleanup.run();
-			if (prefs.allow(NotificationPreferencesService.Category.ALERT)) {
-				push.sendToAll("Monthly data cleanup", report.summary(), "/agents");
-			}
+			push.sendToAll("Monthly data cleanup", report.summary(), "/agents", false,
+					userId -> prefs.allowFor(userId, NotificationPreferencesService.Category.ALERT, null, false));
 		}
 		catch (RuntimeException ex) {
 			log.warn("Scheduled cleanup failed: {}", ex.getMessage());

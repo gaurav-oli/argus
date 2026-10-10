@@ -82,12 +82,12 @@ public class DiscoveryService {
 			if (DENYLIST.contains(c.ticker()) || c.mentions() < props.minMentions()) {
 				continue;
 			}
-			var existing = watchlist.findByTicker(c.ticker());
+			if (watchlist.existsByTickerAndSource(c.ticker(), WatchlistEntry.Source.MANUAL.name())) {
+				continue; // never override a manual pick (anyone's), even an inactive one
+			}
+			var existing = watchlist.findByTickerAndUserIdIsNull(c.ticker());
 			if (existing.isPresent()) {
-				if (!"DISCOVERED".equals(existing.get().getSource())) {
-					continue; // never override a manual pick, even an inactive one
-				}
-				jdbc.update("update watchlist set expires_at = ?, note = ?, active = true where ticker = ?",
+				jdbc.update("update watchlist set expires_at = ?, note = ?, active = true where ticker = ? and user_id is null",
 						java.sql.Timestamp.from(expiresAt), note(c), c.ticker());
 			}
 			else {

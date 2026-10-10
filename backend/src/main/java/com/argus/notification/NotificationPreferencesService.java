@@ -1,21 +1,28 @@
 package com.argus.notification;
 
-import jakarta.annotation.PostConstruct;
+import com.argus.security.CurrentUserContext;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The single gate every Web Push producer consults before fanning out. It applies the user's
- * notification preferences: per-type toggles (briefing / breaking / other alerts), quiet hours
- * (local time — non-critical pushes are held overnight), and per-ticker mutes. A CRITICAL-tier alert
- * bypasses quiet hours but still respects the master type toggle and mutes. Preferences are cached in
- * memory (single-process monolith) so the hot-path {@link #allow} check never hits the DB.
+ * The gate every Web Push producer consults before sending to a person. It applies <em>that person's</em>
+ * notification preferences (S-C1: one row per user in {@code user_notification_prefs}; defaults when they have
+ * none): per-type toggles (briefing / breaking / other alerts), quiet hours (local time — non-critical pushes
+ * are held overnight), and per-ticker mutes. A CRITICAL-tier alert bypasses quiet hours but still respects the
+ * type toggle and mutes. Each person's preferences are cached in memory (single-process monolith) and the cache
+ * entry is replaced on save, so the hot-path {@link #allowFor} check rarely hits the DB.
+ *
+ * <p>A broadcast (no specific recipient) is filtered per device owner — see {@code PushService.sendToAll} with
+ * a recipient filter — so one person turning breaking news off never silences it for anyone else.
  */
 @Service
 public class NotificationPreferencesService {
@@ -25,53 +32,70 @@ public class NotificationPreferencesService {
 	}
 
 	private static final ZoneId ZONE = ZoneId.of("America/Toronto");
+	private static final Snapshot DEFAULTS = new Snapshot(true, true, true, null, null, Set.of());
 
-	private final NotificationPrefsRepository repo;
-	private volatile Snapshot cache = new Snapshot(true, true, true, null, null, Set.of());
+	private final JdbcTemplate jdbc;
+	private final Map<Long, Snapshot> cache = new ConcurrentHashMap<>();
 
-	public NotificationPreferencesService(NotificationPrefsRepository repo) {
-		this.repo = repo;
+	public NotificationPreferencesService(JdbcTemplate jdbc) {
+		this.jdbc = jdbc;
 	}
 
 	private record Snapshot(boolean briefing, boolean breaking, boolean alerts, Integer quietStart,
 			Integer quietEnd, Set<String> muted) {
 	}
 
-	/** The current preferences for the settings UI. */
+	/** The signed-in person's preferences for the settings UI. */
 	public record View(boolean briefingEnabled, boolean breakingEnabled, boolean alertsEnabled,
 			Integer quietStartHour, Integer quietEndHour, List<String> mutedTickers) {
 	}
 
-	@PostConstruct
-	void load() {
-		this.cache = readFromDb();
-	}
-
+	/** The signed-in person's preferences (defaults when they have never saved any). */
 	public View current() {
-		Snapshot s = cache;
+		Snapshot s = snapshot(CurrentUserContext.get());
 		return new View(s.briefing(), s.breaking(), s.alerts(), s.quietStart(), s.quietEnd(),
 				List.copyOf(s.muted()));
 	}
 
+	/** Save the signed-in person's preferences. Nobody else's change. */
 	@Transactional
 	public View update(View v) {
-		NotificationPrefs prefs = repo.findSingleton().orElseGet(NotificationPrefs::new);
+		Long userId = CurrentUserContext.get();
+		if (userId == null) {
+			throw new IllegalStateException("Notification preferences need a signed-in user");
+		}
 		String[] muted = v.mutedTickers() == null ? new String[0]
 				: v.mutedTickers().stream().filter(t -> t != null && !t.isBlank())
 						.map(t -> t.trim().toUpperCase()).distinct().toArray(String[]::new);
-		prefs.update(v.briefingEnabled(), v.breakingEnabled(), v.alertsEnabled(),
-				hour(v.quietStartHour()), hour(v.quietEndHour()), muted);
-		repo.save(prefs);
-		this.cache = readFromDb();
+		jdbc.update(con -> {
+			var ps = con.prepareStatement("""
+					insert into user_notification_prefs (user_id, briefing_enabled, breaking_enabled, alerts_enabled,
+					    quiet_start_hour, quiet_end_hour, muted_tickers, updated_at)
+					values (?, ?, ?, ?, ?, ?, ?, now())
+					on conflict (user_id) do update set briefing_enabled = excluded.briefing_enabled,
+					    breaking_enabled = excluded.breaking_enabled, alerts_enabled = excluded.alerts_enabled,
+					    quiet_start_hour = excluded.quiet_start_hour, quiet_end_hour = excluded.quiet_end_hour,
+					    muted_tickers = excluded.muted_tickers, updated_at = now()""");
+			ps.setLong(1, userId);
+			ps.setBoolean(2, v.briefingEnabled());
+			ps.setBoolean(3, v.breakingEnabled());
+			ps.setBoolean(4, v.alertsEnabled());
+			ps.setObject(5, hour(v.quietStartHour()));
+			ps.setObject(6, hour(v.quietEndHour()));
+			ps.setArray(7, con.createArrayOf("text", muted));
+			return ps;
+		});
+		cache.remove(userId);
 		return current();
 	}
 
 	/**
-	 * Whether a push in this category (about these tickers, at this urgency) may go out right now.
-	 * {@code tickers} may be null/empty for untargeted pushes (e.g. the briefing).
+	 * Whether a push in this category (about these tickers, at this urgency) may go to {@code userId} right now.
+	 * {@code tickers} may be null/empty for untargeted pushes (e.g. the briefing). A null user (a device
+	 * registered before multi-user) gets the defaults.
 	 */
-	public boolean allow(Category category, String[] tickers, boolean critical) {
-		Snapshot s = cache;
+	public boolean allowFor(Long userId, Category category, String[] tickers, boolean critical) {
+		Snapshot s = snapshot(userId);
 		boolean typeOn = switch (category) {
 			case BRIEFING -> s.briefing();
 			case BREAKING -> s.breaking();
@@ -86,8 +110,20 @@ public class NotificationPreferencesService {
 		return critical || !inQuietHours(s);
 	}
 
+	/** {@link #allowFor} for the person the current thread acts as (a request, or a job's {@code runAs}). */
+	public boolean allow(Category category, String[] tickers, boolean critical) {
+		return allowFor(CurrentUserContext.get(), category, tickers, critical);
+	}
+
 	public boolean allow(Category category) {
 		return allow(category, null, false);
+	}
+
+	private Snapshot snapshot(Long userId) {
+		if (userId == null) {
+			return DEFAULTS;
+		}
+		return cache.computeIfAbsent(userId, this::readFromDb);
 	}
 
 	private static boolean allMuted(String[] tickers, Set<String> muted) {
@@ -111,15 +147,18 @@ public class NotificationPreferencesService {
 		return h == null ? null : (short) Math.floorMod(h, 24);
 	}
 
-	private Snapshot readFromDb() {
-		NotificationPrefs p = repo.findSingleton().orElse(null);
-		if (p == null) {
-			return new Snapshot(true, true, true, null, null, Set.of());
-		}
-		Set<String> muted = p.getMutedTickers() == null ? Set.of()
-				: Arrays.stream(p.getMutedTickers()).map(t -> t.trim().toUpperCase()).collect(Collectors.toSet());
-		Integer qs = p.getQuietStartHour() == null ? null : p.getQuietStartHour().intValue();
-		Integer qe = p.getQuietEndHour() == null ? null : p.getQuietEndHour().intValue();
-		return new Snapshot(p.isBriefingEnabled(), p.isBreakingEnabled(), p.isAlertsEnabled(), qs, qe, muted);
+	private Snapshot readFromDb(Long userId) {
+		List<Snapshot> rows = jdbc.query("""
+				select briefing_enabled, breaking_enabled, alerts_enabled, quiet_start_hour, quiet_end_hour, muted_tickers
+				  from user_notification_prefs where user_id = ?""", (rs, i) -> {
+			java.sql.Array arr = rs.getArray("muted_tickers");
+			String[] m = arr == null ? new String[0] : (String[]) arr.getArray();
+			Set<String> muted = Arrays.stream(m).map(t -> t.trim().toUpperCase()).collect(Collectors.toSet());
+			Integer qs = rs.getObject("quiet_start_hour") == null ? null : rs.getInt("quiet_start_hour");
+			Integer qe = rs.getObject("quiet_end_hour") == null ? null : rs.getInt("quiet_end_hour");
+			return new Snapshot(rs.getBoolean("briefing_enabled"), rs.getBoolean("breaking_enabled"),
+					rs.getBoolean("alerts_enabled"), qs, qe, muted);
+		}, userId);
+		return rows.isEmpty() ? DEFAULTS : rows.get(0);
 	}
 }

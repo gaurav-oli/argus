@@ -36,12 +36,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 | S-B6 | `969453c` | Playbook × style matrix (V89 tags), sample-guarded ±25% size tilt on paper entries, Agents heatmap |
 | S-B7 | `93c6f2f` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
+| S-C1 | see `feat(S-C1)` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) is complete.
 
 ### Next story for the next agent
 
-**→ S-C1 — Per-user journal, watchlist, notification prefs** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-C2 — Admin uninvite / disable user / revoke-all sessions** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -165,7 +166,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | done |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | done |
-| 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | in-progress |
+| 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | done |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | not-started |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | not-started |
@@ -458,14 +459,35 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-C1 — Per-user journal, watchlist, notification prefs
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P2
 - **Finding:** H3
 - **Goal:** One friend’s decisions/prefs don’t rewrite everyone else’s.
 - **Acceptance:** Journal/decisions, watchlist, notification prefs scoped by `user_id` (or documented admin-global watchlist universe).
 - **Hints:** `docs/multi-user.md` §5.5; Flyway + `@TenantId` or explicit filters.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code). V91 uses explicit `user_id` filters rather than `@TenantId`, because each table mixes shared rows with personal ones. Pre-multi-user data went to the admin.
+  - **Journal:**
+    - `trade_decisions.user_id` is set on USER decisions; AGENT decisions stay shared (null).
+    - `JournalService` lists the AGENT decisions plus the caller's own (`findJournal`). `detail` returns not found for someone else's decision.
+    - `confirm` no longer rewrites the shared recommendation's status.
+    - `recordAgentDecision` and the startup backfill only check AGENT decisions, so a person's decision no longer suppresses the Investor's.
+  - **Watchlist:**
+    - `watchlist.user_id` is set on MANUAL picks; DISCOVERED entries stay shared. The unique key is now `(owner, ticker)`.
+    - `GET` returns your picks plus the discoveries. `DELETE` removes only your own; dropping a discovered entry needs admin, as does `POST /discover`.
+    - `CompositeKnownUniverse` still covers the union. `DiscoveryService` only touches system rows and never overrides anyone's manual pick.
+    - The UI hides "Find trending" and the discovered-entry ✕ for non-admins.
+  - **Notification preferences:**
+    - New `user_notification_prefs` table (seeded from the old singleton for every existing user); `NotificationPrefs` and its repository were removed.
+    - `NotificationPreferencesService` reads and writes the caller's row and keeps a per-user cache. `allowFor(userId, …)` gates each recipient.
+    - Every broadcast filters per device owner (new `PushService.sendToAll(…, Predicate<Long>)`): ticker alerts, breaking news, the weekly digest and the monthly cleanup.
+  - **Tests:**
+    - New `PerUserPrefsAndWatchlistIntegrationTest` (2) and `TradeConfirmationIntegrationTest.eachPersonSeesOnlyTheirOwnDecisionsPlusTheInvestors`.
+    - `NotificationServiceTest` gained per-holder prefs and all-opted-out cases.
+    - Digest, breaking-news and decision tests were updated to the per-user semantics.
+    - `UserDeletionService` now also deletes a person's decisions, picks and preferences; its guard test caught the new tables.
+    - The full backend suite passes, 1211/1211.
+  - **Recommendation cards:** they gain `myDecision`, the caller's own TAKEN/DECLINED. `status` stays the shared Investor's.
+- **Notes:** The accuracy panel's Taken/Declined tallies (`countByDecision`) still count across everyone; it's a system-health number, not a personal one. The old `notification_prefs` table is left in place, unused, for rollback.
 
 ### S-C2 — Admin uninvite / disable user / revoke-all sessions
 
@@ -571,7 +593,7 @@ Use for evidence; **stories above are the work queue.**
 | C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 |
 | H1 | High | Global settings / Demo Mode | S-A3 (**done**) |
 | H2 | High | Broadcast push holdings hints | ~~S-A4~~ done |
-| H3 | High | Shared journal/watchlist/prefs | S-C1 |
+| H3 | High | Shared journal/watchlist/prefs | S-C1 (**done**) |
 | H4 | High | Chrome positioning | S-D2 |
 | H5 | High | Haiku fallbacks bypass budget | ~~S-A5~~ done |
 | M1 | Medium | No per-user AI quotas | S-C3 |

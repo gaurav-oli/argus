@@ -39,8 +39,9 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
 	@org.springframework.data.jpa.repository.EntityGraph(attributePaths = "signals")
 	Optional<Recommendation> findWithSignalsById(Long id);
 
-	/** Recommendations with no {@link TradeDecision} yet — the Investor's live hook only records one at
+	/** Recommendations with no AGENT {@link TradeDecision} yet — the Investor's live hook only records one at
 	 * creation time, so this is what the startup backfill (and any future gap) reconciles against. */
-	@Query("select r from Recommendation r where r.id not in (select d.recommendationId from TradeDecision d)")
+	@Query("select r from Recommendation r where r.id not in (select d.recommendationId from TradeDecision d "
+			+ "where d.source = com.argus.recommendation.TradeDecision.Source.AGENT)")
 	List<Recommendation> findMissingDecision();
 }

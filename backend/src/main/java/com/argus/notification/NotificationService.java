@@ -97,11 +97,10 @@ public class NotificationService {
 	/** Push a pushing-tier notification, unless the user's preferences suppress it. */
 	private NotificationOutcome pushIfAllowed(Notification n, boolean requireAck) {
 		String[] tickers = n.ticker() == null ? null : new String[] { n.ticker() };
-		if (!prefs.allow(NotificationPreferencesService.Category.ALERT, tickers,
-				n.tier() == UrgencyTier.CRITICAL)) {
-			log.info("Notification suppressed by preferences: '{}' ({})", n.title(), n.tier());
-			return NotificationOutcome.SUPPRESSED_PREFS;
-		}
+		boolean critical = n.tier() == UrgencyTier.CRITICAL;
+		// S-C1: each recipient's own preferences decide whether it reaches them.
+		java.util.function.Predicate<Long> allowed = userId -> prefs.allowFor(userId,
+				NotificationPreferencesService.Category.ALERT, tickers, critical);
 		if (n.ticker() != null && !n.ticker().isBlank()) {
 			List<Long> holders = positions.userIdsHoldingTicker(n.ticker());
 			if (holders.isEmpty()) {
@@ -109,12 +108,17 @@ public class NotificationService {
 						n.title(), n.ticker());
 				return NotificationOutcome.PUSHED;
 			}
-			for (Long userId : holders) {
+			List<Long> recipients = holders.stream().filter(allowed).toList();
+			if (recipients.isEmpty()) {
+				log.info("Notification suppressed by every holder's preferences: '{}' ({})", n.title(), n.tier());
+				return NotificationOutcome.SUPPRESSED_PREFS;
+			}
+			for (Long userId : recipients) {
 				push.sendToUser(userId, n.title(), n.body(), n.url(), requireAck);
 			}
 			return NotificationOutcome.PUSHED;
 		}
-		push.sendToAll(n.title(), n.body(), n.url(), requireAck);
+		push.sendToAll(n.title(), n.body(), n.url(), requireAck, allowed);
 		return NotificationOutcome.PUSHED;
 	}
 

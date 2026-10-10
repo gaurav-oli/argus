@@ -69,6 +69,10 @@ public class TradeDecision {
 	@Column(nullable = false)
 	private Source source;
 
+	/** S-C1: who made a USER decision (each person sees only their own); null for the shared AGENT decisions. */
+	@Column(name = "user_id")
+	private Long userId;
+
 	protected TradeDecision() {
 		// JPA
 	}
@@ -130,5 +134,14 @@ public class TradeDecision {
 
 	public Source getSource() {
 		return source;
+	}
+
+	public Long getUserId() {
+		return userId;
+	}
+
+	/** S-C1: stamp the person a USER decision belongs to. */
+	void ownedBy(Long userId) {
+		this.userId = userId;
 	}
 }

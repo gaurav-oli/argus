@@ -87,13 +87,28 @@ public class PushService {
 	 */
 	@Transactional
 	public int sendToAll(String title, String body, String url, boolean requireInteraction) {
+		return sendToAll(title, body, url, requireInteraction, userId -> true);
+	}
+
+	/**
+	 * As {@link #sendToAll(String, String, String, boolean)}, but only to devices whose owner {@code allow}s it —
+	 * S-C1: a broadcast honours each person's own notification preferences. A device registered before
+	 * multi-user has a null owner and is tested as such.
+	 */
+	@Transactional
+	public int sendToAll(String title, String body, String url, boolean requireInteraction,
+			java.util.function.Predicate<Long> allow) {
 		if (!props.isConfigured()) {
 			log.debug("Web push not configured (no VAPID keys) — skipping notification '{}'", title);
 			return 0;
 		}
 		String payload = payload(title, body, url, requireInteraction);
 		int sent = 0;
+		java.util.Map<Long, Boolean> allowed = new java.util.HashMap<>();
 		for (PushSubscription sub : subscriptions.findAll()) {
+			if (!allowed.computeIfAbsent(sub.getUserId(), allow::test)) {
+				continue;
+			}
 			switch (sender.send(sub, payload)) {
 				case SENT -> sent++;
 				case EXPIRED -> subscriptions.delete(sub);

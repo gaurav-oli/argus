@@ -733,6 +733,8 @@ export interface RecommendationCard {
   createdAt: string;
   /** When this call (same action, unbroken) was first made. */
   callSince: string;
+  /** S-C1: the signed-in person's own Take/Decline on this call; `status` stays the shared Investor's. */
+  myDecision: "TAKEN" | "DECLINED" | null;
   signals: SignalView[];
   /** The call: STRONG_BUY | BUY | AVOID | STRONG_AVOID (WATCH never reaches the card list). Null on legacy rows. */
   action: "STRONG_BUY" | "BUY" | "WATCH" | "AVOID" | "STRONG_AVOID" | null;

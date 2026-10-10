@@ -116,24 +116,22 @@ public class BreakingNewsAlertService {
 		alerts.save(new BreakingAlert(headline, article.getUrl(), article.getTickers(), reason, impact,
 				article.getSentimentLabel().name(), article.getId()));
 
-		if (!prefs.allow(Category.BREAKING, article.getTickers(), false)) {
-			log.info("Breaking-news recorded but push suppressed by preferences (off/muted/quiet): {}", headline);
-			return;
-		}
+		// S-C1: each recipient's own preferences (off / muted / quiet hours) decide whether the push reaches them.
+		java.util.function.Predicate<Long> allowed = userId -> prefs.allowFor(userId, Category.BREAKING, article.getTickers(), false);
 		// S-A4: holdings-impact alerts go only to people who hold the tagged tickers — never broadcast
 		// "High impact for your holdings" to friends who don't hold them. True market-wide breaking
 		// (macro/crisis) may still fan out to everyone.
 		int delivered;
 		if (strongForHoldings) {
-			delivered = pushToHolders(article.getTickers(), headline);
+			delivered = pushToHolders(article.getTickers(), headline, allowed);
 		} else {
-			delivered = push.sendToAll("⚠️ Market alert", headline, "/intelligence", true);
+			delivered = push.sendToAll("⚠️ Market alert", headline, "/intelligence", true, allowed);
 		}
 		log.info("Breaking-news alert pushed to {} device(s) [{}]: {}", delivered, reason, headline);
 	}
 
 	/** Push a holdings-linked breaking alert only to owners of the given tickers (S-A4). */
-	private int pushToHolders(String[] tickers, String headline) {
+	private int pushToHolders(String[] tickers, String headline, java.util.function.Predicate<Long> allowed) {
 		if (tickers == null || tickers.length == 0) {
 			log.info("Holdings-impact breaking news had no tickers — not broadcasting: {}", headline);
 			return 0;
@@ -147,6 +145,9 @@ public class BreakingNewsAlertService {
 		}
 		int delivered = 0;
 		for (Long userId : recipients) {
+			if (!allowed.test(userId)) {
+				continue;
+			}
 			delivered += push.sendToUser(userId, "⚠️ Market alert", headline, "/intelligence", true);
 		}
 		return delivered;

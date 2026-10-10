@@ -25,7 +25,7 @@ public class WatchlistEntry {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(nullable = false, unique = true)
+	@Column(nullable = false)
 	private String ticker;
 
 	@Column(nullable = false)
@@ -42,6 +42,10 @@ public class WatchlistEntry {
 	@Column(name = "expires_at")
 	private Instant expiresAt;
 
+	/** S-C1: who added a MANUAL pick (each person sees and edits only their own); null for DISCOVERED entries. */
+	@Column(name = "user_id")
+	private Long userId;
+
 	protected WatchlistEntry() {
 		// JPA
 	}
@@ -51,6 +55,13 @@ public class WatchlistEntry {
 		this.source = (source == null ? Source.MANUAL : source).name();
 		this.note = note;
 		this.expiresAt = expiresAt;
+	}
+
+	/** S-C1: a MANUAL pick owned by {@code userId}. */
+	public static WatchlistEntry manualFor(Long userId, String ticker, String note) {
+		WatchlistEntry e = new WatchlistEntry(ticker, Source.MANUAL, note, null);
+		e.userId = userId;
+		return e;
 	}
 
 	public Long getId() {
@@ -79,5 +90,9 @@ public class WatchlistEntry {
 
 	public Instant getExpiresAt() {
 		return expiresAt;
+	}
+
+	public Long getUserId() {
+		return userId;
 	}
 }

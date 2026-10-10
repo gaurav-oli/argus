@@ -44,6 +44,7 @@ class BreakingNewsAlertServiceTest {
 
 	{
 		when(prefs.allow(any(), any(), anyBoolean())).thenReturn(true);
+		when(prefs.allowFor(any(), any(), any(), anyBoolean())).thenReturn(true);
 		when(alerts.existsByHeadlineAndCreatedAtAfter(anyString(), any())).thenReturn(false);
 		when(alerts.countByCreatedAtAfter(any())).thenReturn(0L);
 	}
@@ -70,7 +71,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
-		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true), any());
 	}
 
 	@Test
@@ -81,7 +82,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
-		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true), any());
 	}
 
 	@Test
@@ -92,7 +93,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
-		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true), any());
 	}
 
 	@Test
@@ -106,7 +107,7 @@ class BreakingNewsAlertServiceTest {
 		verify(alerts, times(1)).save(any());
 		verify(push).sendToUser(eq(7L), eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
 		verify(push).sendToUser(eq(9L), eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 	}
 
 	@Test
@@ -117,7 +118,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
-		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean(), any());
 		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 

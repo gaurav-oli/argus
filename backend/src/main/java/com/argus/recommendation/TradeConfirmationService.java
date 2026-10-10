@@ -64,10 +64,12 @@ public class TradeConfirmationService {
 		Recommendation rec = recommendations.findWithSignalsById(recommendationId)
 				.orElseThrow(() -> new IllegalArgumentException("No recommendation " + recommendationId));
 		String snapshot = snapshot(rec, decision, reasoning);
-		rec.markStatus(decision == Decision.TAKEN ? RecommendationStatus.TAKEN : RecommendationStatus.DECLINED);
-		recommendations.save(rec);
-		return decisions.save(new TradeDecision(recommendationId, decision, reasoning, snapshot,
-				entryPrice, positionSize, Source.USER));
+		// S-C1: a person's Take/Decline is theirs alone — it no longer rewrites the shared recommendation's
+		// status (which reflects the Investor's own decision) or anyone else's journal.
+		TradeDecision d = new TradeDecision(recommendationId, decision, reasoning, snapshot, entryPrice, positionSize,
+				Source.USER);
+		d.ownedBy(com.argus.security.CurrentUserContext.get());
+		return decisions.save(d);
 	}
 
 	/**
@@ -81,7 +83,7 @@ public class TradeConfirmationService {
 	 */
 	@Transactional
 	public void recordAgentDecision(Long recommendationId, Decision decision) {
-		if (decisions.existsByRecommendationId(recommendationId)) {
+		if (decisions.existsByRecommendationIdAndSource(recommendationId, Source.AGENT)) {
 			return;
 		}
 		Recommendation rec = recommendations.findWithSignalsById(recommendationId).orElse(null);

@@ -35,7 +35,7 @@ public class JournalService {
 	@Transactional(readOnly = true)
 	public List<JournalEntryView> list() {
 		Map<Long, Double> avgReturnByRec = performance.avgReturnByRecommendation();
-		return decisions.findTop100ByOrderByDecidedAtDesc().stream()
+		return decisions.findJournal(com.argus.security.CurrentUserContext.get(), org.springframework.data.domain.Limit.of(100)).stream()
 				.map(d -> toEntryView(d, avgReturnByRec.get(d.getRecommendationId())))
 				.toList();
 	}
@@ -43,7 +43,10 @@ public class JournalService {
 	@Transactional(readOnly = true)
 	public Optional<JournalDetailView> detail(Long decisionId) {
 		Map<Long, Double> avgReturnByRec = performance.avgReturnByRecommendation();
+		Long me = com.argus.security.CurrentUserContext.get();
+		// S-C1: someone else's decision reads as not found, same as an unknown id.
 		return decisions.findById(decisionId)
+				.filter(d -> d.getSource() == TradeDecision.Source.AGENT || java.util.Objects.equals(d.getUserId(), me))
 				.map(d -> toDetailView(d, avgReturnByRec.get(d.getRecommendationId())));
 	}
 

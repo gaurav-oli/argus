@@ -74,7 +74,7 @@ class RecommendationControllerIntegrationTest {
 	}
 
 	@Test
-	void decisionMarksTheRecommendationTaken() throws Exception {
+	void decisionIsRecordedAsThePersonsOwn() throws Exception {
 		Cookie session = login();
 		Recommendation rec = recommendations.create("AAPL",
 				List.of(new AgentSignal("agent-1-news", SignalDirection.BULLISH, 2, "good")), null, null);
@@ -84,7 +84,9 @@ class RecommendationControllerIntegrationTest {
 						.content("{\"decision\":\"TAKEN\",\"reasoning\":\"I agree\"}"))
 				.andExpect(status().isOk());
 
+		// S-C1: the person's decision is theirs; the shared status stays the Investor's.
 		mockMvc.perform(get("/api/recommendations").cookie(session))
-				.andExpect(jsonPath("$[0].status").value("TAKEN"));
+				.andExpect(jsonPath("$[0].myDecision").value("TAKEN"))
+				.andExpect(jsonPath("$[0].status").value("PENDING"));
 	}
 }

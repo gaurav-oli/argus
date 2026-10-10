@@ -1,5 +1,9 @@
 package com.argus.watchlist;
 
+import com.argus.security.CurrentUserContext;
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
+
 import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.List;
@@ -25,20 +29,24 @@ public class WatchlistController {
 
 	private final WatchlistRepository repo;
 	private final DiscoveryService discovery;
+	private final CurrentUserService users;
 
-	public WatchlistController(WatchlistRepository repo, DiscoveryService discovery) {
+	public WatchlistController(WatchlistRepository repo, DiscoveryService discovery, CurrentUserService users) {
 		this.repo = repo;
 		this.discovery = discovery;
+		this.users = users;
 	}
 
+	/** S-C1: your own picks plus the system's discoveries — never another person's picks. */
 	@GetMapping
 	public List<WatchlistView> list() {
-		return repo.findAllByOrderByAddedAtDesc().stream().map(WatchlistView::from).toList();
+		return repo.visibleTo(CurrentUserContext.get()).stream().map(WatchlistView::from).toList();
 	}
 
 	/** Run the auto-discovery agent now: promote trending non-portfolio tickers. Returns the fresh list. */
 	@PostMapping("/discover")
-	public List<WatchlistView> discover() {
+	public List<WatchlistView> discover(HttpServletRequest request) {
+		users.requireAdmin(request); // S-C1: rewrites the shared discovered set
 		discovery.discover();
 		return list();
 	}
@@ -49,15 +57,25 @@ public class WatchlistController {
 		if (ticker.isBlank()) {
 			return ResponseEntity.badRequest().build();
 		}
-		WatchlistEntry entry = repo.findByTicker(ticker)
-				.orElseGet(() -> repo.save(new WatchlistEntry(ticker, WatchlistEntry.Source.MANUAL, req.note(), null)));
+		Long me = CurrentUserContext.get();
+		WatchlistEntry entry = repo.findByTickerAndUserId(ticker, me)
+				.orElseGet(() -> repo.save(WatchlistEntry.manualFor(me, ticker, req.note())));
 		return ResponseEntity.status(HttpStatus.CREATED).body(WatchlistView.from(entry));
 	}
 
+	/** S-C1: removes your own pick; an admin may also drop a discovered entry. Anyone else's pick is untouched. */
 	@DeleteMapping("/{ticker}")
-	public ResponseEntity<Void> remove(@PathVariable String ticker) {
-		repo.deleteByTicker(ticker.trim().toUpperCase());
-		return ResponseEntity.noContent().build();
+	public ResponseEntity<Void> remove(@PathVariable String ticker, HttpServletRequest request) {
+		String t = ticker.trim().toUpperCase();
+		if (repo.deleteOwn(t, CurrentUserContext.get()) > 0) {
+			return ResponseEntity.noContent().build();
+		}
+		if (repo.findByTickerAndUserIdIsNull(t).isPresent()) {
+			users.requireAdmin(request);
+			repo.deleteDiscovered(t);
+			return ResponseEntity.noContent().build();
+		}
+		return ResponseEntity.notFound().build();
 	}
 
 	public record AddRequest(@NotBlank String ticker, String note) {

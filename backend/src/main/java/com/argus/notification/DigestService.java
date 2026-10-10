@@ -55,9 +55,9 @@ public class DigestService {
 			log.debug("Weekly digest: nothing deferred this week — skipping");
 			return 0;
 		}
-		if (prefs.allow(NotificationPreferencesService.Category.BRIEFING)) {
-			push.sendToAll("Your weekly digest", body(items), "/intelligence");
-		}
+		// S-C1: only to devices whose owner has briefings on (and isn't in quiet hours).
+		push.sendToAll("Your weekly digest", body(items), "/intelligence", false,
+				userId -> prefs.allowFor(userId, NotificationPreferencesService.Category.BRIEFING, null, false));
 		items.forEach(DeferredNotification::markDelivered);
 		deferred.saveAll(items);
 		log.info("Weekly digest delivered {} item(s)", items.size());

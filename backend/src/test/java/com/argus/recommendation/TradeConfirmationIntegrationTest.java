@@ -71,7 +71,7 @@ class TradeConfirmationIntegrationTest {
 	}
 
 	@Test
-	void takenDecisionFreezesSnapshotAndUpdatesStatus() {
+	void takenDecisionFreezesSnapshotAndLeavesTheSharedStatusAlone() {
 		Recommendation rec = aRecommendation();
 
 		TradeDecision d = confirmation.confirm(rec.getId(), Decision.TAKEN, "I agree with the thesis", null, null);
@@ -79,7 +79,8 @@ class TradeConfirmationIntegrationTest {
 		assertEquals(Decision.TAKEN, d.getDecision());
 		assertTrue(d.getSnapshot().contains("positive coverage"), "snapshot freezes the signals");
 		assertTrue(d.getSnapshot().contains("I agree with the thesis"), "snapshot freezes the reasoning");
-		assertEquals(RecommendationStatus.TAKEN, recRepo.findById(rec.getId()).orElseThrow().getStatus());
+		// S-C1: a person's Take/Decline is theirs — the shared recommendation's status is the Investor's.
+		assertEquals(RecommendationStatus.PENDING, recRepo.findById(rec.getId()).orElseThrow().getStatus());
 	}
 
 	@Test
@@ -180,15 +181,48 @@ class TradeConfirmationIntegrationTest {
 	}
 
 	@Test
-	void agentDecisionNeverOverwritesAnExistingOne() {
+	void aPersonsDecisionNeitherBlocksNorIsOverwrittenByTheInvestors() {
 		Recommendation rec = aRecommendation();
 		confirmation.confirm(rec.getId(), Decision.DECLINED, "too risky", null, null);
 
 		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
 
-		assertEquals(1, decisions.findByRecommendationId(rec.getId()).size(),
-				"the Investor must not overwrite a decision that already exists");
-		assertEquals(Decision.DECLINED, decisions.findByRecommendationId(rec.getId()).get(0).getDecision());
+		List<TradeDecision> all = decisions.findByRecommendationId(rec.getId());
+		assertEquals(2, all.size(), "S-C1: the Investor records its own decision alongside the person's");
+		assertEquals(Decision.DECLINED, all.stream().filter(x -> x.getSource() == TradeDecision.Source.USER)
+				.findFirst().orElseThrow().getDecision(), "the person's decision is untouched");
+	}
+
+	@Autowired
+	JournalService journal;
+
+	@Autowired
+	org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	private long user(String email) {
+		jdbc.update("delete from app_user where email = ?", email);
+		return jdbc.queryForObject("insert into app_user (google_sub, email, name) values (?, ?, ?) returning id", Long.class,
+				"sub-" + email, email, email);
+	}
+
+	@Test
+	void eachPersonSeesOnlyTheirOwnDecisionsPlusTheInvestors() {
+		Recommendation rec = aRecommendation();
+		long ana = user("ana@example.test");
+		long ben = user("ben@example.test");
+		TradeDecision anas = com.argus.security.CurrentUserContext.callAs(ana,
+				() -> confirmation.confirm(rec.getId(), Decision.TAKEN, "ana is in", null, null));
+		confirmation.recordAgentDecision(rec.getId(), Decision.TAKEN);
+
+		List<JournalService.JournalEntryView> forBen = com.argus.security.CurrentUserContext.callAs(ben, journal::list);
+		List<JournalService.JournalEntryView> forAna = com.argus.security.CurrentUserContext.callAs(ana, journal::list);
+
+		assertEquals(1, forBen.size(), "ben sees the Investor's decision only");
+		assertEquals("AGENT", forBen.get(0).source());
+		assertEquals(2, forAna.size());
+		assertTrue(com.argus.security.CurrentUserContext.callAs(ben, () -> journal.detail(anas.getId())).isEmpty(),
+				"ana's decision reads as not found for ben");
+		assertTrue(com.argus.security.CurrentUserContext.callAs(ana, () -> journal.detail(anas.getId())).isPresent());
 	}
 
 	@Test

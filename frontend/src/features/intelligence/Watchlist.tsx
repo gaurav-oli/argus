@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   addWatchlist,
   discoverWatchlist,
+  getAuthStatus,
   getWatchlist,
   removeWatchlist,
   type WatchlistEntry,
@@ -17,6 +18,9 @@ import { useAutoRefresh } from "@/lib/useAutoRefresh";
  * Watchlist — the universe beyond your holdings. Adding a ticker widens what the agents cover, so
  * Agent 5 starts recommending on it alongside your portfolio (from the next agent cycle). Entries you
  * add are MANUAL; DISCOVERED ones come from the auto-discovery agent.
+ *
+ * S-C1: your picks are yours — friends don't see or remove them (the agents still cover everyone's). The
+ * discovered set is shared, so only the admin can re-run discovery or drop a discovered name.
  */
 export function Watchlist() {
   const [entries, setEntries] = useState<WatchlistEntry[] | null>(null);
@@ -25,6 +29,17 @@ export function Watchlist() {
   const [busy, setBusy] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [admin, setAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getAuthStatus()
+      .then((s) => active && setAdmin(!!s.user?.admin))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function refresh() {
     try {
@@ -90,19 +105,21 @@ export function Watchlist() {
             <span className="ml-2 font-mono text-xs text-text-secondary">{entries.length}</span>
           )}
         </h3>
-        <button
-          type="button"
-          onClick={onDiscover}
-          disabled={discovering}
-          className="shrink-0 rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] font-semibold text-text-primary transition hover:bg-border/20 disabled:opacity-60"
-          title="Promote tickers the market is buzzing about that you don't already hold or watch"
-        >
-          {discovering ? "Scanning…" : "✨ Find trending"}
-        </button>
+        {admin && (
+          <button
+            type="button"
+            onClick={onDiscover}
+            disabled={discovering}
+            className="shrink-0 rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] font-semibold text-text-primary transition hover:bg-border/20 disabled:opacity-60"
+            title="Promote tickers the market is buzzing about that you don't already hold or watch"
+          >
+            {discovering ? "Scanning…" : "✨ Find trending"}
+          </button>
+        )}
       </div>
       <p className="mt-0.5 text-xs text-text-secondary">
         Add tickers you want covered — the agents ingest them and Agent 5 recommends on them from the next
-        cycle (holdings stay untouched).
+        cycle (holdings stay untouched). Your picks are private to you; discovered names are shared.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -142,7 +159,7 @@ export function Watchlist() {
         <ul className="mt-3 flex flex-wrap gap-2">
           {entries.map((e) => (
             <li
-              key={e.ticker}
+              key={`${e.source}-${e.ticker}`}
               className="flex items-center gap-2 rounded-lg border border-[var(--hairline)] bg-border/[0.15] px-2.5 py-1.5"
               title={e.note ?? undefined}
             >
@@ -153,16 +170,18 @@ export function Watchlist() {
                   discovered
                 </span>
               )}
-              <button
-                type="button"
-                onClick={() => onRemove(e.ticker)}
-                aria-label={`Remove ${e.ticker}`}
-                className="text-text-secondary transition hover:text-losses"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-              </button>
+              {(e.source !== "DISCOVERED" || admin) && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(e.ticker)}
+                  aria-label={`Remove ${e.ticker}`}
+                  className="text-text-secondary transition hover:text-losses"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </li>
           ))}
         </ul>

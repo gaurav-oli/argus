@@ -38,12 +38,13 @@ public class RecommendationController {
 	private final com.argus.deepanalysis.DeepAnalysisService deepAnalyses;
 	private final com.argus.technical.LivePriceService prices;
 	private final CurrentUserService currentUser;
+	private final TradeDecisionRepository decisions;
 
 	public RecommendationController(RecommendationService recommendations,
 			TradeConfirmationService confirmation, GraduationService graduation,
 			RecommendationDebateService debates, com.argus.technical.ChartStudyService charts,
 			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.technical.LivePriceService prices,
-			CurrentUserService currentUser) {
+			CurrentUserService currentUser, TradeDecisionRepository decisions) {
 		this.recommendations = recommendations;
 		this.confirmation = confirmation;
 		this.graduation = graduation;
@@ -52,6 +53,7 @@ public class RecommendationController {
 		this.deepAnalyses = deepAnalyses;
 		this.prices = prices;
 		this.currentUser = currentUser;
+		this.decisions = decisions;
 	}
 
 	@GetMapping
@@ -79,8 +81,11 @@ public class RecommendationController {
 		String valuation = token(r, "val=");
 		PriceGuidance.Guidance guidance = PriceGuidance.build(r.getAction(), r.getHoldDays() == null ? 0 : r.getHoldDays(),
 				lastPrice, chart, deep, valuation);
+		// S-C1: the signed-in person's own Take/Decline on this call (status stays the shared Investor's).
+		String myDecision = decisions.findFirstByRecommendationIdAndSourceAndUserIdOrderByDecidedAtDesc(r.getId(),
+				TradeDecision.Source.USER, com.argus.security.CurrentUserContext.get()).map(d -> d.getDecision().name()).orElse(null);
 		return RecommendationCard.from(r, state, blackSwan, chart == null ? null : ChartView.from(chart, lastPrice),
-				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance), callSince);
+				deep == null ? null : DeepSummary.from(deep), GuidanceView.from(guidance), callSince, myDecision);
 	}
 
 	@GetMapping("/graduation")
@@ -139,7 +144,8 @@ public class RecommendationController {
 	 * reasoning and risks behind it, and — kept for the diagnostic view — the raw probabilities and
 	 * per-agent signals. {@code action}/{@code convictionScore}/{@code holdDays} are null only on legacy rows.
 	 * {@code callSince} is when this call (same action, unbroken) was first made; {@code createdAt} is
-	 * when it was last re-checked.
+	 * when it was last re-checked. {@code status} is the shared lifecycle (the Investor's decision);
+	 * {@code myDecision} is the signed-in person's own TAKEN/DECLINED, or null (S-C1).
 	 */
 	public record RecommendationCard(Long id, String ticker, String direction, BigDecimal bullProbability,
 			BigDecimal bearProbability, BigDecimal confidence, boolean confidenceCapped, BigDecimal priceTarget,
@@ -147,10 +153,10 @@ public class RecommendationController {
 			List<SignalView> signals, String action, String actionLabel, Integer convictionScore, Integer holdDays,
 			String horizonLabel, LocalDate reviewOn, String thesis, List<String> reasons, List<String> caveats,
 			String exitPlan, String sector, List<String> learned, ChartView chart, DeepSummary deep, String guidance, String valuation,
-			GuidanceView priceGuidance, Instant callSince) {
+			GuidanceView priceGuidance, Instant callSince, String myDecision) {
 
 		static RecommendationCard from(Recommendation r, GraduationState state, boolean blackSwan, ChartView chart, DeepSummary deep, GuidanceView priceGuidance,
-				Instant callSince) {
+				Instant callSince, String myDecision) {
 			BigDecimal confidence = r.getConfidence();
 			boolean capped = blackSwan && confidence.compareTo(BLACK_SWAN_CONFIDENCE_CAP) > 0;
 			if (capped) {
@@ -167,7 +173,7 @@ public class RecommendationController {
 					r.getConvictionScore(), r.getHoldDays(), r.getHorizonLabel(), reviewOn, r.getThesis(),
 					lines(r.getReasons()), lines(r.getCaveats()), r.getExitPlan(), sectorLabel(r.getSector()),
 					lines(r.getLessons()), chart, deep, token(r, "guidance="), token(r, "val="), priceGuidance,
-					callSince == null ? r.getCreatedAt() : callSince);
+					callSince == null ? r.getCreatedAt() : callSince, myDecision);
 		}
 	}
 
