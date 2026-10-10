@@ -108,7 +108,7 @@ export function IntelligenceView() {
       <PageHeader
         eyebrow="Agents 1–15"
         title="Intelligence"
-        subtitle="What's actionable right now, every ticker Argus follows, and how each agent arrived there."
+        subtitle="Calls the agents are testing on paper right now, how confident they are, and how each agent got there. Research, not advice."
         action={<CommandPalette items={paletteItems} />}
       />
 

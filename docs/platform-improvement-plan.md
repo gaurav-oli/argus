@@ -40,12 +40,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
 | S-D1 | `6d1896d` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
+| S-D2 | see `feat(S-D2)` | Paper-lab positioning in metadata, PWA manifest, Intelligence header and sign-in boot log |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-D2 — Align chrome copy with paper-lab positioning** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-D3 — Frontend error boundary + visible refresh failures** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -173,7 +174,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | done |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
-| 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | in-progress |
+| 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | done |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
 | 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
 | 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | not-started |
@@ -561,12 +562,17 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-D2 — Align chrome copy with paper-lab positioning
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P3
 - **Finding:** H4
 - **Goal:** Metadata/PWA/UI say paper-validated intelligence lab, not alpha tip sheet / not brokerage advice.
 - **Acceptance:** `layout` / `manifest` / Intelligence chrome updated; no “guaranteed edge” language.
-- **Completed:** —
+- **Completed:** 2026-10-10 (Claude Code). Copy only:
+  - **Metadata and manifest:** the page `<meta description>` and the PWA manifest now say "A paper-validated research lab: AI agents make calls, test them on paper trades, and learn. Not brokerage advice; never places orders." The manifest name is "Argus — Paper-validated research lab".
+  - **Intelligence header:** "Calls the agents are testing on paper right now, how confident they are, and how each agent got there. Research, not advice."
+  - **Sign-in boot log:** gains "mode: paper lab. calls are tested on paper; no orders placed."
+  - The persistent paper-lab banner (S-B2) already carries the message on every page.
+  - A sweep for "guarantee", "alpha", "beat the market", "outperform", "smart money" and "AI-powered investment intelligence" in the UI copy found nothing else to change; the one "outperformed" left is the honest regret line in Agent Performance.
 - **Notes:** —
 
 ### S-D3 — Frontend error boundary + visible refresh failures
@@ -627,7 +633,7 @@ Use for evidence; **stories above are the work queue.**
 | H1 | High | Global settings / Demo Mode | S-A3 (**done**) |
 | H2 | High | Broadcast push holdings hints | ~~S-A4~~ done |
 | H3 | High | Shared journal/watchlist/prefs | S-C1 (**done**) |
-| H4 | High | Chrome positioning | S-D2 |
+| H4 | High | Chrome positioning | S-D2 (**done**) |
 | H5 | High | Haiku fallbacks bypass budget | ~~S-A5~~ done |
 | M1 | Medium | No per-user AI quotas | S-C3 (**done**) |
 | M2 | Medium | Userless sessions authenticate | ~~S-A6~~ done |

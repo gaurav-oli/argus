@@ -38,7 +38,8 @@ const vt323 = VT323({
 
 export const metadata: Metadata = {
   title: "Argus",
-  description: "AI-powered investment intelligence.",
+  // S-D2: a paper-validated research lab, not a tip sheet or a broker.
+  description: "A paper-validated research lab: AI agents make calls, test them on paper trades, and learn. Not brokerage advice; never places orders.",
 };
 
 // Browser chrome follows the theme; `viewportFit: cover` exposes the iOS

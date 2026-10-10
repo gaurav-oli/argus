@@ -7,9 +7,9 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Argus — Investment Intelligence",
+    name: "Argus — Paper-validated research lab",
     short_name: "Argus",
-    description: "AI-powered investment intelligence.",
+    description: "A paper-validated research lab: AI agents make calls, test them on paper trades, and learn. Not brokerage advice; never places orders.",
     start_url: "/",
     display: "standalone",
     background_color: "#0A0A08",

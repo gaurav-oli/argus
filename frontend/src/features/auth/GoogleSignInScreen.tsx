@@ -20,6 +20,7 @@ const BOOT_LINES: { text: string; status?: string }[] = [
   { text: "mounting market feeds", status: "OK" },
   { text: "loading model gateway", status: "OK" },
   { text: "isolating portfolios per user", status: "OK" },
+  { text: "mode: paper lab. calls are tested on paper; no orders placed." },
   { text: "access: invite-only. identity required." },
 ];
 const LINE_MS = 280;
