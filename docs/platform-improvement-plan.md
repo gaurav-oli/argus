@@ -47,7 +47,7 @@ Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C*
 
 ### Next story for the next agent
 
-**→ No story is ready to start.** Phases A–D are done; S-E1 and S-E3 were closed by the owner (2026-10-10). The only open story, S-E2 (Strategy Scout), is blocked until the owner names the allowed source sites. Next step: the owner's validation pass on the Mini (`docs/mac-mini-validation.md` §16–24), then merge to main when the owner asks. Owner asked to work through the remaining stories in order in auto mode.
+**→ No story is ready to start.** Phases A–D are done; S-E1 and S-E3 were closed by the owner (2026-10-10). The only open story, S-E2 (Strategy Scout), is blocked until the owner names the allowed source sites. Merged to `main` at the owner's request (2026-10-10). S-E2 is skipped for now: the owner chose not to take a Papers With Backtest subscription yet. Next step: the owner's validation pass on the Mini (`docs/mac-mini-validation.md` §16–24). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
