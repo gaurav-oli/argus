@@ -47,7 +47,7 @@ Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C*
 
 ### Next story for the next agent
 
-**→ Phase E (S-E1/E2/E3)** — not started. Each one needs an owner decision first (see the story notes): S-E1 "may collapse into Trade Learner", S-E2 adds allowlisted web scraping, S-E3 "skip if Filings + calendar are enough". Owner asked to work through the remaining stories in order in auto mode.
+**→ No story is ready to start.** Phases A–D are done; S-E1 and S-E3 were closed by the owner (2026-10-10). The only open story, S-E2 (Strategy Scout), is blocked until the owner names the allowed source sites. Next step: the owner's validation pass on the Mini (`docs/mac-mini-validation.md` §16–24), then merge to main when the owner asks. Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -177,9 +177,9 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | done |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | done |
-| 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
-| 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | not-started |
-| 22 | S-E3 | Optional Agent 18 — Earnings Call Reader | E — New agents | not-started |
+| 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | cancelled |
+| 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | blocked |
+| 22 | S-E3 | Optional Agent 18 — Earnings Call Reader | E — New agents | cancelled |
 
 ---
 
@@ -602,30 +602,30 @@ Do **not** start Phase E until S-B1 and S-B3 are `done` (and preferably S-B4 ske
 
 ### S-E1 — Agent 16 Pattern Matcher
 
-- **Status:** `not-started`
+- **Status:** `cancelled`
 - **Priority:** P2 (after S-B3/B4)
 - **Goal:** Dedicated runtime that owns setup fingerprints + similarity search + pre-trade advice consumed by the paper Investor.
 - **Acceptance:** Appears on Agents fleet; consulted on every new paper entry; outcomes feed its own accuracy (did “skip” advice avoid losses?).
-- **Completed:** —
-- **Notes:** May collapse into Trade Learner if a separate agent is overkill — decide at implementation time.
+- **Completed:** — (cancelled 2026-10-10 by the owner)
+- **Notes:** May collapse into Trade Learner if a separate agent is overkill — decide at implementation time. **Decision (owner, 2026-10-10): closed — covered by S-B4.** The pattern library (`learning/PatternLibraryService`) already fingerprints setups, finds similar past paper outcomes and advises skip/size/stop/proceed on every entry, with every check logged and shown on Agents (`#patterns`). It runs inside the Investor's entry path, so it needs no schedule, DLQ or dossier of its own. Reopen only if the owner wants it as its own fleet card with its own skip-accuracy record.
 
 ### S-E2 — Agent 17 Strategy Scout
 
-- **Status:** `not-started`
+- **Status:** `blocked`
 - **Priority:** P2 (after S-B1)
 - **Goal:** Periodically propose strategies from allowlisted sources into **SHADOW** only; never writes live Agent 5 weights.
 - **Acceptance:** New candidates visible in sandbox UI; promotion only via S-B7 rules; Cost Governor respected for any LLM summarization.
 - **Completed:** —
-- **Notes:** Scraping must stay allowlisted domains — no open-ended web agent.
+- **Notes:** Scraping must stay allowlisted domains — no open-ended web agent. **Blocked (2026-10-10): waiting on the owner's list of allowed source sites.** When it's built, candidates go in through `StrategySandboxService.enroll` (S-B7), so they start in SHADOW and can only reach live scoring by beating SPY there.
 
 ### S-E3 — Agent 18 Earnings Call Reader (optional)
 
-- **Status:** `not-started`
+- **Status:** `cancelled`
 - **Priority:** P3
 - **Goal:** Earnings-call transcript digests as an Agent 5 signal, separate from Filings Reader.
 - **Acceptance:** Signal weight + contribution in probability audit; skips tickers with no transcript source.
-- **Completed:** —
-- **Notes:** Skip entirely if Filings + calendar quiet periods are enough.
+- **Completed:** — (cancelled 2026-10-10 by the owner)
+- **Notes:** Skip entirely if Filings + calendar quiet periods are enough. **Decision (owner, 2026-10-10): skipped.** Agent 14 (Filings Reader) and Agent 7 (calendar) cover earnings, and there's no free transcript source.
 
 ---
 
