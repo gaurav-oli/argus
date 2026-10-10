@@ -1,10 +1,11 @@
 package com.argus.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.argus.common.BadRequestException;
 import com.argus.common.PayloadTooLargeException;
@@ -12,6 +13,7 @@ import com.argus.cost.CostEventRepository;
 import com.argus.cost.CostGovernor;
 import com.argus.cost.CostRecorder;
 import com.argus.cost.LocalModelCallRepository;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,6 +45,13 @@ class DefaultModelGatewayTest {
 		return new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), 0);
 	}
 
+	/** Governor at ≥95% spent — paid Haiku must be refused (S-A5 / H5). */
+	private static CostGovernor blockedGov() {
+		CostEventRepository events = mock(CostEventRepository.class);
+		when(events.sumCostSince(any())).thenReturn(BigDecimal.valueOf(19));
+		return new CostGovernor(events, mock(LocalModelCallRepository.class), 20);
+	}
+
 	@SuppressWarnings("unchecked")
 	private static CostRecorder recorder() {
 		return new CostRecorder(mock(org.springframework.beans.factory.ObjectProvider.class),
@@ -63,6 +72,55 @@ class DefaultModelGatewayTest {
 				new MockChatModel("local"), prompt -> "haiku:" + prompt, gov(), recorder(), props(1));
 
 		assertEquals("haiku:deep question", gateway.escalate("deep question"));
+	}
+
+	@Test
+	void escalateUsesLocalWhenBudgetBlocked() {
+		ModelGateway gateway = new DefaultModelGateway(
+				new MockChatModel("local-ok"), prompt -> "haiku", blockedGov(), recorder(), props(1));
+
+		assertEquals("local-ok", gateway.escalate("deep question"));
+	}
+
+	@Test
+	void generateDoesNotCallHaikuOnPrimaryFailureWhenBudgetBlocked() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "haiku";
+		};
+		ModelGateway gateway = new DefaultModelGateway(new FailingChatModel(), fallback, blockedGov(), recorder(), props(1));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(0, fallbackCalls.get(), "≥95% budget must block Haiku even after primary failure");
+	}
+
+	@Test
+	void generateDoesNotCallHaikuOnBlankResponseWhenBudgetBlocked() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "haiku";
+		};
+		ModelGateway gateway = new DefaultModelGateway(new MockChatModel(""), fallback, blockedGov(), recorder(), props(1));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(0, fallbackCalls.get(), "≥95% budget must block Haiku even after blank local response");
+	}
+
+	@Test
+	void generateDoesNotCallHaikuOnTimeoutWhenBudgetBlocked() {
+		AtomicInteger fallbackCalls = new AtomicInteger();
+		HaikuFallback fallback = prompt -> {
+			fallbackCalls.incrementAndGet();
+			return "haiku";
+		};
+		ModelGateway gateway = new DefaultModelGateway(
+				new HangingChatModel(Duration.ofSeconds(3)), fallback, blockedGov(),
+				recorder(), propsWithTimeout(1, Duration.ofMillis(200)));
+
+		assertThrows(ModelGatewayException.class, () -> gateway.generate("ping"));
+		assertEquals(0, fallbackCalls.get(), "≥95% budget must block Haiku even after call timeout");
 	}
 
 	@Test

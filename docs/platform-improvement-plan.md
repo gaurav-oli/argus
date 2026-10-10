@@ -118,7 +118,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 2 | S-A2 | Scope session list/revoke to the signed-in user | A — Security | done |
 | 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | done |
 | 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | done |
-| 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | not-started |
+| 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | done |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | not-started |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | not-started |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | not-started |
@@ -198,7 +198,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-A5 — Gate all Haiku paths on Cost Governor
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P0
 - **Finding:** H5
 - **Goal:** At 95% budget, no Haiku call — including `generateBig()` fallbacks.
@@ -206,7 +206,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Every `haikuFallback.generate` path checks `allowPaidCall()` (or shared helper).
   - Unit tests: timeout/blank/primary-failure fallbacks stay local when budget blocked.
 - **Hints:** `DefaultModelGateway.generateBig` / `escalate`.
-- **Completed:** —
+- **Completed:** 2026-10-09 — `paidFallback` gates escalate + generateBig (permit timeout / primary failure / blank); throws when budget ≥95% and local unavailable.
 - **Notes:** —
 
 ### S-A6 — Reject userless sessions; PDF magic; push unsubscribe ownership
@@ -444,7 +444,7 @@ Use for evidence; **stories above are the work queue.**
 | H2 | High | Broadcast push holdings hints | ~~S-A4~~ done |
 | H3 | High | Shared journal/watchlist/prefs | S-C1 |
 | H4 | High | Chrome positioning | S-D2 |
-| H5 | High | Haiku fallbacks bypass budget | S-A5 |
+| H5 | High | Haiku fallbacks bypass budget | ~~S-A5~~ done |
 | M1 | Medium | No per-user AI quotas | S-C3 |
 | M2 | Medium | Userless sessions authenticate | S-A6 |
 | M3 | Medium | Streams spine only 3 agents | (backlog — document hybrid; no story yet) |

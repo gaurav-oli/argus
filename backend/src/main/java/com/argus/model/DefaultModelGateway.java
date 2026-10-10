@@ -82,7 +82,7 @@ public class DefaultModelGateway implements ModelGateway {
 		// Explicit "deeper analysis": go to Haiku (not on the big-model semaphore). HaikuFallback throws
 		// ModelGatewayException when unavailable → 503 at the edge.
 		log.info("escalating to Haiku (deeper analysis)");
-		return haikuFallback.generate(prompt);
+		return paidFallback(prompt, "deeper analysis");
 	}
 
 	/** Cheap guard against a null/blank prompt (caller bug) or an absurdly oversized one (runaway
@@ -135,13 +135,17 @@ public class DefaultModelGateway implements ModelGateway {
 	 * own and its result is discarded. That's an accepted gap: the goal here is bounding how long a
 	 * caller (and everyone queued behind it) waits, not killing the underlying HTTP request.
 	 *
-	 * <p><b>Error contract:</b> every {@code haikuFallback.generate(prompt)} call below happens
-	 * outside the {@code try} that catches the primary model's {@code RuntimeException} — a real
-	 * Haiku failure (bad API key, Anthropic outage, rate-limit) must propagate as its own
-	 * {@link ModelGatewayException} (→ 503 at the edge) instead of being re-caught by the same
-	 * catch-all and silently retried against Haiku a second time. An earlier version nested every
-	 * fallback call inside that one try/catch, so a Haiku failure got mislabeled in the logs as
-	 * "Primary model failed" and paid for a second Haiku call before the real error ever surfaced.
+	 * <p><b>Error contract:</b> every paid fallback below happens outside the {@code try} that
+	 * catches the primary model's {@code RuntimeException} — a real Haiku failure (bad API key,
+	 * Anthropic outage, rate-limit) must propagate as its own {@link ModelGatewayException} (→ 503
+	 * at the edge) instead of being re-caught by the same catch-all and silently retried against
+	 * Haiku a second time. An earlier version nested every fallback call inside that one try/catch,
+	 * so a Haiku failure got mislabeled in the logs as "Primary model failed" and paid for a second
+	 * Haiku call before the real error ever surfaced.
+	 *
+	 * <p><b>S-A5 / H5:</b> every Haiku path — including these failure fallbacks — goes through
+	 * {@link #paidFallback}, which refuses paid calls once {@link com.argus.cost.CostGovernor#allowPaidCall()}
+	 * is false (≥95% budget).
 	 */
 	private String generateBig(String prompt) {
 		boolean acquired;
@@ -155,7 +159,7 @@ public class DefaultModelGateway implements ModelGateway {
 		if (!acquired) {
 			log.warn("Timed out after {} waiting for the model permit (still held by another call) — "
 					+ "invoking Haiku fallback", callTimeout);
-			return haikuFallback.generate(prompt);
+			return paidFallback(prompt, "permit timeout");
 		}
 		String content;
 		long startNanos = System.nanoTime();
@@ -165,18 +169,31 @@ public class DefaultModelGateway implements ModelGateway {
 		catch (RuntimeException ex) {
 			permits.release();
 			log.warn("Primary model failed — invoking Haiku fallback", ex);
-			return haikuFallback.generate(prompt);
+			return paidFallback(prompt, "primary failure");
 		}
 		long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
 		permits.release();
 		if (content == null || content.isBlank()) {
 			log.warn("Local model returned no usable content ({} ms, {} prompt chars) — "
 					+ "invoking Haiku fallback", durationMs, prompt.length());
-			return haikuFallback.generate(prompt);
+			return paidFallback(prompt, "blank local response");
 		}
 		log.info("model generate ok ({} ms)", durationMs);
 		costRecorder.recordLocalCall("BIG");
 		return content;
+	}
+
+	/**
+	 * Single gate for every paid Haiku call (escalate + generateBig fallbacks). At ≥95% budget,
+	 * refuse rather than silently blowing the "auto-switch to local" posture (S-A5 / H5).
+	 */
+	private String paidFallback(String prompt, String reason) {
+		if (!costGovernor.allowPaidCall()) {
+			log.warn("Budget threshold reached — refusing Haiku fallback ({})", reason);
+			throw new ModelGatewayException(
+					"Paid model fallback paused (budget ≥95%); local model unavailable (" + reason + ")");
+		}
+		return haikuFallback.generate(prompt);
 	}
 
 	/** Races the real model call against {@link #callTimeout}; a timeout is treated as a failure

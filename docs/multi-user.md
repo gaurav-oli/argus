@@ -162,11 +162,11 @@ committing a personal address.
 sets `CurrentUserContext` to null but still allows the request. `/api/auth/status` can report
 `authenticated=true` with `user=null`. Those sessions can still hit shared/global endpoints.
 
-### 5.9 High — Cost Governor hole on Haiku fallbacks (H5)
+### 5.9 High — Cost Governor hole on Haiku fallbacks (H5) — **fixed (S-A5)**
 
-`escalate()` respects `CostGovernor.allowPaidCall()`. `generateBig()` still calls Haiku on
-timeout / blank / primary failure **without** that check — so the 95% “auto-switch to local”
-posture is incomplete under Ollama blips.
+Every Haiku path in `DefaultModelGateway` goes through `paidFallback`, which checks
+`CostGovernor.allowPaidCall()`. At ≥95% budget, escalate uses local BIG; generateBig fallbacks
+(timeout / blank / primary failure) refuse paid calls instead of silently billing.
 
 ### 5.10 Medium — No per-user AI / import quotas (M1)
 
