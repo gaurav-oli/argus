@@ -31,7 +31,7 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-A6 | `89cd746` | Userless sessions fail auth; PDF `%PDF` magic; push unsub ownership |
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
-| S-B3 | see `feat(S-B3)` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
+| S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
 
 Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2`, `S-B3` done.
 
