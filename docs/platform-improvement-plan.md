@@ -32,13 +32,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 | S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
-| S-B4 | see `feat(S-B4)` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
+| S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
 
 Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B4` done.
 
 ### Next story for the next agent
 
-**→ S-B5 — Intelligence as active thesis board** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-B5 — Intelligence as active thesis board** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -159,7 +159,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
-| 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
+| 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | in-progress |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
@@ -368,7 +368,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B5 — Intelligence as active thesis board
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P1
 - **Goal:** Intelligence answers: buy/sell/hold, confidence, why, paper position/P&L if any, similar-pattern hint.
 - **Acceptance:**
