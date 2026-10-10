@@ -6,6 +6,7 @@ import { HomeGreeting } from "@/components/dashboard/HomeGreeting";
 import { MarketNews } from "@/components/dashboard/MarketNews";
 import { PortfolioTrendChart } from "@/components/dashboard/PortfolioTrendChart";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
+import { TrustScoreboard } from "@/features/trust/TrustScoreboard";
 import { MotionCard } from "@/components/ui/MotionCard";
 
 /**
@@ -23,6 +24,10 @@ export default function Home() {
     <div className="mx-auto max-w-6xl">
       <DegradedBanner />
       <HomeGreeting />
+
+      <div className="mb-4">
+        <TrustScoreboard />
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
         {/* Pinned morning briefing (Epic 8 — real data) */}

@@ -16,6 +16,7 @@ import { CommandPalette, type PaletteItem } from "@/features/intelligence/Comman
 import { TickerDetail } from "@/features/intelligence/TickerDetail";
 import { TickerRow, useTickerRoster } from "@/features/intelligence/TickerRoster";
 import { TickersTable } from "@/features/intelligence/TickersTable";
+import { TrustScoreboard } from "@/features/trust/TrustScoreboard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
@@ -108,6 +109,10 @@ export function IntelligenceView() {
         subtitle="What's actionable right now, every ticker Argus follows, and how each agent arrived there."
         action={<CommandPalette items={paletteItems} />}
       />
+
+      <div className="mb-6">
+        <TrustScoreboard />
+      </div>
 
       <AnimatePresence mode="wait">
         {selectedTicker ? (

@@ -92,9 +92,10 @@ function AccuracyCard({ a }: { a: AccuracyView }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <WindowTile label="All time" w={a.all} />
         <WindowTile label="Last 30 days" w={a.last30d} />
+        <WindowTile label="Prior 30 days" w={a.prior30d} />
         <WindowTile label="Last 10" w={a.last10} />
       </div>
 

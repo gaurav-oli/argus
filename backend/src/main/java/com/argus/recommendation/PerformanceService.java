@@ -62,8 +62,12 @@ public class PerformanceService {
 		long wins = trades.countByWonTrue();
 
 		Instant since30 = Instant.now().minus(Duration.ofDays(30));
+		Instant since60 = Instant.now().minus(Duration.ofDays(60));
 		long total30 = trades.countByCreatedAtAfter(since30);
 		long wins30 = trades.countByWonTrueAndCreatedAtAfter(since30);
+		// Prior 30d = (now-60d, now-30d] — count after 60d minus count after 30d (S-B1 trend).
+		long total60 = trades.countByCreatedAtAfter(since60);
+		long wins60 = trades.countByWonTrueAndCreatedAtAfter(since60);
 
 		List<PaperTrade> last10 = trades.findTop10ByOrderByIdDesc();
 		long wins10 = last10.stream().filter(PaperTrade::isWon).count();
@@ -73,6 +77,7 @@ public class PerformanceService {
 		return new AccuracyView(
 				window(total, wins),
 				window(total30, wins30),
+				window(total60 - total30, wins60 - wins30),
 				window(last10.size(), wins10),
 				recommendations.count(),
 				decisions.countByDecision(Decision.TAKEN),
@@ -256,7 +261,10 @@ public class PerformanceService {
 	 * {@code oldSystem} / {@code currentSystem} split the paper book at {@code currentSystemSince} (when conviction
 	 * scoring and Agents 11-13 went live), so the current system is judged on its own trades, not the old coin flips.
 	 */
-	public record AccuracyView(WindowStat all, WindowStat last30d, WindowStat last10,
+	/**
+	 * {@code prior30d} is the 30 days before {@code last30d} (S-B1 trend: last 30d vs prior).
+	 */
+	public record AccuracyView(WindowStat all, WindowStat last30d, WindowStat prior30d, WindowStat last10,
 			long totalIssued, long taken, long declined, String graduationState, String graduationBadge,
 			EraStat oldSystem, EraStat currentSystem, java.time.LocalDate currentSystemSince) {
 	}

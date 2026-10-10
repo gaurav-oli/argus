@@ -1286,6 +1286,8 @@ export interface WindowStat {
 export interface AccuracyView {
   all: WindowStat;
   last30d: WindowStat;
+  /** The 30 days before {@link last30d} — for S-B1 trend (last 30d vs prior). */
+  prior30d: WindowStat;
   last10: WindowStat;
   totalIssued: number;
   taken: number;

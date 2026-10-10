@@ -120,7 +120,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | done |
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | done |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
-| 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | not-started |
+| 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | not-started |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | not-started |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
@@ -229,7 +229,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B1 — Trust scoreboard front-and-center
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P1
 - **Goal:** Operator can answer “is the agent getting better?” without digging only into Agents.
 - **Acceptance:**
@@ -237,7 +237,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - When sample size is too small, UI explicitly says results are not statistically meaningful.
   - Uses existing performance/calibration APIs where possible.
 - **Hints:** `AgentPerformance`, `PaperInvestorScoreboard`, `PerformanceController`, graduation APIs; Agents page already has pieces — lift a compact “trust strip.”
-- **Completed:** —
+- **Completed:** 2026-10-09 — `TrustScoreboard` on Home + Intelligence; accuracy API adds `prior30d` for 30d vs prior trend; sample-size copy when &lt;20 closed.
 - **Notes:** —
 
 ### S-B2 — Paper-validation bar (real-money gate messaging)

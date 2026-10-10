@@ -39,8 +39,9 @@ class PerformanceServiceTest {
 	void accuracyComputesWindowsAndFlagsSmallSamplesAsNotMeaningful() {
 		when(trades.count()).thenReturn(8L);
 		when(trades.countByWonTrue()).thenReturn(6L);
-		when(trades.countByCreatedAtAfter(any())).thenReturn(4L);
-		when(trades.countByWonTrueAndCreatedAtAfter(any())).thenReturn(3L);
+		// Calls: last30 total, then since60 total → prior = 7-4; wins similarly.
+		when(trades.countByCreatedAtAfter(any())).thenReturn(4L, 7L);
+		when(trades.countByWonTrueAndCreatedAtAfter(any())).thenReturn(3L, 5L);
 		when(trades.findTop10ByOrderByIdDesc()).thenReturn(List.of(trade(true), trade(false), trade(true)));
 		when(recommendations.count()).thenReturn(12L);
 		when(decisions.countByDecision(Decision.TAKEN)).thenReturn(5L);
@@ -52,6 +53,7 @@ class PerformanceServiceTest {
 		assertEquals(75, v.all().winRatePct());          // 6/8
 		assertFalse(v.all().statisticallyMeaningful());  // 8 < 20
 		assertEquals(75, v.last30d().winRatePct());       // 3/4
+		assertEquals(67, v.prior30d().winRatePct());      // (5-3)/(7-4) = 2/3
 		assertEquals(67, v.last10().winRatePct());        // 2/3 -> 66.7 rounds to 67
 		assertEquals(12, v.totalIssued());
 		assertEquals(5, v.taken());
