@@ -36,13 +36,14 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 | S-B6 | `969453c` | Playbook × style matrix (V89 tags), sample-guarded ±25% size tilt on paper entries, Agents heatmap |
 | S-B7 | `93c6f2f` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
-| S-C1 | see `feat(S-C1)` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
+| S-C1 | `40de6af` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
+| S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) is complete.
 
 ### Next story for the next agent
 
-**→ S-C2 — Admin uninvite / disable user / revoke-all sessions** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-C3 — Per-user AI / import soft quotas** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -167,8 +168,8 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | done |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | done |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | done |
-| 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
-| 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | not-started |
+| 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | done |
+| 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | in-progress |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | not-started |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | not-started |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
@@ -491,18 +492,24 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-C2 — Admin uninvite / disable user / revoke-all sessions
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P2
 - **Finding:** M5
 - **Goal:** Offboard a friend without SQL.
 - **Acceptance:** Admin API + Profile UI: disable/uninvite; revoke all sessions for that user; disabled user cannot sign in.
 - **Hints:** `AdminController`, `SessionStore.revokeAllForUser` already exists.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code, verification). Every acceptance criterion was already met by `1aa3f3c` ("revoke, restore or delete a person from Invite a friend", 2026-10-06, on this branch):
+  - **Admin API:** `POST /api/admin/users/revoke | restore | delete` and `/invites/remove`, all behind `requireAdmin`. An admin can't be removed.
+  - **Profile UI:** the People on Argus rows in `AdminUserStats.tsx` have the actions and show a "revoked" badge.
+  - **Sessions:** revoke and delete call `SessionStore.revokeAllForUser`.
+  - **Sign-in:** a revoked user can't sign in (`GoogleAuthController` answers "not invited"). `CurrentUserService.resolve` treats a revoked account as signed out.
+  - **Tests:** `AdminControllerTest` (revoke, restore, delete, admin-protected, invite removal) and `SessionManagementIntegrationTest.revokingAPersonEndsAllOfTheirSessionsAndNobodyElses` pass in the 1211/1211 run.
+  - This story fixed the stale "no endpoints to un-invite or remove a user" text in `docs/multi-user.md` §4.
+- **Notes:** A STOMP connection opened before a revoke stays up until the browser drops it, because the handshake was authorised then. It can't open a new one, and every REST call fails. Changing who is admin is still SQL-only (out of scope).
 
 ### S-C3 — Per-user AI / import soft quotas
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P2
 - **Finding:** M1
 - **Goal:** One invitee cannot burn the household Haiku/Gemma budget alone.
@@ -600,7 +607,7 @@ Use for evidence; **stories above are the work queue.**
 | M2 | Medium | Userless sessions authenticate | ~~S-A6~~ done |
 | M3 | Medium | Streams spine only 3 agents | (backlog — document hybrid; no story yet) |
 | M4 | Medium | PDF magic / push unsub IDOR | ~~S-A6~~ done |
-| M5 | Medium | No uninvite/disable | S-C2 |
+| M5 | Medium | No uninvite/disable | S-C2 (**done**) |
 | M6 | Medium | No error.tsx | S-D3 |
 | M7 | Medium | Jobs use investor defaults | (fold into B stories when touching briefings) |
 | L1–L4 | Low | Black Swan stub, Flyway admin email, markdown hrefs, CSRF | (backlog) |

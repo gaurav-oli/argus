@@ -100,8 +100,16 @@ owner's preferences allow (see §5.5).
   minutes (from `user_activity_day`, touched at most once a minute). **It returns no financial data**.
 - The other admin endpoints are `GET/POST /api/admin/invites` and `POST /api/admin/invites/send`, all
   behind `CurrentUserService.requireAdmin`.
-- There are **no** endpoints to un-invite someone, remove a user, or change who is admin. Today these
-  are done with SQL on `invited_email` / `app_user`.
+- **Offboarding** (`1aa3f3c`, story S-C2). These are buttons on each person's row in People on Argus:
+  - `POST /api/admin/users/revoke` locks someone out but keeps their data. It sets `revoked_at` and ends every
+    session they have (`SessionStore.revokeAllForUser`). A revoked person who tries to sign in gets the same
+    "not invited" answer as a stranger. Any session that outlived the revoke resolves to no user.
+  - `POST /api/admin/users/restore` gives them access back with their data intact.
+  - `POST /api/admin/users/delete` permanently removes the account, every per-user table
+    (`UserDeletionService.USER_TABLES`, guarded by a test) and their invite. It ends their sessions first.
+  - `POST /api/admin/invites/remove` withdraws an unused invite. It refuses (409) once they've joined.
+  - An admin can't be revoked or deleted through these endpoints.
+- There is still no endpoint to change who is admin. That is a one-line SQL update on `app_user.is_admin`.
 
 ## 5. Known gaps (security-relevant now that the app is public via Funnel)
 
