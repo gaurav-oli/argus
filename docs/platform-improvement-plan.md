@@ -35,13 +35,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
 | S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 | S-B6 | `969453c` | Playbook × style matrix (V89 tags), sample-guarded ±25% size tilt on paper entries, Agents heatmap |
-| S-B7 | see `feat(S-B7)` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
+| S-B7 | `93c6f2f` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) is complete.
 
 ### Next story for the next agent
 
-**→ S-C1 — Per-user journal, watchlist, notification prefs** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-C1 — Per-user journal, watchlist, notification prefs** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -165,7 +165,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | done |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | done |
-| 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
+| 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | in-progress |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | not-started |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | not-started |
@@ -458,7 +458,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-C1 — Per-user journal, watchlist, notification prefs
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P2
 - **Finding:** H3
 - **Goal:** One friend’s decisions/prefs don’t rewrite everyone else’s.
