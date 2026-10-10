@@ -41,7 +41,7 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
 | S-D1 | `6d1896d` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
 | S-D2 | `a9ede2a` | Paper-lab positioning in metadata, PWA manifest, Intelligence header and sign-in boot log |
-| S-D3 | see `feat(S-D3)` | Dashboard + global error boundaries; shell banner when refreshes fail ("showing data from …") |
+| S-D3 | `243bcdf` | Dashboard + global error boundaries; shell banner when refreshes fail ("showing data from …") |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
