@@ -30,13 +30,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-A5 | `a76e0b8` | All Haiku paths via `paidFallback` + Cost Governor (≥95% refuses paid) |
 | S-A6 | `89cd746` | Userless sessions fail auth; PDF `%PDF` magic; push unsub ownership |
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
-| S-B2 | *(this commit)* | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
+| S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 
 Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2` done.
 
 ### Next story for the next agent
 
-**→ S-B3 — Post-trade learning narrative (win and loss)** — status `not-started`. (S-B2 done 2026-10-09; awaiting owner go-ahead before S-B3.)
+**→ S-B3 — Post-trade learning narrative (win and loss)** — status `in-progress` (Claude Code, 2026-10-09).
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B2 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before S-B3.
 
@@ -155,7 +155,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
-| 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | not-started |
+| 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | in-progress |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
@@ -299,7 +299,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B3 — Post-trade learning narrative (win and loss)
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P1
 - **Goal:** Every closed paper trade produces a short structured lesson: why entered, outcome, what changed (or why no change).
 - **Acceptance:**
