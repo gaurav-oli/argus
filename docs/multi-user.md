@@ -217,7 +217,8 @@ Toronto time. Defaults per day:
 
 ### 5.12 Product (optional) — Take/Decline UI orphaned (C4 → story S-D1)
 
-`RecommendationCards` (Take/Decline, debate, personas) is unmounted after the Intelligence
+**Done (S-D1):** a lightweight Agree/Disagree (+ note) now sits on the Intelligence ticker page, stored
+as the person's own decision. `RecommendationCards` (Take/Decline, debate, personas) stays unmounted after the Intelligence
 rebuild. Owner vision prioritizes the **Investor paper → learn** loop; human Agree/Disagree is
 optional later (**S-D1** in `platform-improvement-plan.md`). See also `design-terminal-noir.md`.
 

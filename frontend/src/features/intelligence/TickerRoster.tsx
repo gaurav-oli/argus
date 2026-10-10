@@ -38,6 +38,9 @@ export interface RosterRow {
   /** The 0–100 model odds on the call's own side; null for a WATCH. */
   odds: number | null;
   reasons: string[];
+  /** S-D1: the recommendation behind the call, and the signed-in person's own Agree (TAKEN) / Disagree (DECLINED). */
+  recommendationId: number | null;
+  myDecision: "TAKEN" | "DECLINED" | null;
 }
 
 const ACTION_CLS: Record<string, string> = {
@@ -90,6 +93,8 @@ export function useTickerRoster() {
         signals: r.signals ?? [],
         odds: Math.round(100 * (r.direction === "BEARISH" ? r.bearProbability : r.bullProbability)),
         reasons: r.reasons ?? [],
+        recommendationId: r.id,
+        myDecision: r.myDecision ?? null,
       });
     }
     for (const w of watching) {
@@ -111,6 +116,8 @@ export function useTickerRoster() {
         signals: [],
         odds: null,
         reasons: [],
+        recommendationId: null,
+        myDecision: null,
       });
     }
     return [...byTicker.values()].sort((a, b) => {

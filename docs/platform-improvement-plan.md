@@ -39,12 +39,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C1 | `40de6af` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
 | S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
+| S-D1 | see `feat(S-D1)` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-D1 — Optional human Agree/Disagree overlay** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-D2 — Align chrome copy with paper-lab positioning** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -171,7 +172,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | done |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | done |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
-| 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | in-progress |
+| 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | not-started |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
 | 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
@@ -540,13 +541,22 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-D1 — Optional human Agree/Disagree overlay
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P3
 - **Finding:** C4 (deprioritized vs original review)
 - **Goal:** Operator can mark agreement with an agent call for regret overlay — **not** required for paper loop.
 - **Acceptance:** Lightweight Agree/Disagree (+ optional note) on Intelligence; stored separately from Investor paper decisions; does not block paper trading.
 - **Hints:** Reuse parts of `RecommendationCards` / `decideRecommendation` carefully; do not resurrect full old card stack unless useful.
-- **Completed:** —
+- **Completed:** 2026-10-10 (Claude Code). Frontend only; it rides on S-C1's per-user decisions.
+  - **Overlay:** `features/intelligence/AgreeOverlay.tsx` sits under the thesis panel on a BUY/AVOID ticker page.
+    - It has **Agree** / **Disagree** buttons plus an optional note (≤ 280 characters), saved through the existing `decideRecommendation` (Agree = TAKEN, Disagree = DECLINED).
+    - It shows "You marked this agree/disagree" from the card's `myDecision`.
+  - **Storage:** these are `source=USER` rows owned by the person (S-C1), separate from the Investor's AGENT decisions.
+    - They don't change the shared status or block the paper loop.
+    - Paper-trade closes mirror outcomes onto them (`recordOutcomeFromPaperTrade`), which gives the regret overlay.
+  - **Journal:** the Trade Journal labels your rows Agreed/Disagreed, while the Investor's rows read Taken/Declined.
+  - **Roster:** `RosterRow` gains `recommendationId` and `myDecision`.
+  - The old `RecommendationCards` stack stays unmounted.
 - **Notes:** Owner vision: paper loop is primary; this is optional.
 
 ### S-D2 — Align chrome copy with paper-lab positioning
@@ -613,7 +623,7 @@ Use for evidence; **stories above are the work queue.**
 | C1 | Critical | Session list/revoke unscoped | S-A2 (**done**) |
 | C2 | Critical | Unauthenticated WS portfolio queues | S-A1 (**done**) |
 | C3 | Critical | Ops mutators not admin-gated | S-A3 (**done**) |
-| C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 |
+| C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 (**done**) |
 | H1 | High | Global settings / Demo Mode | S-A3 (**done**) |
 | H2 | High | Broadcast push holdings hints | ~~S-A4~~ done |
 | H3 | High | Shared journal/watchlist/prefs | S-C1 (**done**) |

@@ -212,7 +212,8 @@ function JournalRow({ entry, logoUrl }: { entry: JournalEntryView; logoUrl: stri
               entry.decision === "TAKEN" ? "bg-gains/15 text-gains" : "bg-border/60 text-text-secondary",
             )}
           >
-            {entry.decision === "TAKEN" ? "Taken" : "Declined"}
+            {/* S-D1: your own rows are Agree/Disagree reads on the call; the Investor's are real paper trades. */}
+            {entry.source === "USER" ? (entry.decision === "TAKEN" ? "Agreed" : "Disagreed") : entry.decision === "TAKEN" ? "Taken" : "Declined"}
           </span>
         </td>
         <td className="py-1.5">

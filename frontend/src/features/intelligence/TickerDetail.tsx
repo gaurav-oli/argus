@@ -21,6 +21,7 @@ import { CandlestickChart } from "./CandlestickChart";
 import { DeepAnalysisForTicker } from "./DeepAnalysisCard";
 import { TickerLessons } from "@/features/agents/TradeLessons";
 import { ThesisPanel } from "./ThesisContext";
+import { AgreeOverlay } from "./AgreeOverlay";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
@@ -183,6 +184,9 @@ export function TickerDetail({
       </div>
 
       {roster && <ThesisPanel row={roster} paper={paper} pattern={pattern} />}
+      {roster?.recommendationId != null && roster.action !== "WATCH" && (
+        <AgreeOverlay key={roster.recommendationId} recommendationId={roster.recommendationId} initial={roster.myDecision} />
+      )}
 
       {roster?.deepVerdict?.atRisk && (
         <motion.div

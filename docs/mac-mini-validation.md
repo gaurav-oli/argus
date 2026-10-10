@@ -513,6 +513,13 @@ No migration. The new optional `ARGUS_QUOTA_*` env vars default to sensible caps
       analyses…" and their bar is full. Your own account is unaffected.
 - [ ] After midnight Toronto time the friend's counters are back to 0.
 
+## 23. Agree / Disagree overlay (S-D1, same branch)  ⏳ TODO on the Mini
+- [ ] **Intelligence → open a BUY/AVOID ticker:** "Your read · optional" shows Agree / Disagree.
+  - [ ] Picking one opens the note box. Save → "You marked this agree", and it's still marked after a reload.
+  - [ ] WATCH tickers show no overlay.
+- [ ] **Agents → Trade Journal:** the row reads **Agreed** with the "You" badge. A friend doesn't see it.
+- [ ] The paper Investor still trades that call as usual (its own row reads Taken).
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._
