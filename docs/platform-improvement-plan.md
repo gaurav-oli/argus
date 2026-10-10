@@ -446,9 +446,9 @@ Use for evidence; **stories above are the work queue.**
 | H4 | High | Chrome positioning | S-D2 |
 | H5 | High | Haiku fallbacks bypass budget | ~~S-A5~~ done |
 | M1 | Medium | No per-user AI quotas | S-C3 |
-| M2 | Medium | Userless sessions authenticate | S-A6 |
+| M2 | Medium | Userless sessions authenticate | ~~S-A6~~ done |
 | M3 | Medium | Streams spine only 3 agents | (backlog — document hybrid; no story yet) |
-| M4 | Medium | PDF magic / push unsub IDOR | S-A6 |
+| M4 | Medium | PDF magic / push unsub IDOR | ~~S-A6~~ done |
 | M5 | Medium | No uninvite/disable | S-C2 |
 | M6 | Medium | No error.tsx | S-D3 |
 | M7 | Medium | Jobs use investor defaults | (fold into B stories when touching briefings) |
