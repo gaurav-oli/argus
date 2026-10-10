@@ -11,6 +11,9 @@ public interface PushSubscriptionRepository extends JpaRepository<PushSubscripti
 
 	void deleteByEndpoint(String endpoint);
 
+	/** Ownership-scoped delete (S-A6 / M4) — never remove another user's subscription by endpoint. */
+	void deleteByEndpointAndUserId(String endpoint, Long userId);
+
 	/** This person's own registered device(s) — for a personal push (e.g. their own Briefing). */
 	List<PushSubscription> findByUserId(Long userId);
 }

@@ -146,7 +146,7 @@ class SessionManagementIntegrationTest {
 
 	@Test
 	void validateNeverResurrectsAKilledOrExpiredSession() {
-		String id = sessionStore.create("Test");
+		String id = sessionStore.create("Test", 1L);
 		// Simulate the session being remote-killed / idle-expired out from under an in-flight request.
 		redis.delete(SessionStore.KEY_PREFIX + id);
 		org.junit.jupiter.api.Assertions.assertFalse(sessionStore.validate(id),
@@ -154,5 +154,12 @@ class SessionManagementIntegrationTest {
 		org.junit.jupiter.api.Assertions.assertFalse(
 				Boolean.TRUE.equals(redis.hasKey(SessionStore.KEY_PREFIX + id)),
 				"validate must not recreate the key (no zombie session)");
+	}
+
+	@Test
+	void userlessSessionDoesNotValidate() {
+		String id = sessionStore.create("legacy-pin"); // no userId
+		org.junit.jupiter.api.Assertions.assertFalse(sessionStore.validate(id),
+				"S-A6: sessions without userId must not authenticate");
 	}
 }

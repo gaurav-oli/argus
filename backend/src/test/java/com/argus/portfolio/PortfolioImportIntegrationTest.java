@@ -163,6 +163,17 @@ class PortfolioImportIntegrationTest {
 	}
 
 	@Test
+	void spoofedPdfFilenameWithoutMagicIsRejected() throws Exception {
+		Cookie session = login();
+		MockMultipartFile spoof = new MockMultipartFile("file", "statement.pdf",
+				MediaType.APPLICATION_PDF_VALUE, "not-actually-a-pdf".getBytes());
+
+		mockMvc.perform(multipart("/api/portfolio/imports").file(spoof).cookie(session))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+	}
+
+	@Test
 	void emptyHoldingsPdfSucceedsWithAMessageAndNoPositions() throws Exception {
 		Cookie session = login();
 		mockMvc.perform(multipart("/api/portfolio/imports")

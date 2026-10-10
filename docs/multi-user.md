@@ -156,11 +156,10 @@ V68 seeds it and V69–V72 backfill to it. V70 and V71 fail on a fresh database 
 portfolio or briefing rows and lacks that admin user. Prefer env/Flyway placeholders; avoid
 committing a personal address.
 
-### 5.8 Medium — Userless sessions still authenticate (M2)
+### 5.8 Medium — Userless sessions still authenticate (M2) — **fixed (S-A6)**
 
-`SessionStore.validate` only checks that the Redis key exists, not that `userId` is set. Filter
-sets `CurrentUserContext` to null but still allows the request. `/api/auth/status` can report
-`authenticated=true` with `user=null`. Those sessions can still hit shared/global endpoints.
+`SessionStore.validate` requires a `userId` field. `/api/auth/status` reports authenticated only
+when a non-revoked `AppUser` resolves — never `authenticated=true` with `user=null`.
 
 ### 5.9 High — Cost Governor hole on Haiku fallbacks (H5) — **fixed (S-A5)**
 
@@ -173,11 +172,10 @@ Every Haiku path in `DefaultModelGateway` goes through `paidFallback`, which che
 Ask-AI, debate, research, deep-analysis, and LLM import paths are session-gated only. Shared
 monthly Haiku budget. `escalate()` also bypasses the BIG-tier concurrency semaphore.
 
-### 5.11 Medium — Push unsubscribe IDOR + weak PDF check (M4)
+### 5.11 Medium — Push unsubscribe IDOR + weak PDF check (M4) — **fixed (S-A6)**
 
-- `PushController` unsubscribe deletes by push endpoint with no ownership check.
-- Statement upload `isPdf` accepts content-type **or** `.pdf` filename — no `%PDF` magic bytes
-  (15MB cap still applies).
+- Push unsubscribe deletes by `(endpoint, userId)` for the signed-in caller only.
+- Statement upload requires `%PDF` magic bytes (content-type / `.pdf` filename alone rejected).
 
 ### 5.12 Product (optional) — Take/Decline UI orphaned (C4 → story S-D1)
 

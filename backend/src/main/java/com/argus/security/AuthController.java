@@ -40,11 +40,10 @@ public class AuthController {
 
 	@GetMapping("/status")
 	public AuthStatus status(HttpServletRequest request) {
-		boolean authenticated = sessions.validate(SessionCookie.read(request));
-		AuthStatus.UserView user = authenticated
-				? currentUser.resolve(request).map(AuthStatus.UserView::from).orElse(null)
-				: null;
-		return new AuthStatus(authenticated, user);
+		// S-A6 / M2: never report authenticated=true with user=null — require a resolvable AppUser.
+		return currentUser.resolve(request)
+				.map(u -> new AuthStatus(true, AuthStatus.UserView.from(u)))
+				.orElseGet(() -> new AuthStatus(false, null));
 	}
 
 	@PostMapping("/logout")

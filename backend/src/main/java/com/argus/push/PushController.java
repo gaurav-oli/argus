@@ -61,11 +61,12 @@ public class PushController {
 	}
 
 	@PostMapping("/unsubscribe")
-	public void unsubscribe(@RequestBody UnsubscribeBody body) {
+	public void unsubscribe(@RequestBody UnsubscribeBody body, HttpServletRequest request) {
 		if (body == null || body.endpoint() == null || body.endpoint().isBlank()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endpoint is required");
 		}
-		push.unsubscribe(body.endpoint());
+		Long userId = currentUser.require(request).getId();
+		push.unsubscribe(body.endpoint(), userId);
 	}
 
 	/** Empty {@code publicKey} signals push is unconfigured server-side, so the UI can explain why. */

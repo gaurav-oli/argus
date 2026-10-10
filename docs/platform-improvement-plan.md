@@ -119,7 +119,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | done |
 | 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | done |
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | done |
-| 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | not-started |
+| 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | not-started |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | not-started |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | not-started |
@@ -211,7 +211,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-A6 — Reject userless sessions; PDF magic; push unsubscribe ownership
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P0
 - **Findings:** M2, M4
 - **Goal:** Close leftover single-user auth holes.
@@ -220,8 +220,8 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - PDF upload requires `%PDF` magic (not only content-type/filename).
   - Push unsubscribe only deletes the current user’s subscription for that endpoint.
 - **Hints:** `SessionStore.validate`, `SessionAuthFilter`, `PortfolioImportController.isPdf`, `PushController` / `PushService`.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 — `validate` requires `userId`; `/status` only authenticated when AppUser resolves; PDF `%PDF` magic; push unsubscribe scoped by `userId`.
+- **Notes:** Phase A complete.
 
 ---
 

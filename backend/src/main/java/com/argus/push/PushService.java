@@ -56,10 +56,16 @@ public class PushService {
 		}, () -> subscriptions.save(new PushSubscription(endpoint, p256dh, auth, userId)));
 	}
 
-	/** Drop a device's subscription (e.g. the browser revoked permission). */
+	/**
+	 * Drop <b>this user's</b> subscription for the endpoint (S-A6 / M4). Another person's endpoint
+	 * is a no-op — no cross-user delete.
+	 */
 	@Transactional
-	public void unsubscribe(String endpoint) {
-		subscriptions.deleteByEndpoint(endpoint);
+	public void unsubscribe(String endpoint, Long userId) {
+		if (endpoint == null || endpoint.isBlank() || userId == null) {
+			return;
+		}
+		subscriptions.deleteByEndpointAndUserId(endpoint, userId);
 	}
 
 	/**

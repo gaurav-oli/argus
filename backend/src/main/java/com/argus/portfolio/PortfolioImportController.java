@@ -136,13 +136,23 @@ public class PortfolioImportController {
 	public record FxConfirmation(BigDecimal rate, LocalDate date) {
 	}
 
+	/**
+	 * S-A6 / M4: require {@code %PDF} magic bytes — content-type or a {@code .pdf} filename alone
+	 * is not enough (spoofable).
+	 */
 	private static boolean isPdf(MultipartFile file) {
-		String contentType = file.getContentType();
-		if (MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(contentType)) {
-			return true;
+		try {
+			byte[] bytes = file.getBytes();
+			return looksLikePdf(bytes);
+		} catch (IOException ex) {
+			return false;
 		}
-		String name = file.getOriginalFilename();
-		return name != null && name.toLowerCase().endsWith(".pdf");
+	}
+
+	/** True when the payload starts with the PDF magic header. */
+	static boolean looksLikePdf(byte[] bytes) {
+		return bytes != null && bytes.length >= 4
+				&& bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F';
 	}
 
 	private static String originalName(MultipartFile file) {

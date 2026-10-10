@@ -92,8 +92,10 @@ public class SessionStore {
 	}
 
 	/**
-	 * True if the session exists; atomically refreshes last-seen and (for finite timeouts) slides
-	 * the TTL. Never resurrects a missing key (see {@link #TOUCH}).
+	 * True if the session exists <b>and</b> has a signed-in {@code userId} (S-A6 / M2); atomically
+	 * refreshes last-seen and (for finite timeouts) slides the TTL. Never resurrects a missing key
+	 * (see {@link #TOUCH}). Legacy PIN-era sessions without {@code userId} fail — they must not
+	 * authenticate API requests or report {@code authenticated=true} with {@code user=null}.
 	 */
 	public boolean validate(String id) {
 		if (id == null || id.isBlank()) {
@@ -101,7 +103,10 @@ public class SessionStore {
 		}
 		long ttlMillis = settings.sessionTimeout().map(Duration::toMillis).orElse(0L);
 		Long alive = redis.execute(TOUCH, List.of(key(id)), Instant.now().toString(), Long.toString(ttlMillis));
-		return alive != null && alive == 1L;
+		if (alive == null || alive != 1L) {
+			return false;
+		}
+		return redis.opsForHash().get(key(id), F_USER_ID) != null;
 	}
 
 	/** Destroy a session (logout / remote kill). Idempotent. */

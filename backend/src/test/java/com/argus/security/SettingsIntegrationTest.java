@@ -109,7 +109,7 @@ class SettingsIntegrationTest {
 	@Test
 	void sessionStoreSetsTtlForFiniteTimeout() {
 		settingsService.setSessionTimeout(Optional.of(Duration.ofSeconds(120)));
-		String id = sessionStore.create();
+		String id = sessionStore.create("test", 1L);
 		Long ttl = redis.getExpire(SessionStore.KEY_PREFIX + id);
 		assertNotNull(ttl);
 		assertTrue(ttl > 0 && ttl <= 120, "finite timeout should set a positive TTL, was " + ttl);
@@ -118,7 +118,7 @@ class SettingsIntegrationTest {
 	@Test
 	void sessionStoreSetsNoExpiryForNever() {
 		settingsService.setSessionTimeout(Optional.empty());
-		String id = sessionStore.create();
+		String id = sessionStore.create("test", 1L);
 		// -1 = key exists with no expiry.
 		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id));
 		assertTrue(sessionStore.validate(id), "Never session should validate");
@@ -127,7 +127,7 @@ class SettingsIntegrationTest {
 	@Test
 	void switchingToNeverPersistsExistingSession() {
 		settingsService.setSessionTimeout(Optional.of(Duration.ofSeconds(120)));
-		String id = sessionStore.create();
+		String id = sessionStore.create("test", 1L);
 		assertTrue(redis.getExpire(SessionStore.KEY_PREFIX + id) > 0, "finite session should have a TTL");
 		settingsService.setSessionTimeout(Optional.empty()); // → Never
 		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id),
@@ -137,7 +137,7 @@ class SettingsIntegrationTest {
 	@Test
 	void switchingToFiniteAppliesTtlToExistingSession() {
 		settingsService.setSessionTimeout(Optional.empty());
-		String id = sessionStore.create();
+		String id = sessionStore.create("test", 1L);
 		assertEquals(-1L, redis.getExpire(SessionStore.KEY_PREFIX + id));
 		settingsService.setSessionTimeout(Optional.of(Duration.ofSeconds(120))); // → finite
 		Long ttl = redis.getExpire(SessionStore.KEY_PREFIX + id);
