@@ -26,6 +26,14 @@ public interface PositionRepository extends JpaRepository<Position, Long> {
 	List<String> allTickersAcrossAllUsers();
 
 	/**
+	 * User ids that hold {@code ticker} (any quantity) — for targeted pushes (S-A4). Native so it
+	 * works from background jobs with no {@code CurrentUserContext} (bypasses {@code @TenantId}).
+	 */
+	@Query(value = "select distinct user_id from positions where upper(ticker) = upper(:ticker)",
+			nativeQuery = true)
+	List<Long> userIdsHoldingTicker(String ticker);
+
+	/**
 	 * As {@link #allTickersAcrossAllUsers()}, but also carrying each ticker's company name (also public,
 	 * non-financial information) — for Agent 3's internet-ingestion search queries, which run as a
 	 * background job with no signed-in user on the thread and need the same cross-user escape hatch.

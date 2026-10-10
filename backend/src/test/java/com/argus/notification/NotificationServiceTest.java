@@ -11,8 +11,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.argus.portfolio.PositionRepository;
 import com.argus.push.PushService;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -23,8 +25,10 @@ class NotificationServiceTest {
 	private final PushService push = mock(PushService.class);
 	private final NotificationPreferencesService prefs = mock(NotificationPreferencesService.class);
 	private final DeferredNotificationRepository deferred = mock(DeferredNotificationRepository.class);
+	private final PositionRepository positions = mock(PositionRepository.class);
 	private final NotificationProperties props = new NotificationProperties(0.60, 0.02, 1800);
-	private final NotificationService service = new NotificationService(props, dedup, push, prefs, deferred);
+	private final NotificationService service =
+			new NotificationService(props, dedup, push, prefs, deferred, positions);
 
 	@BeforeEach
 	void passDedupByDefault() {
@@ -32,25 +36,49 @@ class NotificationServiceTest {
 		when(dedup.accept(any(), any(), anyDouble(), any())).thenReturn(true);
 		// Preferences allow everything by default (these tests predate prefs and assert routing behaviour).
 		when(prefs.allow(any(), any(), anyBoolean())).thenReturn(true);
+		when(positions.userIdsHoldingTicker(anyString())).thenReturn(List.of(42L));
 	}
 
 	@Test
-	void criticalPushesWithRequireAckAndBypassesGate() {
+	void criticalTickerPushGoesOnlyToHoldersNotBroadcast() {
 		// confidence/impact are zero — below the gate — but CRITICAL must still fire.
 		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.CRITICAL, "ABCD", "STRANGER",
 				0.0, 0.0, "danger", "body", "/intelligence"));
 
 		assertEquals(NotificationOutcome.PUSHED, out);
-		verify(push).sendToAll("danger", "body", "/intelligence", true);
+		verify(push).sendToUser(eq(42L), eq("danger"), eq("body"), eq("/intelligence"), eq(true));
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
 	}
 
 	@Test
-	void importantAbovethresholdsPushesWithoutRequireAck() {
+	void importantTickerPushGoesOnlyToHolders() {
 		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.IMPORTANT, "AAPL", "BULLISH",
 				0.80, 0.10, "buy", "body", "/recs"));
 
 		assertEquals(NotificationOutcome.PUSHED, out);
-		verify(push).sendToAll("buy", "body", "/recs", false);
+		verify(push).sendToUser(eq(42L), eq("buy"), eq("body"), eq("/recs"), eq(false));
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+	}
+
+	@Test
+	void platformWideAlertWithoutTickerStillBroadcasts() {
+		NotificationOutcome out = service.notify(Notification.of(UrgencyTier.CRITICAL, "platform", "body", "/ops"));
+
+		assertEquals(NotificationOutcome.PUSHED, out);
+		verify(push).sendToAll("platform", "body", "/ops", true);
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
+	}
+
+	@Test
+	void tickerWithNoHoldersDoesNotBroadcast() {
+		when(positions.userIdsHoldingTicker("ABCD")).thenReturn(List.of());
+
+		NotificationOutcome out = service.notify(Notification.forTicker(UrgencyTier.CRITICAL, "ABCD", "STRANGER",
+				0.99, 0.50, "danger", "body", "/intelligence"));
+
+		assertEquals(NotificationOutcome.PUSHED, out);
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
 	@Test
@@ -60,6 +88,7 @@ class NotificationServiceTest {
 
 		assertEquals(NotificationOutcome.SUPPRESSED_GATE, out);
 		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
 	@Test
@@ -69,6 +98,7 @@ class NotificationServiceTest {
 
 		assertEquals(NotificationOutcome.SUPPRESSED_GATE, out);
 		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
 	@Test
@@ -108,5 +138,6 @@ class NotificationServiceTest {
 
 		assertEquals(NotificationOutcome.SUPPRESSED_DEDUP, out);
 		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 }

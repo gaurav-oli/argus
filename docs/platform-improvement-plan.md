@@ -117,7 +117,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 1 | S-A1 | Lock WebSocket: auth + block raw portfolio queues | A — Security | done |
 | 2 | S-A2 | Scope session list/revoke to the signed-in user | A — Security | done |
 | 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | done |
-| 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | not-started |
+| 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | done |
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | not-started |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | not-started |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | not-started |
@@ -185,7 +185,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-A4 — Route portfolio-derived pushes to `sendToUser`
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P0
 - **Finding:** H2
 - **Goal:** Alerts that can hint at holdings go only to the affected user; true market-wide news may still broadcast.
@@ -193,8 +193,8 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Inventory of `sendToAll` call sites; portfolio-linked paths use `sendToUser`.
   - HoldingGuard-style path remains correct; `/test` push is admin-only or user-scoped.
 - **Hints:** `NotificationService`, `PushController`, digest/breaking/cleanup schedulers.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 — ticker-linked `NotificationService` + holdings-impact breaking news → `sendToUser` via `PositionRepository.userIdsHoldingTicker`; `/api/push/test` scoped to caller; macro/crisis breaking, digest, cleanup remain `sendToAll`.
+- **Notes:** Same feature branch.
 
 ### S-A5 — Gate all Haiku paths on Cost Governor
 
@@ -441,7 +441,7 @@ Use for evidence; **stories above are the work queue.**
 | C3 | Critical | Ops mutators not admin-gated | S-A3 (**done**) |
 | C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 |
 | H1 | High | Global settings / Demo Mode | S-A3 (**done**) |
-| H2 | High | Broadcast push holdings hints | S-A4 |
+| H2 | High | Broadcast push holdings hints | ~~S-A4~~ done |
 | H3 | High | Shared journal/watchlist/prefs | S-C1 |
 | H4 | High | Chrome positioning | S-D2 |
 | H5 | High | Haiku fallbacks bypass budget | S-A5 |

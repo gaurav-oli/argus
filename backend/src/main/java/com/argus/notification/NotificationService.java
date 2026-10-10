@@ -1,7 +1,9 @@
 package com.argus.notification;
 
+import com.argus.portfolio.PositionRepository;
 import com.argus.push.PushService;
 import java.time.Duration;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,8 +18,8 @@ import org.springframework.stereotype.Service;
  *   <li><b>Tier routing</b> (Story 8.2): CRITICAL/IMPORTANT push now; NORMAL → briefing; INFO → digest.</li>
  * </ol>
  *
- * Suppressed and deduped alerts are logged (per the acceptance criteria). The actual Web Push fan-out
- * is delegated to {@link PushService}.
+ * <p>S-A4: ticker-linked pushes go only to people who hold that ticker ({@link PushService#sendToUser});
+ * platform-wide alerts (no ticker) may still {@link PushService#sendToAll}.
  */
 @Service
 public class NotificationService {
@@ -29,14 +31,17 @@ public class NotificationService {
 	private final PushService push;
 	private final NotificationPreferencesService prefs;
 	private final DeferredNotificationRepository deferred;
+	private final PositionRepository positions;
 
 	public NotificationService(NotificationProperties props, NotificationDedupStore dedup, PushService push,
-			NotificationPreferencesService prefs, DeferredNotificationRepository deferred) {
+			NotificationPreferencesService prefs, DeferredNotificationRepository deferred,
+			PositionRepository positions) {
 		this.props = props;
 		this.dedup = dedup;
 		this.push = push;
 		this.prefs = prefs;
 		this.deferred = deferred;
+		this.positions = positions;
 	}
 
 	/** Run a candidate notification through dedup → gate → tier routing. Returns what happened. */
@@ -96,6 +101,18 @@ public class NotificationService {
 				n.tier() == UrgencyTier.CRITICAL)) {
 			log.info("Notification suppressed by preferences: '{}' ({})", n.title(), n.tier());
 			return NotificationOutcome.SUPPRESSED_PREFS;
+		}
+		if (n.ticker() != null && !n.ticker().isBlank()) {
+			List<Long> holders = positions.userIdsHoldingTicker(n.ticker());
+			if (holders.isEmpty()) {
+				log.info("Notification '{}' for {} — no holders; not broadcasting to other users",
+						n.title(), n.ticker());
+				return NotificationOutcome.PUSHED;
+			}
+			for (Long userId : holders) {
+				push.sendToUser(userId, n.title(), n.body(), n.url(), requireAck);
+			}
+			return NotificationOutcome.PUSHED;
 		}
 		push.sendToAll(n.title(), n.body(), n.url(), requireAck);
 		return NotificationOutcome.PUSHED;

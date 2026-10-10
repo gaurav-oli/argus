@@ -45,15 +45,15 @@ public class PushController {
 	}
 
 	/**
-	 * Send a test notification to every subscribed device — used to verify delivery end-to-end from the
-	 * settings screen. {@code delivered} < {@code devices} means some subscriptions are failing (e.g. a
-	 * stale VAPID key); the server logs the HTTP status per failure.
+	 * Send a test notification to <b>this user's</b> devices only (S-A4) — used to verify delivery
+	 * from the settings screen without pinging every friend.
 	 */
 	@PostMapping("/test")
-	public TestResult test() {
+	public TestResult test(HttpServletRequest request) {
+		Long userId = currentUser.require(request).getId();
 		long devices = push.deviceCount();
-		int delivered = push.sendToAll("Argus test 🔔", "Alerts are working — you'll get market news here.", "/",
-				true);
+		int delivered = push.sendToUser(userId, "Argus test 🔔",
+				"Alerts are working — you'll get market news here.", "/", true);
 		return new TestResult(push.isConfigured(), devices, delivered);
 	}
 

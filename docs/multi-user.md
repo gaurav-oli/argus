@@ -134,11 +134,11 @@ These mutators now call `requireAdmin`:
 
 Ops GETs (summary, backup status, last cleanup, etc.) stay session-gated for the dashboard.
 
-### 5.4 High — Broadcast pushes can leak holdings signals (H2)
+### 5.4 High — Broadcast pushes can leak holdings signals (H2) — **fixed (S-A4)**
 
-`NotificationService` fans out with `sendToAll` after shared preference checks. Also: cleanup
-scheduler, weekly digest, breaking-news alerts, `PushController /test`. HoldingGuard correctly uses
-`sendToUser` — keep that pattern for portfolio-derived alerts.
+Ticker-linked `NotificationService` alerts and holdings-impact breaking news go only to
+`PositionRepository.userIdsHoldingTicker` via `sendToUser`. `/api/push/test` pings the caller only.
+True market-wide paths (macro/crisis breaking, weekly digest, monthly cleanup) still use `sendToAll`.
 
 ### 5.5 High — Shared journal, watchlist, notification preferences (H3)
 

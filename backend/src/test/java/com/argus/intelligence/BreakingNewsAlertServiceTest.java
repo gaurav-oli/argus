@@ -3,6 +3,7 @@ package com.argus.intelligence;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -12,8 +13,10 @@ import static org.mockito.Mockito.when;
 import com.argus.cost.CostGovernor;
 import com.argus.model.ModelGateway;
 import com.argus.notification.NotificationPreferencesService;
+import com.argus.portfolio.PositionRepository;
 import com.argus.push.PushService;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -30,13 +33,14 @@ class BreakingNewsAlertServiceTest {
 	private final CostGovernor costGovernor = mock(CostGovernor.class);
 	private final NotificationPreferencesService prefs = mock(NotificationPreferencesService.class);
 	private final MacroRelevanceTagger macroTagger = new MacroRelevanceTagger();
+	private final PositionRepository positions = mock(PositionRepository.class);
 
 	// llmConfirm off by default so tests exercise the deterministic gate, not the LLM confirm step.
 	private final BreakingNewsProperties props =
 			new BreakingNewsProperties(true, 0.5, 0.45, 4, 180, 6, false);
 
 	private final BreakingNewsAlertService service =
-			new BreakingNewsAlertService(alerts, push, gateway, costGovernor, prefs, props, macroTagger);
+			new BreakingNewsAlertService(alerts, push, gateway, costGovernor, prefs, props, macroTagger, positions);
 
 	{
 		when(prefs.allow(any(), any(), anyBoolean())).thenReturn(true);
@@ -45,8 +49,13 @@ class BreakingNewsAlertServiceTest {
 	}
 
 	private static NewsArticle article(String headline, SentimentLabel label, double score, double relevance) {
+		return article(headline, label, score, relevance, new String[0]);
+	}
+
+	private static NewsArticle article(String headline, SentimentLabel label, double score, double relevance,
+			String[] tickers) {
 		NewsArticle a = new NewsArticle("Reuters", "id-" + Math.random(), "u", headline, null,
-				Instant.now(), new String[0]);
+				Instant.now(), tickers);
 		a.applySentiment(new SentimentAnalysis(label, score, relevance, false), Instant.now());
 		return a;
 	}
@@ -61,6 +70,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
 	}
 
 	@Test
@@ -71,6 +81,7 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
 	}
 
 	@Test
@@ -81,16 +92,33 @@ class BreakingNewsAlertServiceTest {
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
+		verify(push).sendToAll(eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
 	}
 
 	@Test
-	void highImpactHoldingsStoryAlertsWithNoTopicMatchAtAll() {
+	void highImpactHoldingsStoryAlertsOnlyHolders() {
+		when(positions.userIdsHoldingTicker("AAPL")).thenReturn(List.of(7L, 9L));
 		NewsArticle a = article("AAPL beats quarterly earnings estimates by wide margin",
-				SentimentLabel.BULLISH, 0.9, 0.8); // impact 0.72 ≥ threshold 0.5
+				SentimentLabel.BULLISH, 0.9, 0.8, new String[] { "AAPL" }); // impact 0.72 ≥ threshold 0.5
 
 		service.evaluate(a);
 
 		verify(alerts, times(1)).save(any());
+		verify(push).sendToUser(eq(7L), eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
+		verify(push).sendToUser(eq(9L), eq("⚠️ Market alert"), anyString(), eq("/intelligence"), eq(true));
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+	}
+
+	@Test
+	void highImpactWithNoTickersDoesNotBroadcast() {
+		NewsArticle a = article("AAPL beats quarterly earnings estimates by wide margin",
+				SentimentLabel.BULLISH, 0.9, 0.8); // impact 0.72 but empty tickers
+
+		service.evaluate(a);
+
+		verify(alerts, times(1)).save(any());
+		verify(push, never()).sendToAll(anyString(), anyString(), anyString(), anyBoolean());
+		verify(push, never()).sendToUser(any(), anyString(), anyString(), anyString(), anyBoolean());
 	}
 
 	@Test
@@ -118,7 +146,7 @@ class BreakingNewsAlertServiceTest {
 	void disabledPropertySkipsEvaluationEntirely() {
 		BreakingNewsProperties off = new BreakingNewsProperties(false, 0.5, 0.45, 4, 180, 6, false);
 		BreakingNewsAlertService disabled =
-				new BreakingNewsAlertService(alerts, push, gateway, costGovernor, prefs, off, macroTagger);
+				new BreakingNewsAlertService(alerts, push, gateway, costGovernor, prefs, off, macroTagger, positions);
 		NewsArticle a = article("Trump announces new tariffs", SentimentLabel.BEARISH, -0.6, 0.0);
 
 		disabled.evaluate(a);

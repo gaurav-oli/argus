@@ -4,9 +4,11 @@ import com.argus.cost.CostGovernor;
 import com.argus.model.ModelGateway;
 import com.argus.notification.NotificationPreferencesService;
 import com.argus.notification.NotificationPreferencesService.Category;
+import com.argus.portfolio.PositionRepository;
 import com.argus.push.PushService;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -47,10 +49,11 @@ public class BreakingNewsAlertService {
 	private final NotificationPreferencesService prefs;
 	private final BreakingNewsProperties props;
 	private final MacroRelevanceTagger macroTagger;
+	private final PositionRepository positions;
 
 	public BreakingNewsAlertService(BreakingAlertRepository alerts, PushService push, ModelGateway gateway,
 			CostGovernor costGovernor, NotificationPreferencesService prefs, BreakingNewsProperties props,
-			MacroRelevanceTagger macroTagger) {
+			MacroRelevanceTagger macroTagger, PositionRepository positions) {
 		this.alerts = alerts;
 		this.push = push;
 		this.gateway = gateway;
@@ -58,6 +61,7 @@ public class BreakingNewsAlertService {
 		this.prefs = prefs;
 		this.props = props;
 		this.macroTagger = macroTagger;
+		this.positions = positions;
 	}
 
 	/** Evaluate a freshly-analyzed article; push + record it if it clears the bar and the guards. */
@@ -116,8 +120,36 @@ public class BreakingNewsAlertService {
 			log.info("Breaking-news recorded but push suppressed by preferences (off/muted/quiet): {}", headline);
 			return;
 		}
-		int delivered = push.sendToAll("⚠️ Market alert", headline, "/intelligence", true);
+		// S-A4: holdings-impact alerts go only to people who hold the tagged tickers — never broadcast
+		// "High impact for your holdings" to friends who don't hold them. True market-wide breaking
+		// (macro/crisis) may still fan out to everyone.
+		int delivered;
+		if (strongForHoldings) {
+			delivered = pushToHolders(article.getTickers(), headline);
+		} else {
+			delivered = push.sendToAll("⚠️ Market alert", headline, "/intelligence", true);
+		}
 		log.info("Breaking-news alert pushed to {} device(s) [{}]: {}", delivered, reason, headline);
+	}
+
+	/** Push a holdings-linked breaking alert only to owners of the given tickers (S-A4). */
+	private int pushToHolders(String[] tickers, String headline) {
+		if (tickers == null || tickers.length == 0) {
+			log.info("Holdings-impact breaking news had no tickers — not broadcasting: {}", headline);
+			return 0;
+		}
+		Set<Long> recipients = new HashSet<>();
+		for (String ticker : tickers) {
+			if (ticker == null || ticker.isBlank() || MacroRelevanceTagger.MACRO_TAG.equalsIgnoreCase(ticker)) {
+				continue;
+			}
+			recipients.addAll(positions.userIdsHoldingTicker(ticker));
+		}
+		int delivered = 0;
+		for (Long userId : recipients) {
+			delivered += push.sendToUser(userId, "⚠️ Market alert", headline, "/intelligence", true);
+		}
+		return delivered;
 	}
 
 	/**

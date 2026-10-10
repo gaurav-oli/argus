@@ -102,15 +102,21 @@ public class PushService {
 
 	/**
 	 * Send a notification to only ONE person's own registered device(s) — for personal content like
-	 * their morning Briefing, which must never show up on a friend's phone (unlike {@link #sendToAll},
-	 * which is for shared content like breaking market news). Same pruning/no-op behavior as sendToAll.
+	 * their morning Briefing or a holdings-linked alert (S-A4), which must never show up on a friend's
+	 * phone (unlike {@link #sendToAll}, which is for shared market-wide content).
 	 */
 	@Transactional
 	public int sendToUser(Long userId, String title, String body, String url) {
+		return sendToUser(userId, title, body, url, false);
+	}
+
+	/** As {@link #sendToUser(Long, String, String, String)} with CRITICAL-style {@code requireInteraction}. */
+	@Transactional
+	public int sendToUser(Long userId, String title, String body, String url, boolean requireInteraction) {
 		if (!props.isConfigured() || userId == null) {
 			return 0;
 		}
-		String payload = payload(title, body, url, false);
+		String payload = payload(title, body, url, requireInteraction);
 		int sent = 0;
 		for (PushSubscription sub : subscriptions.findByUserId(userId)) {
 			switch (sender.send(sub, payload)) {
