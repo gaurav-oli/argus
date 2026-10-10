@@ -16,7 +16,7 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 ## Session checkpoint (read this first)
 
 **Branch:** `feature/platform-improvement-s-a1-websocket-auth` (do **not** merge to `main` until the owner asks).  
-**Tip of branch (pushed):** `3b43977` — `feat(S-B1): put paper trust scoreboard on Home and Intelligence`  
+**Tip of branch (pushed):** `28ba426` — `docs: add session checkpoint for next-agent handoff after S-B1`  
 **Do not start a new feature branch** for the remaining stories — keep committing on this same branch.
 
 ### Done on this branch (do not redo)
@@ -35,7 +35,7 @@ Phase **A (security)** is complete. Phase **B** has started (`S-B1` done).
 
 ### Next story for the next agent
 
-**→ S-B2 — Paper-validation bar (explicit “not real money until bar clears”)** — status `not-started`.
+**→ S-B2 — Paper-validation bar (explicit “not real money until bar clears”)** — status `in-progress` (Claude Code, 2026-10-09).
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B2 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before S-B3.
 
@@ -153,7 +153,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | done |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
-| 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | not-started |
+| 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | in-progress |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | not-started |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
@@ -274,7 +274,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B2 — Paper-validation bar (real-money gate messaging)
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P1
 - **Depends on:** S-B1 helpful but not required
 - **Goal:** Product clearly framed as paper lab until a configurable trust bar clears.
@@ -503,6 +503,6 @@ When renaming/moving this plan, update links in:
 ## Next action for any new agent
 
 1. Open this file.  
-2. Find the first story with Status `not-started` (currently **S-A1**).  
+2. Find the first story with Status `in-progress` or `not-started` (see the Story board).  
 3. Confirm with the user if the session doesn’t already say to start.  
-4. Set `in-progress` → implement → `done` → **ask before S-A2**.
+4. Set `in-progress` → implement → `done` → **ask before the next story**.
