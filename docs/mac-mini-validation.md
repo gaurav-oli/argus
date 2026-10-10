@@ -482,6 +482,15 @@ Migration **V89** adds `simulated_trades.playbook` and `style_fit`. There are no
 - [ ] Once a playbook has 10+ closed trades in a bucket, an entry on that kind of name reads "good fit, ×1.25" or
       "poor fit, ×0.75", and the trade amount moves to match.
 
+## 20. Strategy sandbox (S-B7, same branch)  ⏳ TODO on the Mini
+Migration **V90** adds `strategy_sandbox` and `strategy_shadow_call`. There are no env vars.
+- [ ] After the deploy, `select acronym, state from strategy_sandbox` lists every previously ACTIVE strategy as
+      PROMOTED, and the Intelligence Strategies tab shows the same strategies as before.
+- [ ] **Agents → Strategy sandbox** lists them, and the state filter counts are right.
+- [ ] After the next Sunday validation, any newly passing strategy appears as **Shadow** with 0/30 resolved.
+- [ ] After the next 20:15 ET pass, it has open shadow calls (`select count(*) from strategy_shadow_call`).
+- [ ] A shadow strategy does **not** show on any ticker's Strategies tab until it is promoted.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

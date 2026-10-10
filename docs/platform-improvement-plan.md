@@ -35,12 +35,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
 | S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 | S-B6 | `969453c` | Playbook × style matrix (V89 tags), sample-guarded ±25% size tilt on paper entries, Agents heatmap |
+| S-B7 | see `feat(S-B7)` | Strategy sandbox (V90): backtest pass → SHADOW calls vs SPY → PROMOTED (live) / KILLED; live readback gated on PROMOTED |
 
-Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B6` done.
+Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) is complete.
 
 ### Next story for the next agent
 
-**→ S-B7 — Strategy sandbox: shadow → promote or kill** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-C1 — Per-user journal, watchlist, notification prefs** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -163,7 +164,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | done |
-| 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | in-progress |
+| 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | done |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | not-started |
@@ -424,7 +425,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B7 — Strategy sandbox: shadow → promote or kill
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P2
 - **Depends on:** S-B6 helpful
 - **Goal:** New strategies run in shadow/paper only; promote into live Agent 5 weighting only after beating baseline with min sample; else kill.
@@ -433,8 +434,23 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Shadow results visible on Agents; no effect on live scores until promoted.
   - Promotion rule documented and enforced in code (min N, beat baseline metric).
 - **Hints:** Academic strategies package; graduation patterns are a good model.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code).
+  - **States:** V90 adds `strategy_sandbox` (SHADOW / CANDIDATE / PROMOTED / KILLED, with counts and a reason) and `strategy_shadow_call` (forward calls priced against SPY).
+  - **Entry:** a hold-out PASS in `StrategyValidationService` still marks the strategy ACTIVE ("validated"), and now also calls `StrategySandboxService.enroll`. That puts it in SHADOW at its best passing horizon.
+  - **Live gate:** `StrategyScoreService.readingsFor` only reads strategies that are ACTIVE **and** PROMOTED, so shadow and candidate strategies have no effect on live scores.
+    - The migration grandfathers every strategy that was ACTIVE before the sandbox as PROMOTED, so current live behaviour is unchanged.
+  - **Shadow calls:** a daily pass at 20:15 New York (after the 19:30 score refresh) runs three steps:
+    - it makes a call wherever a sandboxed strategy's view is strong (|view| ≥ 0.8, the top or bottom decile), with at most one open call per strategy × ticker;
+    - it resolves due calls on `price_candles`, scoring a hit when the side beat SPY;
+    - it re-evaluates each strategy with `SandboxRules`.
+  - **Promotion rule (enforced in code, pure `SandboxRules`):**
+    - **PROMOTED:** 30+ resolved calls, ≥ 55% hits and a positive mean excess (baseline = coin flip vs SPY).
+    - **KILLED:** 30+ resolved and under 50% hits or a mean excess ≤ 0, or still under the 55% bar at 60 resolved.
+    - **CANDIDATE:** 15+ resolved and above the bar so far.
+    - PROMOTED and KILLED are final.
+  - **API and UI:** `GET /api/strategies/sandbox`. Agents shows a "Strategy sandbox" card (`#sandbox`) with a state filter, hit %, average excess, a 30-call progress bar and the reason.
+  - **Tests:** `SandboxRulesTest` (6) and `StrategySandboxIntegrationTest` (3: shadow → promoted with the live gate, killed, weak/bearish views and one open call per ticker). The full backend suite passes, 1206/1206.
+- **Notes:** A killed strategy is not revived by a later backtest pass; `enroll` is a no-op once a strategy is in the sandbox. Strategies on the Intelligence ticker page's Strategies tab now show only promoted ones (same readback). S-E2's Strategy Scout candidates should enter through `enroll`.
 
 ---
 

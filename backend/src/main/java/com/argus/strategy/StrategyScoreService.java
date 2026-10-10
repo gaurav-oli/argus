@@ -22,7 +22,8 @@ import org.springframework.stereotype.Service;
  *
  * <p>Percentiles are computed over the <em>whole</em> ranking universe but stored only for the tickers Argus
  * follows — the 500 index members exist to give a holding a meaningful rank, not to be tracked themselves. Only
- * {@code ACTIVE} strategies are read back, so an unvalidated or rejected paper can never reach a recommendation,
+ * {@code ACTIVE} strategies that the S-B7 sandbox has {@code PROMOTED} are read back, so an unvalidated, rejected or
+ * still-shadowed paper can never reach a recommendation,
  * and each one's influence is weighted by the edge <em>Argus measured</em>, never by the t-stat its authors
  * published.
  */
@@ -41,16 +42,18 @@ public class StrategyScoreService {
 	private final KnownUniverse followed;
 	private final JdbcTemplate jdbc;
 	private final boolean enabled;
+	private final StrategySandboxService sandbox;
 
 	public StrategyScoreService(StrategyScoringService scoring, StrategyValidationService validation,
 			AcademicStrategyRepository strategies, KnownUniverse followed, JdbcTemplate jdbc,
-			@Value("${argus.strategy.enabled:true}") boolean enabled) {
+			@Value("${argus.strategy.enabled:true}") boolean enabled, StrategySandboxService sandbox) {
 		this.scoring = scoring;
 		this.validation = validation;
 		this.strategies = strategies;
 		this.followed = followed;
 		this.jdbc = jdbc;
 		this.enabled = enabled;
+		this.sandbox = sandbox;
 	}
 
 	/** Daily, after both candle passes have run. */
@@ -121,7 +124,9 @@ public class StrategyScoreService {
 
 	/** What every validated strategy currently says about {@code ticker}, strongest view first. */
 	public List<Reading> readingsFor(String ticker) {
-		List<AcademicStrategy> active = strategies.active();
+		// S-B7: validated is not enough — only strategies the sandbox has PROMOTED reach live scoring.
+		java.util.Set<String> live = sandbox.liveAcronyms();
+		List<AcademicStrategy> active = strategies.active().stream().filter(s -> live.contains(s.getAcronym())).toList();
 		if (active.isEmpty()) {
 			return List.of();
 		}

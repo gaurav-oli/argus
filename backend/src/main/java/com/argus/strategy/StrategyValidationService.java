@@ -39,16 +39,18 @@ public class StrategyValidationService {
 	private final SignalLibrary library;
 	private final JdbcTemplate jdbc;
 	private final boolean enabled;
+	private final StrategySandboxService sandbox;
 
 	public StrategyValidationService(AcademicStrategyRepository strategies, StrategyScoringService scoring,
 			StrategyUniverseService universe, SignalLibrary library, JdbcTemplate jdbc,
-			@Value("${argus.strategy.enabled:true}") boolean enabled) {
+			@Value("${argus.strategy.enabled:true}") boolean enabled, StrategySandboxService sandbox) {
 		this.strategies = strategies;
 		this.scoring = scoring;
 		this.universe = universe;
 		this.library = library;
 		this.jdbc = jdbc;
 		this.enabled = enabled;
+		this.sandbox = sandbox;
 	}
 
 	/**
@@ -162,6 +164,8 @@ public class StrategyValidationService {
 			if (verdict == Backtest.Verdict.PASS) {
 				strategy.activate();
 				activated++;
+				// S-B7: passing the backtest earns a place in the sandbox, not live weight.
+				sandbox.enroll(strategy.getAcronym(), bestPassHorizon(outcomes, strategy.getAcronym()));
 			}
 			else if (verdict != Backtest.Verdict.INSUFFICIENT_DATA) {
 				strategy.reject();
@@ -171,6 +175,14 @@ public class StrategyValidationService {
 		log.info("Agent 15: validation complete — {} strategy-horizon test(s), {} strategy/strategies now ACTIVE",
 				outcomes.size(), activated);
 		return outcomes;
+	}
+
+	/** The passing horizon with the strongest hold-out t-stat — the horizon the sandbox will shadow it at. */
+	static int bestPassHorizon(List<Outcome> outcomes, String acronym) {
+		return outcomes.stream()
+				.filter(o -> o.acronym().equals(acronym) && o.result().verdict() == Backtest.Verdict.PASS)
+				.max(java.util.Comparator.comparingDouble(o -> o.result().holdout() == null ? o.result().tStat() : o.result().holdout().tStat()))
+				.map(Outcome::horizonDays).orElse(30);
 	}
 
 	/** A PASS at any horizon beats a failure at another; INSUFFICIENT_DATA never overrides a real verdict. */

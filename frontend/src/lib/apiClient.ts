@@ -1460,6 +1460,31 @@ export interface StyleFitReport {
 
 export const getStyleFit = (): Promise<StyleFitReport> => apiGet<StyleFitReport>("/api/learning/style-fit");
 
+// ---- S-B7: strategy sandbox ----
+
+export type SandboxState = "SHADOW" | "CANDIDATE" | "PROMOTED" | "KILLED";
+
+export interface SandboxStrategy {
+  acronym: string;
+  name: string;
+  state: SandboxState;
+  /** True only when PROMOTED: the strategy's readings reach live Agent 5 scoring. */
+  live: boolean;
+  horizonDays: number;
+  resolved: number;
+  hits: number;
+  hitPct: number | null;
+  meanExcessPct: number | null;
+  openCalls: number;
+  /** Resolved shadow calls still needed before a promote/kill decision (0 once decided or eligible). */
+  neededToDecide: number;
+  reason: string;
+  enteredAt: string;
+  stateChangedAt: string;
+}
+
+export const getStrategySandbox = (): Promise<SandboxStrategy[]> => apiGet<SandboxStrategy[]>("/api/strategies/sandbox");
+
 /** The lesson for one closed paper trade; rejects (404) until the 5-minute lessons pass has written it. */
 export const getLessonForTrade = (tradeId: number): Promise<TradeLesson> =>
   apiGet<TradeLesson>(`/api/learning/lessons/trade/${tradeId}`);

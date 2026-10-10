@@ -22,14 +22,23 @@ public class StrategyController {
 	private final StrategyValidationService validation;
 	private final StrategyUniverseService universe;
 	private final JdbcTemplate jdbc;
+	private final StrategySandboxService sandbox;
 
 	public StrategyController(AcademicStrategyRepository strategies, StrategyScoreService scores,
-			StrategyValidationService validation, StrategyUniverseService universe, JdbcTemplate jdbc) {
+			StrategyValidationService validation, StrategyUniverseService universe, JdbcTemplate jdbc,
+			StrategySandboxService sandbox) {
 		this.strategies = strategies;
 		this.scores = scores;
 		this.validation = validation;
 		this.universe = universe;
 		this.jdbc = jdbc;
+		this.sandbox = sandbox;
+	}
+
+	/** S-B7: every sandboxed strategy — shadow results, state, and whether it is live. */
+	@GetMapping("/sandbox")
+	public List<StrategySandboxService.SandboxView> sandbox() {
+		return sandbox.list();
 	}
 
 	/** The library: what was imported, what Argus can compute, and what survived validation. */
