@@ -31,14 +31,15 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-A6 | `89cd746` | Userless sessions fail auth; PDF `%PDF` magic; push unsub ownership |
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
+| S-B3 | see `feat(S-B3)` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
 
-Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2` done.
+Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2`, `S-B3` done.
 
 ### Next story for the next agent
 
-**→ S-B3 — Post-trade learning narrative (win and loss)** — status `in-progress` (Claude Code, 2026-10-09).
+**→ S-B4 — Pattern library consulted before next paper trade** — status `not-started`. Waiting for the owner's go-ahead.
 
-Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B2 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before S-B3.
+Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
 ### Owner follow-up
 
@@ -155,7 +156,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
-| 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | in-progress |
+| 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
@@ -299,7 +300,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B3 — Post-trade learning narrative (win and loss)
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P1
 - **Goal:** Every closed paper trade produces a short structured lesson: why entered, outcome, what changed (or why no change).
 - **Acceptance:**
@@ -307,8 +308,27 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - UI: readable narrative on Agents (and link from Intelligence thesis if present).
   - Logic Review / weight changes referenced when they fire; “no change” is an explicit outcome.
 - **Hints:** `learning/*`, `PaperInvestorService`, Logic Review, Trade Journal snapshots.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 (Claude Code).
+  - **Storage:** V87 `trade_lesson`, one row per closed `simulated_trades` row (unique `trade_id`), linked to `recommendation_id`.
+  - **Writing lessons:** `learning/TradeLessonService` runs a scheduled pass every 5 minutes (`argus.lessons.*`). It writes missing lessons, backfilling 200 at a time, then settles "what changed".
+    - It is deliberately **not** inside `PaperInvestorService.closeOne`, so a lesson can never slow down or break a close.
+    - `LessonComposer` is pure and makes **no model calls**.
+  - **Content:**
+    - **Why entered:** the call, conviction, odds, the top 3 agents on the trade's side, and the thesis.
+    - **Outcome:** the return and the return vs SPY, plus the exit reason.
+    - **Lesson:** the Analyst's post-mortem on a loss; on a win, the agents that were right on direction.
+  - **What changed** comes from activity after the close:
+    - `logic_review` adopted proposals become `WEIGHTS_ADJUSTED`, which names the factors and flags the agents this trade relied on.
+    - `learned_rule` activations and retirements become `RULE_ACTIVATED` / `RULE_RETIRED`.
+    - Explicit `NO_CHANGE` is written only once both a logic review and an Agent 13 run have happened since the close. Until then the lesson is `PENDING`.
+    - After 7 days with a job still missing, it becomes `NO_CHANGE` and names the job that didn't run.
+  - **API:** `GET /api/learning/lessons?ticker=&limit=` and `GET /api/learning/lessons/trade/{tradeId}`.
+  - **UI:**
+    - Agents page: the "What the Investor learned" feed (`#lessons`), with result and what-changed filters plus paging.
+    - The Investor record's expanded closed-trade row shows the lesson.
+    - Intelligence ticker view: "Paper lessons on X" (up to 3), linking to the feed.
+  - **Tests:** `LessonComposerTest` (11) and `TradeLessonIntegrationTest` (3). The full backend suite passes, 1174/1174.
+- **Notes:** The `ChangeWatcherIntegrationTest` failures noted under S-B2 did not happen in this run (all 1174 passed), so they look flaky (time-of-day), not broken. Mini checks are in `docs/mac-mini-validation.md` §16.
 
 ### S-B4 — Pattern library consulted before next paper trade
 

@@ -17,6 +17,7 @@ import {
 } from "@/lib/apiClient";
 import { CandlestickChart } from "./CandlestickChart";
 import { DeepAnalysisForTicker } from "./DeepAnalysisCard";
+import { TickerLessons } from "@/features/agents/TradeLessons";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
@@ -257,6 +258,7 @@ export function TickerDetail({
                 )}
               </div>
               <DeepAnalysisForTicker ticker={ticker} />
+              <TickerLessons ticker={ticker} />
             </div>
           )}
 

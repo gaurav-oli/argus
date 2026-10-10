@@ -1381,6 +1381,39 @@ export interface TrustBarView {
 
 export const getTrustBar = (): Promise<TrustBarView> => apiGet<TrustBarView>("/api/recommendations/trust-bar");
 
+// ---- S-B3: per-trade lessons ----
+
+export type LessonChangeKind = "PENDING" | "WEIGHTS_ADJUSTED" | "RULE_ACTIVATED" | "RULE_RETIRED" | "NO_CHANGE";
+
+/** One closed paper trade's lesson: why it entered, how it ended, what it taught, and what changed after. */
+export interface TradeLesson {
+  id: number;
+  tradeId: number;
+  recommendationId: number | null;
+  ticker: string;
+  direction: string;
+  won: boolean;
+  exitReason: string | null;
+  closedAt: string;
+  whyEntered: string;
+  outcome: string;
+  lesson: string;
+  /** Friendly names of the agents whose signals drove the call. */
+  reliedOn: string[];
+  changeKind: LessonChangeKind;
+  changeSummary: string | null;
+  changeCheckedAt: string | null;
+}
+
+export const getLessons = (ticker?: string, limit = 30): Promise<TradeLesson[]> =>
+  apiGet<TradeLesson[]>(
+    `/api/learning/lessons?limit=${limit}${ticker ? `&ticker=${encodeURIComponent(ticker)}` : ""}`,
+  );
+
+/** The lesson for one closed paper trade; rejects (404) until the 5-minute lessons pass has written it. */
+export const getLessonForTrade = (tradeId: number): Promise<TradeLesson> =>
+  apiGet<TradeLesson>(`/api/learning/lessons/trade/${tradeId}`);
+
 // ---- Regret analysis (the behavioral mirror) ----
 
 /** One decision bucket: decided recs with closed paper legs, and how they went. */

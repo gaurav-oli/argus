@@ -8,6 +8,7 @@ import { useCompanyLogos } from "@/lib/useCompanyLogos";
 import { useAutoRefresh } from "@/lib/useAutoRefresh";
 import { cn } from "@/lib/utils";
 import { Fragment, useMemo, useState } from "react";
+import { LessonForTrade } from "./TradeLessons";
 import { FilterChips, Pager, SortHeader, compareBy, usePaged, useSort } from "./tableKit";
 
 const PAGE = 15;
@@ -250,7 +251,14 @@ export function TradeLedger() {
                         {r.closedAt && ` · sold ${new Date(r.closedAt).toLocaleString()}`}
                         {r.vsSpyPct != null && ` · ${signed(r.vsSpyPct)}% vs the S&P 500`}
                         {isOpen && r.unrealizedPct != null && ` · live ${signed(r.unrealizedPct)}% (not yet realized)`}
-                        {r.review && <p className="mt-1 italic">Post-mortem: {r.review}</p>}
+                        {r.closedAt ? (
+                          <LessonForTrade
+                            tradeId={r.id}
+                            fallback={r.review && <p className="mt-1 italic">Post-mortem: {r.review}</p>}
+                          />
+                        ) : (
+                          r.review && <p className="mt-1 italic">Post-mortem: {r.review}</p>
+                        )}
                       </td>
                     </tr>
                   )}

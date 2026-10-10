@@ -430,6 +430,25 @@ Design notes: `docs/design-terminal-noir.md`.
   - [ ] The eye blinks occasionally. Confetti (celebrating), rain (sad) and zzz (napping) show.
   - [ ] Nothing moves with Reduce Motion on.
 
+## 16. Post-trade lessons (S-B3, branch `feature/platform-improvement-s-a1-websocket-auth`)  ⏳ TODO on the Mini
+Built on the MacBook. The backend tests (1174, including 14 new ones) and the frontend checks pass.
+No model calls and no new env vars. Migration **V87** creates `trade_lesson`. A pass every 5 minutes
+writes a lesson for each closed paper trade and backfills older trades 200 at a time.
+- [ ] **Backfill:** about 5 minutes after the deploy, `select count(*) from trade_lesson` equals the
+      number of closed `simulated_trades`.
+- [ ] **Agents → "What the Investor learned"** (below the Investor record):
+  - [ ] Each lesson shows Why entered / Outcome / Lesson / What changed.
+  - [ ] Losses quote the Analyst's post-mortem. Wins name the agents that were right on direction.
+  - [ ] Result and What-changed filters show correct counts, and paging works.
+- [ ] **What changed:** trades closed today read **Pending tonight's review**. After the nightly
+      logic review and the Agent 13 run they settle to Weights adjusted / Rule activated / Rule retired
+      (with a summary) or an explicit **No change**.
+- [ ] **Investor record → open a closed trade:** the expanded row shows the lesson. A trade closed in
+      the last few minutes still shows the plain post-mortem until its lesson is written.
+- [ ] **Intelligence → open a ticker that has closed paper trades:** "Paper lessons on X" shows up to
+      3 lessons, and **All lessons →** jumps to the feed on Agents. A ticker with no trades shows no
+      section.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

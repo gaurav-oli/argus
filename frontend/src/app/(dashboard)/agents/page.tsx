@@ -8,6 +8,7 @@ import { PaperInvestorScoreboard } from "@/features/agents/PaperInvestorScoreboa
 import { ResearchAgentSection } from "@/features/agents/ResearchAgentSection";
 import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
+import { LessonsFeed } from "@/features/agents/TradeLessons";
 import { TradeJournal } from "@/features/agents/TradeJournal";
 import { TradeLedger } from "@/features/agents/TradeLedger";
 
@@ -37,6 +38,7 @@ export default function AgentsPage() {
         <div className="flex flex-col gap-4">
           <PaperInvestorScoreboard />
           <TradeLedger />
+          <LessonsFeed />
           <AgentPerformance />
           <TradeJournal />
           <LogicReview />
