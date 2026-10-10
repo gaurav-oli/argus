@@ -111,17 +111,28 @@ public class SessionStore {
 		}
 	}
 
-	/** List active sessions, marking which one matches {@code currentId} (Story 2.7). */
-	public List<SessionInfo> list(String currentId) {
-		Set<String> keys = redis.keys(KEY_PREFIX + "*"); // single-user scale — a handful of sessions
+	/**
+	 * List active sessions <b>owned by {@code ownerUserId}</b>, marking which one matches
+	 * {@code currentId} (Story 2.7 / S-A2). Never returns another person's sessions.
+	 */
+	public List<SessionInfo> list(String currentId, Long ownerUserId) {
 		List<SessionInfo> out = new ArrayList<>();
+		if (ownerUserId == null) {
+			return out;
+		}
+		Set<String> keys = redis.keys(KEY_PREFIX + "*"); // friend-group scale — a handful of sessions
 		if (keys == null) {
 			return out;
 		}
+		String owner = ownerUserId.toString();
 		String currentHandle = currentId == null ? null : handle(currentId);
 		for (String k : keys) {
 			Map<Object, Object> h = redis.opsForHash().entries(k);
 			if (h.isEmpty()) {
+				continue;
+			}
+			Object uid = h.get(F_USER_ID);
+			if (uid == null || !owner.equals(uid.toString())) {
 				continue;
 			}
 			String id = k.substring(KEY_PREFIX.length());
@@ -153,18 +164,28 @@ public class SessionStore {
 		return removed;
 	}
 
-	/** Revoke the session whose handle matches (Story 2.7). Returns true if one was removed. */
-	public boolean revokeByHandle(String targetHandle) {
+	/**
+	 * Revoke the session whose handle matches <b>and</b> belongs to {@code ownerUserId} (Story 2.7 /
+	 * S-A2). Returns true if one was removed; false if missing or owned by someone else (caller should
+	 * treat both as not-found — no cross-user oracle).
+	 */
+	public boolean revokeByHandle(String targetHandle, Long ownerUserId) {
 		Set<String> keys = redis.keys(KEY_PREFIX + "*");
-		if (keys == null || targetHandle == null) {
+		if (keys == null || targetHandle == null || ownerUserId == null) {
 			return false;
 		}
+		String owner = ownerUserId.toString();
 		for (String k : keys) {
 			String id = k.substring(KEY_PREFIX.length());
-			if (handle(id).equals(targetHandle)) {
-				redis.delete(k);
-				return true;
+			if (!handle(id).equals(targetHandle)) {
+				continue;
 			}
+			Object uid = redis.opsForHash().get(k, F_USER_ID);
+			if (uid == null || !owner.equals(uid.toString())) {
+				return false;
+			}
+			redis.delete(k);
+			return true;
 		}
 		return false;
 	}

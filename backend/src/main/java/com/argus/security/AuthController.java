@@ -1,5 +1,6 @@
 package com.argus.security;
 
+import com.argus.common.NotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <ul>
  *   <li>{@code GET    /api/auth/status}         — authenticated + who, for the frontend's routing</li>
  *   <li>{@code POST   /api/auth/logout}          — destroy session + clear cookie</li>
- *   <li>{@code GET    /api/auth/sessions}        — list this person's active sessions (FR-39)</li>
- *   <li>{@code DELETE /api/auth/sessions/{{handle}}} — remotely terminate one of them</li>
+ *   <li>{@code GET    /api/auth/sessions}        — list <b>this person's</b> active sessions (FR-39 / S-A2)</li>
+ *   <li>{@code DELETE /api/auth/sessions/{{handle}}} — remotely terminate one of <b>theirs</b></li>
  * </ul>
  */
 @RestController
@@ -54,20 +55,23 @@ public class AuthController {
 				.build();
 	}
 
-	/** List active sessions (FR-39 / Story 2.7), marking the caller's own. Session-gated. */
+	/** List this person's active sessions (FR-39 / Story 2.7 / S-A2), marking the caller's own. */
 	@GetMapping("/sessions")
 	public java.util.List<SessionStore.SessionInfo> sessions(HttpServletRequest request) {
-		return sessions.list(SessionCookie.read(request));
+		AppUser user = currentUser.require(request);
+		return sessions.list(SessionCookie.read(request), user.getId());
 	}
 
 	/**
-	 * Remotely terminate a session by its handle (FR-39). Session-gated, so any signed-in device
-	 * (e.g. another Tailscale device) can kill a lost device's session; the target is rejected on
-	 * its next request (the filter validates every call), well within the 5s target.
+	 * Remotely terminate one of <b>this person's</b> sessions by handle (FR-39 / S-A2). Another
+	 * user's handle is indistinguishable from unknown (404) — no cross-user kill.
 	 */
 	@DeleteMapping("/sessions/{handle}")
-	public ResponseEntity<Void> revokeSession(@PathVariable String handle) {
-		sessions.revokeByHandle(handle);
+	public ResponseEntity<Void> revokeSession(@PathVariable String handle, HttpServletRequest request) {
+		AppUser user = currentUser.require(request);
+		if (!sessions.revokeByHandle(handle, user.getId())) {
+			throw new NotFoundException("session", handle);
+		}
 		return ResponseEntity.noContent().build();
 	}
 }

@@ -101,6 +101,44 @@ class SessionManagementIntegrationTest {
 	}
 
 	@Test
+	void listAndRevokeAreScopedToTheSignedInUser() throws Exception {
+		Cookie alicePhone = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "AlicePhone");
+		Long aliceId = sessionStore.userId(alicePhone.getValue()).orElseThrow();
+		Cookie aliceLaptop = TestUserSessions.loginAs(sessionStore, aliceId, "AliceMac");
+		Cookie bob = TestUserSessions.loginAsNewUser(appUsers, sessionStore, "BobPhone");
+
+		// Alice only sees her two devices — never Bob's.
+		mockMvc.perform(get("/api/auth/sessions").cookie(aliceLaptop))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2));
+		mockMvc.perform(get("/api/auth/sessions").cookie(bob))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].device").value("BobPhone"));
+
+		String aliceList = mockMvc.perform(get("/api/auth/sessions").cookie(aliceLaptop))
+				.andReturn().getResponse().getContentAsString();
+		String alicePhoneHandle = null;
+		for (JsonNode n : json.readTree(aliceList)) {
+			if ("AlicePhone".equals(n.get("device").asText())) {
+				alicePhoneHandle = n.get("handle").asText();
+			}
+		}
+		org.junit.jupiter.api.Assertions.assertNotNull(alicePhoneHandle);
+
+		// Bob cannot kill Alice's session (404 — no cross-user oracle).
+		mockMvc.perform(delete("/api/auth/sessions/{handle}", alicePhoneHandle).cookie(bob))
+				.andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/auth/status").cookie(alicePhone))
+				.andExpect(jsonPath("$.authenticated").value(true));
+
+		// Alice can still kill her own.
+		mockMvc.perform(delete("/api/auth/sessions/{handle}", alicePhoneHandle).cookie(aliceLaptop))
+				.andExpect(status().isNoContent());
+		mockMvc.perform(get("/api/system-info").cookie(alicePhone)).andExpect(status().isUnauthorized());
+	}
+
+	@Test
 	void sessionsRequireSession() throws Exception {
 		mockMvc.perform(get("/api/auth/sessions")).andExpect(status().isUnauthorized());
 		mockMvc.perform(delete("/api/auth/sessions/whatever")).andExpect(status().isUnauthorized());

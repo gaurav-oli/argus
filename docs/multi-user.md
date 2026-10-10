@@ -113,12 +113,10 @@ Strike items here when fixed and set the matching story to `done` in that plan.
 - `StompDestinationGuard` rejects client SUBSCRIBE/SEND to raw `/queue/**` (including
   `/queue/portfolio-user{id}`). Clients use `/user/queue/portfolio` only.
 
-### 5.1 Critical — Session list / revoke not scoped (C1)
+### 5.1 Critical — Session list / revoke not scoped (C1) — **fixed (S-A2, 2026-10-09)**
 
-- `GET /api/auth/sessions` lists *every* user's sessions; `DELETE /api/auth/sessions/{handle}`
-  revokes *any* of them.
-- Cause: `SessionStore.list` / `revokeByHandle` scan all `argus:session:*` keys; `AuthController`
-  does no owner check. Comments still say “this person’s” sessions.
+`SessionStore.list(currentId, ownerUserId)` and `revokeByHandle(handle, ownerUserId)` only touch
+sessions owned by the caller. Foreign handles return 404 (same as unknown).
 
 ### 5.2 High — Global settings writable by any user (H1)
 

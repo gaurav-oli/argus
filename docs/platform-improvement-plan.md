@@ -115,7 +115,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | Order | ID | Story | Phase | Status |
 |---|---|---|---|---|
 | 1 | S-A1 | Lock WebSocket: auth + block raw portfolio queues | A — Security | done |
-| 2 | S-A2 | Scope session list/revoke to the signed-in user | A — Security | not-started |
+| 2 | S-A2 | Scope session list/revoke to the signed-in user | A — Security | done |
 | 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | not-started |
 | 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | not-started |
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | not-started |
@@ -158,7 +158,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-A2 — Scope session list/revoke to the signed-in user
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P0
 - **Finding:** C1
 - **Goal:** `GET/DELETE /api/auth/sessions` only affect the caller’s sessions.
@@ -167,8 +167,8 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Revoke by handle fails (404/403) if handle belongs to another user.
   - Unit/integration coverage for cross-user revoke attempt.
 - **Hints:** `SessionStore.list` / `revokeByHandle`, `AuthController`.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 — `list`/`revokeByHandle` take owner userId; foreign handle → 404; IT `listAndRevokeAreScopedToTheSignedInUser`.
+- **Notes:** Same branch `feature/platform-improvement-s-a1-websocket-auth`.
 
 ### S-A3 — Admin-gate ops mutators + global settings + Demo Mode
 
@@ -436,7 +436,7 @@ Use for evidence; **stories above are the work queue.**
 
 | ID | Sev | Finding | Story |
 |---|---|---|---|
-| C1 | Critical | Session list/revoke unscoped | S-A2 |
+| C1 | Critical | Session list/revoke unscoped | S-A2 (**done**) |
 | C2 | Critical | Unauthenticated WS portfolio queues | S-A1 (**done**) |
 | C3 | Critical | Ops mutators not admin-gated | S-A3 |
 | C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 |
