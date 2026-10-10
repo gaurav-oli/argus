@@ -98,6 +98,11 @@ services:
       # Analyst Logic Review schedule (argus.logic-review.cron). Default 03:00; set e.g. "0 */2 * * * *"
       # (every 2 min) during validation so the LLM-proposes/backtest-decides pass fires promptly.
       ARGUS_LOGIC_REVIEW_CRON: ${LOGIC_REVIEW_CRON:-0 0 3 * * *}
+      # S-B2 paper-validation trust bar (defaults in application.yml)
+      ARGUS_TRUST_BAR_REQUIRED_STATE: ${ARGUS_TRUST_BAR_REQUIRED_STATE:-ACTIVE}
+      ARGUS_TRUST_BAR_MIN_CLOSED_TRADES: ${ARGUS_TRUST_BAR_MIN_CLOSED_TRADES:-50}
+      ARGUS_TRUST_BAR_MIN_WIN_RATE_PCT: ${ARGUS_TRUST_BAR_MIN_WIN_RATE_PCT:-55}
+      ARGUS_TRUST_BAR_MAX_BRIER: ${ARGUS_TRUST_BAR_MAX_BRIER:-0.22}
       # Agent 13 (Trade Learner): mines the closed paper trades for what wins and loses, after tuning (02:30)
       # and the logic review (03:00). Agent 11 (Deep Analyst): nightly enqueue; a full pass takes hours by design.
       ARGUS_LEARNING_CRON: ${LEARNING_CRON:-0 30 3 * * *}

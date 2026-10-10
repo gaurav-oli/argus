@@ -1355,6 +1355,32 @@ export interface CalibrationView {
 export const getCalibration = (): Promise<CalibrationView> =>
   apiGet<CalibrationView>("/api/recommendations/calibration");
 
+// ---- S-B2: paper-validation trust bar ----
+
+/** One line of the trust-bar checklist: what's required, what Agent 5's current system shows, pass/fail. */
+export interface TrustBarCheck {
+  key: "state" | "sample" | "winRate" | "brier";
+  label: string;
+  required: string;
+  actual: string;
+  pass: boolean;
+}
+
+/**
+ * Whether the current system's paper record clears the configured trust bar. `headline` is the exact
+ * message to show; either way it never implies Argus places orders.
+ */
+export interface TrustBarView {
+  cleared: boolean;
+  passed: number;
+  total: number;
+  checks: TrustBarCheck[];
+  headline: string;
+  thresholds: { requiredState: string; minClosedTrades: number; minWinRatePct: number; maxBrier: number };
+}
+
+export const getTrustBar = (): Promise<TrustBarView> => apiGet<TrustBarView>("/api/recommendations/trust-bar");
+
 // ---- Regret analysis (the behavioral mirror) ----
 
 /** One decision bucket: decided recs with closed paper legs, and how they went. */

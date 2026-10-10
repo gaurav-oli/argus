@@ -8,8 +8,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   getAccuracy,
   getCalibration,
+  getTrustBar,
   type AccuracyView,
   type CalibrationView,
+  type TrustBarView,
   type WindowStat,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
@@ -18,18 +20,21 @@ import { REFRESH, useAutoRefresh } from "@/lib/useAutoRefresh";
 /**
  * Compact paper-trust strip (S-B1): win rate, sample-size honesty, Brier, graduation, and
  * last-30d vs prior trend — lifted from Agents so Home / Intelligence can answer
- * “is the agent getting better?” without digging into Ops.
+ * “is the agent getting better?” without digging into Ops. S-B2 adds the paper-validation trust
+ * bar's checklist: each configured check, what's required, what the current system shows.
  */
 export function TrustScoreboard({ className }: { className?: string }) {
   const [accuracy, setAccuracy] = useState<AccuracyView | null>(null);
   const [calibration, setCalibration] = useState<CalibrationView | null>(null);
+  const [bar, setBar] = useState<TrustBarView | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useAutoRefresh(
     () =>
-      Promise.allSettled([getAccuracy(), getCalibration()]).then((r) => {
+      Promise.allSettled([getAccuracy(), getCalibration(), getTrustBar()]).then((r) => {
         if (r[0].status === "fulfilled") setAccuracy(r[0].value);
         if (r[1].status === "fulfilled") setCalibration(r[1].value);
+        if (r[2].status === "fulfilled") setBar(r[2].value);
         setLoaded(true);
       }),
     REFRESH.NORMAL,
@@ -92,6 +97,8 @@ export function TrustScoreboard({ className }: { className?: string }) {
           />
         </div>
 
+        {bar && <TrustBarChecklist bar={bar} />}
+
         {!meaningful && (
           <p className="mt-2 text-[11px] italic leading-snug text-text-secondary">
             {w.trades === 0
@@ -150,4 +157,29 @@ function trendLabel(
   if (delta > 0) return { text: `+${delta} pts`, tone: "up" };
   if (delta < 0) return { text: `${delta} pts`, tone: "down" };
   return { text: "flat", tone: "flat" };
+}
+
+/** S-B2: the trust bar as a checklist — the message, then one chip per check (✓ / ✗, actual vs required). */
+function TrustBarChecklist({ bar }: { bar: TrustBarView }) {
+  return (
+    <div className="mt-3 border-t border-[var(--hairline)] pt-2">
+      <p className={cn("text-xs font-semibold", bar.cleared ? "text-gains" : "text-warning")}>{bar.headline}</p>
+      <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label={`Trust bar: ${bar.passed} of ${bar.total} checks pass`}>
+        {bar.checks.map((c) => (
+          <li
+            key={c.key}
+            className={cn(
+              "border px-2 py-0.5 font-mono text-[10px]",
+              c.pass ? "border-gains/40 text-gains" : "border-warning/40 text-warning",
+            )}
+          >
+            <span aria-hidden>{c.pass ? "✓" : "✗"} </span>
+            <span className="sr-only">{c.pass ? "Passes: " : "Not yet: "}</span>
+            {c.label} <span className="text-text-primary">{c.actual}</span>{" "}
+            <span className="text-text-secondary">(needs {c.required})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

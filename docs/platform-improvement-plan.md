@@ -30,12 +30,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-A5 | `a76e0b8` | All Haiku paths via `paidFallback` + Cost Governor (≥95% refuses paid) |
 | S-A6 | `89cd746` | Userless sessions fail auth; PDF `%PDF` magic; push unsub ownership |
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
+| S-B2 | *(this commit)* | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 
-Phase **A (security)** is complete. Phase **B** has started (`S-B1` done).
+Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2` done.
 
 ### Next story for the next agent
 
-**→ S-B2 — Paper-validation bar (explicit “not real money until bar clears”)** — status `in-progress` (Claude Code, 2026-10-09).
+**→ S-B3 — Post-trade learning narrative (win and loss)** — status `not-started`. (S-B2 done 2026-10-09; awaiting owner go-ahead before S-B3.)
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B2 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before S-B3.
 
@@ -153,7 +154,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | done |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | done |
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
-| 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | in-progress |
+| 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | not-started |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | not-started |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
@@ -274,7 +275,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B2 — Paper-validation bar (real-money gate messaging)
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P1
 - **Depends on:** S-B1 helpful but not required
 - **Goal:** Product clearly framed as paper lab until a configurable trust bar clears.
@@ -283,8 +284,18 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Configurable bar fields documented (e.g. min closed trades, max Brier, not FROZEN) — even if thresholds are config defaults first.
   - When bar not met: “Paper validation only — trust bar not cleared.”
 - **Hints:** Frontend chrome + optional `app_settings` / env thresholds; align README tone on Intelligence.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 — `TrustBar` (pure evaluator) + `TrustBarService` + `GET /api/recommendations/trust-bar`; persistent `PaperLabBanner` under the top bar on every page; checklist in `TrustScoreboard` (Home + Intelligence); `TrustBarTest` (6).
+- **Bar definition** (judged on the **current system's** paper book only; reuses the graduation ladder so “trusted” has one definition):
+
+  | Check | Config key | Env var | Default |
+  |---|---|---|---|
+  | Graduation state | `argus.trust-bar.required-state` | `ARGUS_TRUST_BAR_REQUIRED_STATE` | `ACTIVE` (so SHADOW / PROBATION / FROZEN never clear) |
+  | Closed paper trades | `argus.trust-bar.min-closed-trades` | `ARGUS_TRUST_BAR_MIN_CLOSED_TRADES` | `50` |
+  | Paper win rate % | `argus.trust-bar.min-win-rate-pct` | `ARGUS_TRUST_BAR_MIN_WIN_RATE_PCT` | `55` |
+  | Calibration (Brier) | `argus.trust-bar.max-brier` | `ARGUS_TRUST_BAR_MAX_BRIER` | `0.22` (0.25 = coin flip) |
+
+  Thresholds are inclusive; a missing number fails its check. Not cleared → “Paper validation only — trust bar not cleared.” Cleared → “Trust bar cleared on paper — still advisory: Argus never places orders.” The banner's paper-lab statement shows even if the bar can't be loaded.
+- **Notes:** Owner chose option (a): the banner covers **recommendations**; the holding guard (real holdings: broker stops, auto SELL after 15 min) is unchanged. Gating the guard's auto-decision on the bar would be a separate story if wanted. **Pre-existing failure, not S-B2:** `ChangeWatcherIntegrationTest` has 3 failing “fires only once per day” assertions on this branch *before* S-B2's changes too (verified by running it with S-B2 stashed); every other backend test passes (1157/1160).
 
 ### S-B3 — Post-trade learning narrative (win and loss)
 

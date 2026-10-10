@@ -22,13 +22,24 @@ public class PerformanceController {
 	private final PaperInvestorService investor;
 	private final AdaptiveTuningService tuning;
 	private final CurrentUserService currentUser;
+	private final TrustBarService trustBar;
 
 	public PerformanceController(PerformanceService performance, PaperInvestorService investor,
-			AdaptiveTuningService tuning, CurrentUserService currentUser) {
+			AdaptiveTuningService tuning, CurrentUserService currentUser, TrustBarService trustBar) {
 		this.performance = performance;
 		this.investor = investor;
 		this.tuning = tuning;
 		this.currentUser = currentUser;
+		this.trustBar = trustBar;
+	}
+
+	/**
+	 * S-B2 — the paper-validation trust bar: whether the current system's paper record clears the
+	 * configured bar, check by check. Session-gated like the rest of the performance endpoints.
+	 */
+	@GetMapping("/trust-bar")
+	public TrustBar.View trustBar() {
+		return trustBar.current();
 	}
 
 	/** Story 9.2 — win rate over All/30d/last-10, issued, taken vs declined, graduation state. */

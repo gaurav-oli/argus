@@ -2,6 +2,7 @@ import { AmbientBackground } from "@/components/shell/AmbientBackground";
 import { BottomNav } from "@/components/shell/BottomNav";
 import { BottomStrip } from "@/components/shell/BottomStrip";
 import { RightPanel } from "@/components/shell/RightPanel";
+import { PaperLabBanner } from "@/components/shell/PaperLabBanner";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TickerTape } from "@/components/terminal/TickerTape";
 import { SystemAlertBanner } from "@/components/shell/SystemAlertBanner";
@@ -39,6 +40,7 @@ export default function DashboardLayout({
             <div className="flex min-w-0 flex-1 flex-col">
               <TopBar />
               <TickerTape />
+              <PaperLabBanner />
               <SystemAlertBanner />
               <WhatsNewBanner />
 
