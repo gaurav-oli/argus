@@ -40,13 +40,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
 | S-D1 | `6d1896d` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
-| S-D2 | see `feat(S-D2)` | Paper-lab positioning in metadata, PWA manifest, Intelligence header and sign-in boot log |
+| S-D2 | `a9ede2a` | Paper-lab positioning in metadata, PWA manifest, Intelligence header and sign-in boot log |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-D3 — Frontend error boundary + visible refresh failures** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-D3 — Frontend error boundary + visible refresh failures** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -175,7 +175,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | done |
-| 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
+| 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | in-progress |
 | 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
 | 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | not-started |
 | 22 | S-E3 | Optional Agent 18 — Earnings Call Reader | E — New agents | not-started |
@@ -577,7 +577,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-D3 — Frontend error boundary + visible refresh failures
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P3
 - **Finding:** M6
 - **Goal:** Failures don’t blank the app or silently keep stale numbers.
