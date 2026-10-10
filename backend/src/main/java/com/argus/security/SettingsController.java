@@ -1,6 +1,7 @@
 package com.argus.security;
 
 import com.argus.common.BadRequestException;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.http.ResponseEntity;
@@ -11,8 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * App settings endpoints (Story 2.3), session-gated under {@code /api/**}. Currently the
- * configurable session timeout (FR-35).
+ * App settings endpoints (Story 2.3), session-gated under {@code /api/**}. Session timeout is
+ * global — writes are admin-only (S-A3 / H1).
  */
 @RestController
 @RequestMapping("/api/settings")
@@ -23,9 +24,11 @@ public class SettingsController {
 	private static final long MIN_SECONDS = 60;
 
 	private final SettingsService settings;
+	private final CurrentUserService currentUser;
 
-	public SettingsController(SettingsService settings) {
+	public SettingsController(SettingsService settings, CurrentUserService currentUser) {
 		this.settings = settings;
+		this.currentUser = currentUser;
 	}
 
 	@GetMapping("/session-timeout")
@@ -34,7 +37,9 @@ public class SettingsController {
 	}
 
 	@PutMapping("/session-timeout")
-	public ResponseEntity<Void> setSessionTimeout(@RequestBody(required = false) SessionTimeout body) {
+	public ResponseEntity<Void> setSessionTimeout(@RequestBody(required = false) SessionTimeout body,
+			HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		if (body == null) {
 			throw new BadRequestException("Missing request body");
 		}

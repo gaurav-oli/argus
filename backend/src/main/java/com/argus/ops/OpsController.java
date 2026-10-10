@@ -5,6 +5,8 @@ import com.argus.backup.BackupTriggerService;
 import com.argus.cost.CostRecorder;
 import com.argus.resilience.PlatformModeService;
 import com.argus.resilience.PlatformModeView;
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Operations endpoints (Epic 9), session-gated under {@code /api/ops}: the dashboard bottom-strip
  * summary (active agents + paid Haiku spend), host hardware telemetry (Story 9.5), and data-source
- * freshness (Story 9.7).
+ * freshness (Story 9.7). Mutators (backup trigger) are admin-only (S-A3).
  */
 @RestController
 @RequestMapping("/api/ops")
@@ -31,10 +33,11 @@ public class OpsController {
 	private final StorageService storage;
 	private final BackupStatusService backup;
 	private final BackupTriggerService backupTrigger;
+	private final CurrentUserService currentUser;
 
 	public OpsController(AgentStatusService agents, CostRecorder cost, HardwareService hardware,
 			FreshnessService freshness, PlatformModeService platformMode, StorageService storage,
-			BackupStatusService backup, BackupTriggerService backupTrigger) {
+			BackupStatusService backup, BackupTriggerService backupTrigger, CurrentUserService currentUser) {
 		this.agents = agents;
 		this.cost = cost;
 		this.hardware = hardware;
@@ -43,6 +46,7 @@ public class OpsController {
 		this.storage = storage;
 		this.backup = backup;
 		this.backupTrigger = backupTrigger;
+		this.currentUser = currentUser;
 	}
 
 	@GetMapping("/summary")
@@ -83,10 +87,11 @@ public class OpsController {
 		return new BackupView(backup.status(), backupTrigger.status());
 	}
 
-	/** Kick off an on-demand backup ("Back Up Now"). Returns immediately — the dump runs in the
-	 * background; poll {@code GET /backup} for the trigger state to reach SUCCESS/FAILED. */
+	/** Kick off an on-demand backup ("Back Up Now"). Admin-only (S-A3). Returns immediately — the
+	 * dump runs in the background; poll {@code GET /backup} for the trigger state. */
 	@PostMapping("/backup/trigger")
-	public BackupView triggerBackup() {
+	public BackupView triggerBackup(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		backupTrigger.trigger();
 		return new BackupView(backup.status(), backupTrigger.status());
 	}

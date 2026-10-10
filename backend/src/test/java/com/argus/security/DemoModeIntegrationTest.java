@@ -49,7 +49,7 @@ class DemoModeIntegrationTest {
 	}
 
 	private Cookie login() {
-		return TestUserSessions.loginAsNewUser(appUsers, sessions);
+		return TestUserSessions.loginAsAdmin(appUsers, sessions);
 	}
 
 	@Test

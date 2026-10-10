@@ -1,5 +1,7 @@
 package com.argus.ops;
 
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,10 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Smart Cleanup agent endpoints (session-gated under {@code /api/ops/cleanup}). {@code POST /preview}
- * runs the agent in dry-run mode and returns exactly what it would keep, delete, and roll up — deleting
- * nothing. {@code POST /run} performs the roll-up + delete for real. {@code GET /last} returns the most
- * recent run for the "Last cleanup" panel. Nothing here runs on a timer — cleanup is only ever invoked
- * on demand from the Ops UI.
+ * and {@code POST /run} are admin-only (S-A3). {@code GET /last} stays readable by any signed-in user
+ * for the Ops panel.
  */
 @RestController
 @RequestMapping("/api/ops/cleanup")
@@ -20,21 +20,25 @@ public class CleanupController {
 
 	private final CleanupService cleanup;
 	private final JdbcTemplate jdbc;
+	private final CurrentUserService currentUser;
 
-	public CleanupController(CleanupService cleanup, JdbcTemplate jdbc) {
+	public CleanupController(CleanupService cleanup, JdbcTemplate jdbc, CurrentUserService currentUser) {
 		this.cleanup = cleanup;
 		this.jdbc = jdbc;
+		this.currentUser = currentUser;
 	}
 
-	/** Dry-run: compute the keep/delete/roll-up plan, change nothing. */
+	/** Dry-run: compute the keep/delete/roll-up plan, change nothing. Admin-only (S-A3). */
 	@PostMapping("/preview")
-	public CleanupService.CleanupReport preview() {
+	public CleanupService.CleanupReport preview(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		return cleanup.preview();
 	}
 
-	/** Live: roll up then delete the disposable firehose rows. */
+	/** Live: roll up then delete the disposable firehose rows. Admin-only (S-A3). */
 	@PostMapping("/run")
-	public CleanupService.CleanupReport run() {
+	public CleanupService.CleanupReport run(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		return cleanup.run();
 	}
 

@@ -1,7 +1,8 @@
 package com.argus.recommendation;
 
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
-
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Agent 5 performance endpoints for the Operations dashboards (Epic 9), session-gated under
  * {@code /api/recommendations}. Separate from {@link RecommendationController} so the analytics
- * dependencies stay decoupled from the card/decision flow.
+ * dependencies stay decoupled from the card/decision flow. Tuning recompute is admin-only (S-A3).
  */
 @RestController
 @RequestMapping("/api/recommendations")
@@ -20,12 +21,14 @@ public class PerformanceController {
 	private final PerformanceService performance;
 	private final PaperInvestorService investor;
 	private final AdaptiveTuningService tuning;
+	private final CurrentUserService currentUser;
 
 	public PerformanceController(PerformanceService performance, PaperInvestorService investor,
-			AdaptiveTuningService tuning) {
+			AdaptiveTuningService tuning, CurrentUserService currentUser) {
 		this.performance = performance;
 		this.investor = investor;
 		this.tuning = tuning;
+		this.currentUser = currentUser;
 	}
 
 	/** Story 9.2 — win rate over All/30d/last-10, issued, taken vs declined, graduation state. */
@@ -65,12 +68,12 @@ public class PerformanceController {
 	}
 
 	/**
-	 * Ops: force the Phase B adaptive-tuning recompute now (it otherwise runs nightly), and return the
-	 * resulting per-agent reliability so the effect is immediately visible. Session-gated like all
-	 * {@code /api/*} endpoints.
+	 * Ops: force the Phase B adaptive-tuning recompute now (it otherwise runs nightly). Admin-only
+	 * (S-A3).
 	 */
 	@PostMapping("/tuning/recompute")
-	public Map<String, AdaptiveTuningService.ReliabilityView> recomputeTuning() {
+	public Map<String, AdaptiveTuningService.ReliabilityView> recomputeTuning(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		tuning.recompute();
 		return tuning.reliabilityByAgent();
 	}

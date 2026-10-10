@@ -1,5 +1,7 @@
 package com.argus.recommendation;
 
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,8 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Analyst Logic Review endpoints (session-gated under {@code /api/ops/logic-review}). {@code POST /run}
- * triggers a review on demand (the model proposes, the backtest decides); {@code GET /last} returns the
- * most recent run for the Ops UI. The review otherwise runs automatically after the nightly tuning.
+ * is admin-only (S-A3); {@code GET /last} stays readable for the Ops UI. The review otherwise runs
+ * automatically after the nightly tuning.
  */
 @RestController
 @RequestMapping("/api/ops/logic-review")
@@ -18,14 +20,18 @@ public class LogicReviewController {
 
 	private final LogicReviewService review;
 	private final JdbcTemplate jdbc;
+	private final CurrentUserService currentUser;
 
-	public LogicReviewController(LogicReviewService review, JdbcTemplate jdbc) {
+	public LogicReviewController(LogicReviewService review, JdbcTemplate jdbc,
+			CurrentUserService currentUser) {
 		this.review = review;
 		this.jdbc = jdbc;
+		this.currentUser = currentUser;
 	}
 
 	@PostMapping("/run")
-	public LogicReviewService.Result run() {
+	public LogicReviewService.Result run(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		return review.review();
 	}
 

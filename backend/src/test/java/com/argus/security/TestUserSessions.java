@@ -23,9 +23,19 @@ public final class TestUserSessions {
 	/** As {@link #loginAsNewUser(AppUserRepository, SessionStore)}, with a specific device label
 	 * (e.g. to simulate one person's two different devices in a session-management test). */
 	public static Cookie loginAsNewUser(AppUserRepository users, SessionStore sessions, String device) {
+		return loginAsNewUser(users, sessions, device, false);
+	}
+
+	/** Admin session for ops/settings mutators (S-A3). */
+	public static Cookie loginAsAdmin(AppUserRepository users, SessionStore sessions) {
+		return loginAsNewUser(users, sessions, "Admin device", true);
+	}
+
+	private static Cookie loginAsNewUser(AppUserRepository users, SessionStore sessions, String device,
+			boolean admin) {
 		String unique = UUID.randomUUID().toString();
 		AppUser user = users.save(new AppUser("test-sub-" + unique, "test-" + unique + "@example.com",
-				"Test User", null, false));
+				"Test User", null, admin));
 		return loginAs(sessions, user.getId(), device);
 	}
 

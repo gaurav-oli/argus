@@ -38,6 +38,10 @@ class OpsControllerBackupTest {
 	com.argus.security.SessionStore sessions;
 
 	private Cookie login() {
+		return TestUserSessions.loginAsAdmin(appUsers, sessions);
+	}
+
+	private Cookie loginAsFriend() {
 		return TestUserSessions.loginAsNewUser(appUsers, sessions);
 	}
 
@@ -65,5 +69,11 @@ class OpsControllerBackupTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.trigger.state").value("FAILED"))
 				.andExpect(jsonPath("$.trigger.message").isNotEmpty());
+	}
+
+	@Test
+	void nonAdminCannotTriggerBackup() throws Exception {
+		Cookie friend = loginAsFriend();
+		mockMvc.perform(post("/api/ops/backup/trigger").cookie(friend)).andExpect(status().isForbidden());
 	}
 }

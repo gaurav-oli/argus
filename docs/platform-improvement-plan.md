@@ -116,7 +116,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 |---|---|---|---|---|
 | 1 | S-A1 | Lock WebSocket: auth + block raw portfolio queues | A — Security | done |
 | 2 | S-A2 | Scope session list/revoke to the signed-in user | A — Security | done |
-| 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | not-started |
+| 3 | S-A3 | Admin-gate ops mutators + global settings + Demo Mode | A — Security | done |
 | 4 | S-A4 | Route portfolio-derived pushes to `sendToUser` | A — Security | not-started |
 | 5 | S-A5 | Gate all Haiku paths on Cost Governor | A — Security | not-started |
 | 6 | S-A6 | Reject userless sessions; PDF magic bytes; push unsubscribe ownership | A — Security | not-started |
@@ -172,7 +172,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-A3 — Admin-gate ops mutators + global settings + Demo Mode
 
-- **Status:** `not-started`
+- **Status:** `done`
 - **Priority:** P0
 - **Findings:** C3, H1
 - **Goal:** Only admin can trigger backup/cleanup/logic-review/tuning/graduation resume or change session-timeout / Demo Mode.
@@ -180,8 +180,8 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Listed mutators call `requireAdmin` (or equivalent); non-admin gets 403.
   - Reads used by the Agents dashboard may stay session-gated if they leak no secrets beyond current behavior (document any change).
 - **Hints:** `OpsController`, `CleanupController`, `LogicReviewController`, `PerformanceController`, `RecommendationController`, `SettingsController`, `DemoModeController`.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-09 — `requireAdmin` on listed POSTs/PUTs; GETs stay session-gated; IT `AdminMutatorGateIntegrationTest`.
+- **Notes:** Same feature branch.
 
 ### S-A4 — Route portfolio-derived pushes to `sendToUser`
 
@@ -438,9 +438,9 @@ Use for evidence; **stories above are the work queue.**
 |---|---|---|---|
 | C1 | Critical | Session list/revoke unscoped | S-A2 (**done**) |
 | C2 | Critical | Unauthenticated WS portfolio queues | S-A1 (**done**) |
-| C3 | Critical | Ops mutators not admin-gated | S-A3 |
+| C3 | Critical | Ops mutators not admin-gated | S-A3 (**done**) |
 | C4 | Critical→P3 | Take/Decline UI dead (optional for owner vision) | S-D1 |
-| H1 | High | Global settings / Demo Mode | S-A3 |
+| H1 | High | Global settings / Demo Mode | S-A3 (**done**) |
 | H2 | High | Broadcast push holdings hints | S-A4 |
 | H3 | High | Shared journal/watchlist/prefs | S-C1 |
 | H4 | High | Chrome positioning | S-D2 |

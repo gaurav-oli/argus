@@ -59,7 +59,7 @@ class SettingsIntegrationTest {
 	}
 
 	private Cookie login() {
-		return TestUserSessions.loginAsNewUser(appUsers, sessionStore);
+		return TestUserSessions.loginAsAdmin(appUsers, sessionStore);
 	}
 
 	@Test

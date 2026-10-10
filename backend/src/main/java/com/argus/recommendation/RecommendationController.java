@@ -1,6 +1,8 @@
 package com.argus.recommendation;
 
 import com.argus.recommendation.TradeDecision.Decision;
+import com.argus.security.CurrentUserService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,11 +37,13 @@ public class RecommendationController {
 	private final com.argus.technical.ChartStudyService charts;
 	private final com.argus.deepanalysis.DeepAnalysisService deepAnalyses;
 	private final com.argus.technical.LivePriceService prices;
+	private final CurrentUserService currentUser;
 
 	public RecommendationController(RecommendationService recommendations,
 			TradeConfirmationService confirmation, GraduationService graduation,
 			RecommendationDebateService debates, com.argus.technical.ChartStudyService charts,
-			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.technical.LivePriceService prices) {
+			com.argus.deepanalysis.DeepAnalysisService deepAnalyses, com.argus.technical.LivePriceService prices,
+			CurrentUserService currentUser) {
 		this.recommendations = recommendations;
 		this.confirmation = confirmation;
 		this.graduation = graduation;
@@ -47,6 +51,7 @@ public class RecommendationController {
 		this.charts = charts;
 		this.deepAnalyses = deepAnalyses;
 		this.prices = prices;
+		this.currentUser = currentUser;
 	}
 
 	@GetMapping
@@ -83,9 +88,10 @@ public class RecommendationController {
 		return graduation.summary();
 	}
 
-	/** Manual review (Story 6.6) — resume a FROZEN Agent 5 back to SHADOW. A no-op if not frozen. */
+	/** Manual review (Story 6.6) — resume a FROZEN Agent 5 back to SHADOW. Admin-only (S-A3). */
 	@PostMapping("/graduation/resume")
-	public GraduationService.GraduationSummary resumeGraduation() {
+	public GraduationService.GraduationSummary resumeGraduation(HttpServletRequest request) {
+		currentUser.requireAdmin(request);
 		graduation.resume();
 		return graduation.summary();
 	}

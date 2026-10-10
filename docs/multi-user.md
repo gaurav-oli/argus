@@ -118,15 +118,13 @@ Strike items here when fixed and set the matching story to `done` in that plan.
 `SessionStore.list(currentId, ownerUserId)` and `revokeByHandle(handle, ownerUserId)` only touch
 sessions owned by the caller. Foreign handles return 404 (same as unknown).
 
-### 5.2 High — Global settings writable by any user (H1)
+### 5.2 High — Global settings writable by any user (H1) — **fixed (S-A3, 2026-10-09)**
 
-- Session timeout (`PUT /api/settings/session-timeout`) changes TTL for everyone’s live sessions.
-- Demo Mode (`/api/settings/demo-mode`) flips for everyone.
-- Neither is admin-gated.
+`PUT` session-timeout and Demo Mode require admin. GETs remain available to any signed-in user.
 
-### 5.3 Critical — Ops mutators not admin-gated (C3)
+### 5.3 Critical — Ops mutators not admin-gated (C3) — **fixed (S-A3, 2026-10-09)**
 
-Any signed-in user can call:
+These mutators now call `requireAdmin`:
 
 - `POST /api/ops/backup/trigger`
 - cleanup `/preview` and `/run`
@@ -134,7 +132,7 @@ Any signed-in user can call:
 - tuning `/recompute`
 - graduation `/resume`
 
-(Contrast: admin invites correctly use `requireAdmin`.)
+Ops GETs (summary, backup status, last cleanup, etc.) stay session-gated for the dashboard.
 
 ### 5.4 High — Broadcast pushes can leak holdings signals (H2)
 
