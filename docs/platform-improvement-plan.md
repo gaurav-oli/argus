@@ -39,13 +39,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C1 | `40de6af` | Per-user Trade Journal decisions, watchlist picks and notification prefs (V91); broadcasts filtered per recipient |
 | S-C2 | `1aa3f3c` | Already shipped before the plan: revoke / restore / delete a person + withdraw an invite; verified and documented |
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
-| S-D1 | see `feat(S-D1)` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
+| S-D1 | `6d1896d` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-D2 — Align chrome copy with paper-lab positioning** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-D2 — Align chrome copy with paper-lab positioning** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -173,7 +173,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | done |
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
-| 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | not-started |
+| 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | in-progress |
 | 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | not-started |
 | 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
 | 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | not-started |
@@ -561,7 +561,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-D2 — Align chrome copy with paper-lab positioning
 
-- **Status:** `not-started`
+- **Status:** `in-progress`
 - **Priority:** P3
 - **Finding:** H4
 - **Goal:** Metadata/PWA/UI say paper-validated intelligence lab, not alpha tip sheet / not brokerage advice.
