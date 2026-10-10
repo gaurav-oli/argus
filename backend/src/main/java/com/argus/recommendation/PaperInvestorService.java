@@ -8,6 +8,8 @@ import com.argus.deepanalysis.DeepAnalysisService;
 import com.argus.deepanalysis.DeepVerdict;
 import com.argus.learning.FeatureTokens;
 import com.argus.learning.LessonEffect;
+import com.argus.learning.PatternAdvice;
+import com.argus.learning.PatternLibrary;
 import com.argus.learning.Lessons;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudy;
@@ -65,6 +67,7 @@ public class PaperInvestorService {
 	private final ChartStudyService charts;
 	private final DeepAnalysisService deepAnalyses;
 	private final RecommendationRepository recommendations;
+	private final PatternLibrary patterns;
 
 	public PaperInvestorService(SimulatedTradeRepository trades, LivePriceService prices,
 			BenchmarkPriceSource benchmark, GraduationService graduation,
@@ -76,7 +79,7 @@ public class PaperInvestorService {
 			@Value("${argus.paper-investor.max-open-per-sector-direction:4}") int maxOpenPerSectorDirection,
 			@Value("${argus.paper-investor.max-open-per-correlated-cluster:3}") int maxOpenPerCorrelatedCluster,
 			Lessons lessons, ChartStudyService charts, DeepAnalysisService deepAnalyses,
-			RecommendationRepository recommendations) {
+			RecommendationRepository recommendations, PatternLibrary patterns) {
 		this.trades = trades;
 		this.prices = prices;
 		this.benchmark = benchmark;
@@ -93,6 +96,7 @@ public class PaperInvestorService {
 		this.charts = charts;
 		this.deepAnalyses = deepAnalyses;
 		this.recommendations = recommendations;
+		this.patterns = patterns;
 	}
 
 	// ---- entry-time intelligence: lessons, size, and a chart-based protective stop ----
@@ -497,10 +501,6 @@ public class PaperInvestorService {
 						rec.getDirection(), rec.getTicker(), REENTRY_COOLDOWN.toDays());
 				return List.of();
 			}
-			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(fx.sizeMultiplier())).setScale(2, java.math.RoundingMode.HALF_UP);
-			ChartStudy entryChart = chartAt(rec.getTicker(), entry);
-			BigDecimal stop = StopLoss.stopFor(rec.getDirection(), entryChart, entry.doubleValue());
-			BigDecimal target = targetFor(rec, entry, entryChart);
 			if (sectorFull(rec)) {
 				log.info("Investor: {} book already holds {} {} names — not stacking {}",
 						sectors.sectorOf(rec.getTicker()).label(), maxOpenPerSectorDirection, rec.getDirection(),
@@ -512,6 +512,20 @@ public class PaperInvestorService {
 						maxOpenPerCorrelatedCluster, rec.getDirection(), rec.getTicker());
 				return List.of();
 			}
+			// S-B4: how did similar past setups do? The library can skip the entry, size it down, or tighten
+			// its stop; with too few matches (or any failure) it says "no prior pattern" and the trade proceeds.
+			java.util.Set<String> fingerprint = FeatureTokens.fromJson(rec.getFeatures());
+			PatternAdvice pattern = consultPatterns(rec, fingerprint);
+			if (pattern.skip()) {
+				log.info("Investor: pattern library skips {} {} — {}", rec.getDirection(), rec.getTicker(), pattern.note());
+				return List.of();
+			}
+			double sizeMultiplier = fx.sizeMultiplier() * pattern.sizeMultiplier();
+			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(sizeMultiplier)).setScale(2, java.math.RoundingMode.HALF_UP);
+			ChartStudy entryChart = chartAt(rec.getTicker(), entry);
+			BigDecimal stop = tightened(StopLoss.stopFor(rec.getDirection(), entryChart, entry.doubleValue()), entry, pattern.stopKeep());
+			BigDecimal target = targetFor(rec, entry, entryChart);
+			String fingerprintJson = fingerprint.isEmpty() ? null : FeatureTokens.toJson(fingerprint);
 
 			List<SimulatedTrade> opened = new java.util.ArrayList<>();
 			for (int horizon : horizonsFor(rec)) {
@@ -521,7 +535,8 @@ public class PaperInvestorService {
 				}
 				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
 						tradeNotional, entry, horizon, spy);
-				leg.applyRisk(stop, fx.sizeMultiplier());
+				leg.applyRisk(stop, sizeMultiplier);
+				leg.recordSetup(fingerprintJson, pattern.note());
 				leg.setHighWater(entry);
 				leg.setTargetPrice(target);
 				opened.add(trades.save(leg));
@@ -540,6 +555,9 @@ public class PaperInvestorService {
 						rec.getDirection(), rec.getTicker(), existing.size());
 			}
 			else {
+				if (!"NO_PATTERN".equals(pattern.action())) {
+					log.info("Investor: {} {} — {}", rec.getDirection(), rec.getTicker(), pattern.note());
+				}
 				log.info("Investor opened {} × ${} {} leg(s) on {} @ {} (stop {}, horizons {}, SPY {})",
 						opened.size(), tradeNotional, rec.getDirection(), rec.getTicker(), entry, stop,
 						opened.stream().map(t -> String.valueOf(t.getHorizonDays()))
@@ -553,6 +571,25 @@ public class PaperInvestorService {
 					rec == null ? "?" : rec.getTicker(), ex.getMessage());
 			return List.of();
 		}
+	}
+
+	/** The pattern library, failing open: any error means "no prior pattern" and the entry proceeds unchanged. */
+	private PatternAdvice consultPatterns(Recommendation rec, java.util.Set<String> fingerprint) {
+		try {
+			PatternAdvice advice = patterns.consult(rec.getId(), rec.getTicker(), rec.getDirection().name(), fingerprint);
+			return advice == null ? PatternAdvice.noPattern(0, "No prior pattern.") : advice;
+		}
+		catch (RuntimeException ex) {
+			log.warn("Investor: pattern library failed for {} — proceeding without it: {}", rec.getTicker(), ex.getMessage());
+			return PatternAdvice.noPattern(0, "No prior pattern — the library failed; proceeding as planned.");
+		}
+	}
+
+	/** Move the stop toward the entry so only {@code keep} of its distance remains (1.0 = unchanged). */
+	static BigDecimal tightened(BigDecimal stop, BigDecimal entry, double keep) {
+		if (keep >= 1.0 || stop == null) return stop;
+		BigDecimal distance = stop.subtract(entry).multiply(BigDecimal.valueOf(keep));
+		return entry.add(distance).setScale(6, java.math.RoundingMode.HALF_UP);
 	}
 
 	/**
@@ -718,7 +755,7 @@ public class PaperInvestorService {
 			BigDecimal entryPrice, BigDecimal shares, BigDecimal amount, BigDecimal stopPrice, BigDecimal targetPrice,
 			Instant closedAt, BigDecimal exitPrice, String exitReason, Long heldDays, BigDecimal returnPct, BigDecimal pnl,
 			BigDecimal vsSpyPct, Boolean won, boolean scaleIn, boolean takeProfitHalf, BigDecimal currentPrice,
-			BigDecimal unrealizedPct, String review) {
+			BigDecimal unrealizedPct, String review, String patternAdvice) {
 	}
 
 	/** Every paper trade, newest first — the Investor's full trade journal. */
@@ -741,7 +778,7 @@ public class PaperInvestorService {
 							t.getExitPrice(), open ? null : t.getExitReason(),
 							end == null ? null : java.time.Duration.between(t.getEntryAt(), end).toDays(), t.getReturnPct(), pnl,
 							t.getExcessReturnPct(), t.getWon(), t.isScaleIn(), t.getParentTradeId() != null, current, unrealized,
-							t.getReview());
+							t.getReview(), t.getPatternAdvice());
 				}).toList();
 	}
 

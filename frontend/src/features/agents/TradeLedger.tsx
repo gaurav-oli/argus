@@ -251,6 +251,7 @@ export function TradeLedger() {
                         {r.closedAt && ` · sold ${new Date(r.closedAt).toLocaleString()}`}
                         {r.vsSpyPct != null && ` · ${signed(r.vsSpyPct)}% vs the S&P 500`}
                         {isOpen && r.unrealizedPct != null && ` · live ${signed(r.unrealizedPct)}% (not yet realized)`}
+                        {r.patternAdvice && <p className="mt-1">Pattern check at entry: {r.patternAdvice}</p>}
                         {r.closedAt ? (
                           <LessonForTrade
                             tradeId={r.id}

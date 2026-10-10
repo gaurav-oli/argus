@@ -449,6 +449,17 @@ writes a lesson for each closed paper trade and backfills older trades 200 at a 
       3 lessons, and **All lessons →** jumps to the feed on Agents. A ticker with no trades shows no
       section.
 
+## 17. Pattern library (S-B4, same branch)  ⏳ TODO on the Mini
+Migration **V88** adds `simulated_trades.setup_fingerprint` and `pattern_advice`, plus a `pattern_check` table.
+There are no new env vars and no model calls.
+- [ ] After the next paper entry, `select action, note from pattern_check order by id desc limit 5` has rows.
+      With little history they read NO_PATTERN ("No prior pattern — N similar closed trades (needs 5)").
+- [ ] New `simulated_trades` rows have `setup_fingerprint` (a JSON token array) and `pattern_advice` filled in.
+- [ ] **Agents → "Pattern check before each trade"** lists the checks, and the advice filters count correctly.
+- [ ] **Investor record → open a new trade:** the row shows "Pattern check at entry: …".
+- [ ] Watch for a few days. A SKIP shows in the card and no trade opens. A SIZE_DOWN trade has a $50 amount
+      (or less, with a lesson multiplier).
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

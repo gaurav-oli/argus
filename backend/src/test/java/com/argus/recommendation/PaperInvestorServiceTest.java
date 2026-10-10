@@ -19,6 +19,8 @@ import com.argus.deepanalysis.DeepAnalysisService;
 import com.argus.deepanalysis.DeepVerdict;
 import com.argus.learning.LessonEffect;
 import com.argus.learning.Lessons;
+import com.argus.learning.PatternAdvice;
+import com.argus.learning.PatternLibrary;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.technical.ChartStudy;
@@ -52,6 +54,7 @@ class PaperInvestorServiceTest {
 	private final ChartStudyService charts = mock(ChartStudyService.class);
 	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
 	private final RecommendationRepository recommendationRepo = mock(RecommendationRepository.class);
+	private final PatternLibrary patterns = mock(PatternLibrary.class);
 
 	{
 		when(lessons.evaluate(any())).thenReturn(LessonEffect.none());
@@ -60,17 +63,17 @@ class PaperInvestorServiceTest {
 	// Default horizons (7/30/90); the close tests construct their own horizon-0 trades so they are
 	// immediately due. Benchmark is absent unless a test sets it.
 	private final PaperInvestorService investor = new PaperInvestorService(
-			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo);
+			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns);
 
 	private PaperInvestorService staggeredInvestor() {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "7,30,90", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo);
+				new BigDecimal("100"), "7,30,90", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns);
 	}
 
 	/** A correlation cap tight enough (1) that a single existing correlated same-direction name trips it. */
 	private PaperInvestorService investorWithCorrelationCap(int cap) {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "", 0, sectors, 4, cap, lessons, charts, deepAnalyses, recommendationRepo);
+				new BigDecimal("100"), "", 0, sectors, 4, cap, lessons, charts, deepAnalyses, recommendationRepo, patterns);
 	}
 
 	private static Recommendation rec(String ticker, SignalDirection dir, long id) {
@@ -374,6 +377,66 @@ class PaperInvestorServiceTest {
 
 		assertTrue(investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).isEmpty());
 		verify(trades, never()).save(any());
+	}
+
+	// ---- S-B4: the pattern library is consulted before every entry ----
+
+	private void pricedAapl() {
+		when(trades.existsByRecommendationId(7L)).thenReturn(false);
+		when(prices.latestPrice("AAPL")).thenReturn(Optional.of(bd(100)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+	}
+
+	@Test
+	void aPatternSkipStopsTheEntry() {
+		pricedAapl();
+		when(patterns.consult(any(), any(), any(), any())).thenReturn(new PatternAdvice("SKIP", 0, 1.0, 9, 1, 11, null, 60,
+				"lead=NEWS", "Matched 9 similar setups → skipped.", List.of(1L)));
+
+		assertTrue(investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).isEmpty());
+		verify(trades, never()).save(any());
+	}
+
+	@Test
+	void aPatternSizesDownTightensTheStopAndIsLoggedOnTheTrade() {
+		pricedAapl();
+		when(patterns.consult(eq(7L), eq("AAPL"), eq("BULLISH"), any())).thenReturn(new PatternAdvice("SIZE_DOWN", 0.5, 0.7,
+				6, 2, 33, null, 50, "lead=NEWS", "Matched 6 similar setups → half size + tightened stop.", List.of(1L)));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("50.00")), "half the usual $100");
+		assertEquals(0, leg.getStopPrice().compareTo(new BigDecimal("93.000000")), "10% stop tightened to 7%");
+		assertEquals("Matched 6 similar setups → half size + tightened stop.", leg.getPatternAdvice());
+	}
+
+	@Test
+	void theFingerprintIsStoredOnTheTrade() {
+		pricedAapl();
+		Recommendation r = rec("AAPL", SignalDirection.BULLISH, 7L);
+		when(r.getFeatures()).thenReturn("[\"dir=BULLISH\",\"lead=NEWS\"]");
+
+		SimulatedTrade leg = investor.open(r).get(0);
+
+		assertEquals("[\"dir=BULLISH\",\"lead=NEWS\"]", leg.getSetupFingerprint());
+	}
+
+	@Test
+	void aFailingPatternLibraryFailsOpen() {
+		pricedAapl();
+		when(patterns.consult(any(), any(), any(), any())).thenThrow(new IllegalStateException("db down"));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("100.00")));
+		assertTrue(leg.getPatternAdvice().startsWith("No prior pattern"));
+	}
+
+	@Test
+	void tightenedMovesTheStopTowardTheEntryForShortsToo() {
+		assertEquals(0, PaperInvestorService.tightened(bd(110), bd(100), 0.7).compareTo(new BigDecimal("107.000000")));
+		assertEquals(0, PaperInvestorService.tightened(bd(90), bd(100), 1.0).compareTo(bd(90)));
 	}
 
 	// ---- correlated-cluster concentration guard: the cross-sector blind spot the sector cap misses ----

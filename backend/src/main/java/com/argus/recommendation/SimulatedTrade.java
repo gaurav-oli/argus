@@ -139,6 +139,14 @@ public class SimulatedTrade {
 	@Column(name = "hold_return_pct")
 	private BigDecimal holdReturnPct;
 
+	/** S-B4: the setup's feature tokens at entry (JSON array) — what the pattern library matches on. */
+	@Column(name = "setup_fingerprint")
+	private String setupFingerprint;
+
+	/** S-B4: what the pattern library advised at entry, e.g. "Matched 9 similar setups [...] → tightened stop." */
+	@Column(name = "pattern_advice")
+	private String patternAdvice;
+
 	protected SimulatedTrade() {
 		// JPA
 	}
@@ -291,6 +299,15 @@ public class SimulatedTrade {
 	private static BigDecimal pctChange(BigDecimal from, BigDecimal to) {
 		return to.subtract(from).divide(from, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100));
 	}
+
+	/** S-B4: remember the setup this leg was opened in and what the pattern library advised. */
+	public void recordSetup(String fingerprintJson, String advice) {
+		this.setupFingerprint = fingerprintJson;
+		this.patternAdvice = advice;
+	}
+
+	public String getSetupFingerprint() { return setupFingerprint; }
+	public String getPatternAdvice() { return patternAdvice; }
 
 	public void recordReview(String review) {
 		this.review = review;

@@ -32,12 +32,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 | S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
+| S-B4 | see `feat(S-B4)` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
 
-Phase **A (security)** is complete. Phase **B**: `S-B1`, `S-B2`, `S-B3` done.
+Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B4` done.
 
 ### Next story for the next agent
 
-**→ S-B4 — Pattern library consulted before next paper trade** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-B5 — Intelligence as active thesis board** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -157,7 +158,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 7 | S-B1 | Trust scoreboard front-and-center (wins, Brier, sample size, graduation) | B — Paper trust | done |
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
-| 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | in-progress |
+| 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | not-started |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
@@ -332,7 +333,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B4 — Pattern library consulted before next paper trade
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P1
 - **Depends on:** S-B3 (patterns need lessons/outcomes)
 - **Goal:** Before opening a paper trade, agent looks up similar past setups and adjusts action (skip, size, stop, proceed).
@@ -342,8 +343,28 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Paper entry path consults it; decision logged (“matched pattern X → tightened stop”).
   - Empty library fails open (trade proceeds with “no prior pattern”).
 - **Hints:** New table or extend learned rules; wire into `PaperInvestorService` / recommendation trigger.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code).
+  - **Fingerprint schema** (documented in V88): a JSON array of `FeatureTokens`, the same vocabulary as `recommendations.features`. Keys: `dir`, `sector`, `regime`, `trend`, `vol`, `conv`, `has`/`lead`, `guidance`/`val`, `price`, `deep`, `hold`.
+    - Stored on each new leg as `simulated_trades.setup_fingerprint`.
+    - Older trades fall back to their recommendation's `features`, so the library works from day one without a backfill.
+  - **Lookup:** `learning/PatternMatcher` is pure, and `PatternLibraryService` reads the last 1000 closed trades in the same direction.
+    - A trade counts as similar when its Jaccard overlap is ≥ 0.5; horizon tokens are ignored.
+    - It returns matches, wins, win rate, average return, stop-out share, the shared pattern (e.g. `lead=NEWS · regime=RISK_OFF`) and the advice.
+    - API: `GET /api/learning/patterns?ticker=&limit=` and `/api/learning/patterns/summary?days=`.
+  - **Advice rules:**
+    - Under 5 matches → `NO_PATTERN`; the trade proceeds unchanged.
+    - ≥ 8 matches and a win rate ≤ 25% → `SKIP`.
+    - Win rate < 45% → `SIZE_DOWN` (×0.5).
+    - ≥ 50% of matches stopped out → `TIGHTEN_STOP` (keeps 70% of the stop distance). It can combine with SIZE_DOWN.
+    - Otherwise → `PROCEED`.
+  - **Entry path:** `PaperInvestorService.open` consults the library after the existing gates (lesson block, breaker, cooldown, sector and cluster caps). Size multiplies with the learned-rule size.
+    - Every check is logged to `pattern_check`, including SKIP and NO_PATTERN. The note is also stored on the trade (`pattern_advice`), e.g. "Matched 9 similar setups [...] → tightened stop."
+    - Any library error fails open.
+  - **UI:**
+    - Agents: a "Pattern check before each trade" card (`#patterns`) with advice filters.
+    - Investor record: the expanded row shows "Pattern check at entry".
+  - **Tests:** `PatternMatcherTest` (8), `PatternLibraryIntegrationTest` (2), and 5 new `PaperInvestorServiceTest` cases (skip, size and stop, fingerprint stored, fail open, short stop math). The full backend suite passes, 1189/1189.
+- **Notes:** Implemented as a service inside `learning/`, not a numbered agent. S-E1 decides whether it ever needs its own runtime. The rule thresholds are constants in `PatternMatcher`, not config yet.
 
 ### S-B5 — Intelligence as active thesis board
 

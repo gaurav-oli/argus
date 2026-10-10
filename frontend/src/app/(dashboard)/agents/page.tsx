@@ -9,6 +9,7 @@ import { ResearchAgentSection } from "@/features/agents/ResearchAgentSection";
 import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 import { LessonsFeed } from "@/features/agents/TradeLessons";
+import { PatternChecks } from "@/features/agents/PatternChecks";
 import { TradeJournal } from "@/features/agents/TradeJournal";
 import { TradeLedger } from "@/features/agents/TradeLedger";
 
@@ -39,6 +40,7 @@ export default function AgentsPage() {
           <PaperInvestorScoreboard />
           <TradeLedger />
           <LessonsFeed />
+          <PatternChecks />
           <AgentPerformance />
           <TradeJournal />
           <LogicReview />

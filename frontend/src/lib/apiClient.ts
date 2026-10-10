@@ -1410,6 +1410,32 @@ export const getLessons = (ticker?: string, limit = 30): Promise<TradeLesson[]> 
     `/api/learning/lessons?limit=${limit}${ticker ? `&ticker=${encodeURIComponent(ticker)}` : ""}`,
   );
 
+// ---- S-B4: pattern library (pre-entry checks) ----
+
+export type PatternAction = "PROCEED" | "SIZE_DOWN" | "TIGHTEN_STOP" | "SKIP" | "NO_PATTERN";
+
+/** One pre-entry consultation: how similar past setups did and what that changed about the new trade. */
+export interface PatternCheck {
+  id: number;
+  recommendationId: number | null;
+  ticker: string;
+  direction: string;
+  checkedAt: string;
+  matches: number;
+  wins: number;
+  winRatePct: number | null;
+  avgReturnPct: number | null;
+  stopOutPct: number | null;
+  action: PatternAction;
+  pattern: string | null;
+  note: string;
+}
+
+export const getPatternChecks = (ticker?: string, limit = 30): Promise<PatternCheck[]> =>
+  apiGet<PatternCheck[]>(
+    `/api/learning/patterns?limit=${limit}${ticker ? `&ticker=${encodeURIComponent(ticker)}` : ""}`,
+  );
+
 /** The lesson for one closed paper trade; rejects (404) until the 5-minute lessons pass has written it. */
 export const getLessonForTrade = (tradeId: number): Promise<TradeLesson> =>
   apiGet<TradeLesson>(`/api/learning/lessons/trade/${tradeId}`);
@@ -1684,6 +1710,8 @@ export interface LedgerRow {
   currentPrice: number | null;
   unrealizedPct: number | null;
   review: string | null;
+  /** S-B4: what the pattern library advised at entry; null for trades opened before it existed. */
+  patternAdvice: string | null;
 }
 
 export const getTradeLedger = (): Promise<LedgerRow[]> => apiGet<LedgerRow[]>("/api/recommendations/paper-trades/ledger");
