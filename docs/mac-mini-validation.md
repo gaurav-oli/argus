@@ -520,6 +520,18 @@ No migration. The new optional `ARGUS_QUOTA_*` env vars default to sensible caps
 - [ ] **Agents → Trade Journal:** the row reads **Agreed** with the "You" badge. A friend doesn't see it.
 - [ ] The paper Investor still trades that call as usual (its own row reads Taken).
 
+## 24. Chrome copy, error pages, stale-data banner (S-D2, S-D3, same branch)  ⏳ TODO on the Mini
+- [ ] **Copy:**
+  - [ ] Reinstall the PWA (or check `/manifest.webmanifest`): the name reads "Argus — Paper-validated research lab".
+  - [ ] The sign-in boot log includes "mode: paper lab…".
+  - [ ] The Intelligence header says "Research, not advice."
+- [ ] **Stale-data banner:** with the app open, `docker compose stop backend`.
+  - [ ] Within one refresh, an amber "Couldn't refresh — showing data from HH:MM. Retrying…" line appears under the
+        paper-lab banner, and the numbers stay on screen.
+  - [ ] `docker compose start backend`: the line disappears on the next refresh.
+- [ ] **Error page:** if a page ever throws, the shell stays up with "This page hit a problem" and **Try again**, not
+      a blank screen.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

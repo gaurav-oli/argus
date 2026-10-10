@@ -5,6 +5,8 @@
 // call. On the Mini this is single-origin; in local dev it's cross-port, which the backend
 // CORS config allows (allowCredentials + explicit origin).
 
+import { reportFailure, reportOk } from "./refreshHealth";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 /** Mirrors the backend `SystemInfo` record. */
@@ -73,13 +75,21 @@ async function toApiError(res: Response): Promise<ApiError> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+  } catch (err) {
+    reportFailure(null); // S-D3: offline / backend down — the page is now showing stale data
+    throw err;
+  }
   if (!res.ok) {
+    reportFailure(res.status);
     throw await toApiError(res);
   }
+  reportOk();
   // A 204 or otherwise empty body would throw inside res.json() (Epic 1 hardening backlog —
   // Story 1.6). No current GET endpoint returns one, but apiGet is the shared path for nearly
   // every read in this file, so guarding it here — matching the pattern apiPost/apiPut already

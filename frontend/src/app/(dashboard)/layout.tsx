@@ -3,6 +3,7 @@ import { BottomNav } from "@/components/shell/BottomNav";
 import { BottomStrip } from "@/components/shell/BottomStrip";
 import { RightPanel } from "@/components/shell/RightPanel";
 import { PaperLabBanner } from "@/components/shell/PaperLabBanner";
+import { RefreshStatusBanner } from "@/components/shell/RefreshStatusBanner";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TickerTape } from "@/components/terminal/TickerTape";
 import { SystemAlertBanner } from "@/components/shell/SystemAlertBanner";
@@ -41,6 +42,7 @@ export default function DashboardLayout({
               <TopBar />
               <TickerTape />
               <PaperLabBanner />
+              <RefreshStatusBanner />
               <SystemAlertBanner />
               <WhatsNewBanner />
 

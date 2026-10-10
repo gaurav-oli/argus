@@ -41,12 +41,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-C3 | `4ce49d5` | Per-person daily AI/import caps (Redis, 429 + friendly reset message, admin exempt), Profile usage card |
 | S-D1 | `6d1896d` | Optional Agree/Disagree (+ note) on the Intelligence ticker page, private per person, scored in the Trade Journal |
 | S-D2 | `a9ede2a` | Paper-lab positioning in metadata, PWA manifest, Intelligence header and sign-in boot log |
+| S-D3 | see `feat(S-D3)` | Dashboard + global error boundaries; shell banner when refreshes fail ("showing data from …") |
 
 Phase **A (security)** is complete. Phase **B** (`S-B1`–`S-B7`) and Phase **C** (`S-C1`–`S-C3`) are complete.
 
 ### Next story for the next agent
 
-**→ S-D3 — Frontend error boundary + visible refresh failures** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ Phase E (S-E1/E2/E3)** — not started. Each one needs an owner decision first (see the story notes): S-E1 "may collapse into Trade Learner", S-E2 adds allowlisted web scraping, S-E3 "skip if Filings + calendar are enough". Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -175,7 +176,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 16 | S-C3 | Per-user AI / import soft quotas | C — Multi-user | done |
 | 17 | S-D1 | Optional: human Agree/Disagree overlay on Intelligence | D — Later | done |
 | 18 | S-D2 | Align chrome copy with paper-lab positioning | D — Later | done |
-| 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | in-progress |
+| 19 | S-D3 | Frontend `error.tsx` + visible refresh failures | D — Later | done |
 | 20 | S-E1 | New Agent 16 — Pattern Matcher (only if S-B4 needs a dedicated runtime) | E — New agents | not-started |
 | 21 | S-E2 | New Agent 17 — Strategy Scout (shadow candidates only) | E — New agents | not-started |
 | 22 | S-E3 | Optional Agent 18 — Earnings Call Reader | E — New agents | not-started |
@@ -577,12 +578,20 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-D3 — Frontend error boundary + visible refresh failures
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P3
 - **Finding:** M6
 - **Goal:** Failures don’t blank the app or silently keep stale numbers.
 - **Acceptance:** `error.tsx` (and ideally `global-error.tsx`); key dashboards show “couldn’t refresh — showing data from …” on failure.
-- **Completed:** —
+- **Completed:** 2026-10-10 (Claude Code). Frontend only.
+  - **Error boundaries:**
+    - `app/(dashboard)/error.tsx` keeps the shell (sidebar, top bar, paper-lab banner) and shows "This page hit a problem" with **Try again** (Next 16's `unstable_retry`) and **Go home**.
+    - `app/global-error.tsx` is the last resort for errors in the root layout. It brings its own `<html>`/`<body>` and inline Terminal Noir colours.
+  - **Refresh failures:** `lib/refreshHealth.ts` (no imports, unit-tested) is fed by every `apiGet`.
+    - A network failure or a 5xx marks refreshes as failing. A 4xx doesn't: 404 means "nothing yet", and 401 re-gates.
+    - The next successful read clears it.
+  - **Banner:** `components/shell/RefreshStatusBanner` under the paper-lab banner says "Couldn't refresh — showing data from 10:42 AM. Retrying…" (or "Couldn't reach Argus" before the first success). It's an `aria-live` status with a reduced-motion-safe pulse, and it covers every dashboard, since they all read through `apiGet`.
+  - **Tests:** `lib/refreshHealth.test.mjs` (3). Frontend unit tests 52/52.
 - **Notes:** —
 
 ---
@@ -640,7 +649,7 @@ Use for evidence; **stories above are the work queue.**
 | M3 | Medium | Streams spine only 3 agents | (backlog — document hybrid; no story yet) |
 | M4 | Medium | PDF magic / push unsub IDOR | ~~S-A6~~ done |
 | M5 | Medium | No uninvite/disable | S-C2 (**done**) |
-| M6 | Medium | No error.tsx | S-D3 |
+| M6 | Medium | No error.tsx | S-D3 (**done**) |
 | M7 | Medium | Jobs use investor defaults | (fold into B stories when touching briefings) |
 | L1–L4 | Low | Black Swan stub, Flyway admin email, markdown hrefs, CSRF | (backlog) |
 
