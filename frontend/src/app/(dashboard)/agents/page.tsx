@@ -10,6 +10,7 @@ import { SmartCleanup } from "@/features/agents/SmartCleanup";
 import { OpsHealth } from "@/features/agents/OpsHealth";
 import { LessonsFeed } from "@/features/agents/TradeLessons";
 import { PatternChecks } from "@/features/agents/PatternChecks";
+import { StyleFitMatrix } from "@/features/agents/StyleFitMatrix";
 import { TradeJournal } from "@/features/agents/TradeJournal";
 import { TradeLedger } from "@/features/agents/TradeLedger";
 
@@ -41,6 +42,7 @@ export default function AgentsPage() {
           <TradeLedger />
           <LessonsFeed />
           <PatternChecks />
+          <StyleFitMatrix />
           <AgentPerformance />
           <TradeJournal />
           <LogicReview />

@@ -472,6 +472,16 @@ No migration and no env vars.
       setups) fits on a phone without sideways scroll, and both links jump to the right card on Agents.
 - [ ] A WATCH ticker with no paper history shows no thesis panel.
 
+## 19. Playbook × style fit (S-B6, same branch)  ⏳ TODO on the Mini
+Migration **V89** adds `simulated_trades.playbook` and `style_fit`. There are no env vars.
+- [ ] **Agents → "Which playbooks win where":** switching style (Volatility / Sector / Price band / Market regime /
+      Trend) redraws the table.
+  - [ ] Cells under 10 trades are dimmed.
+  - [ ] The "Overall" column matches each playbook's own record.
+- [ ] New paper legs have `playbook` and `style_fit` filled in. The ledger row shows "Style fit at entry: …".
+- [ ] Once a playbook has 10+ closed trades in a bucket, an entry on that kind of name reads "good fit, ×1.25" or
+      "poor fit, ×0.75", and the trade amount moves to match.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._

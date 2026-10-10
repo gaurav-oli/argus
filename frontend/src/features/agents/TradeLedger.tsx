@@ -252,6 +252,7 @@ export function TradeLedger() {
                         {r.vsSpyPct != null && ` · ${signed(r.vsSpyPct)}% vs the S&P 500`}
                         {isOpen && r.unrealizedPct != null && ` · live ${signed(r.unrealizedPct)}% (not yet realized)`}
                         {r.patternAdvice && <p className="mt-1">Pattern check at entry: {r.patternAdvice}</p>}
+                        {r.styleFit && <p className="mt-1">Style fit at entry: {r.styleFit}</p>}
                         {r.closedAt ? (
                           <LessonForTrade
                             tradeId={r.id}

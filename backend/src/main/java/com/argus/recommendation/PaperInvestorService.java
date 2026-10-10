@@ -10,6 +10,8 @@ import com.argus.learning.FeatureTokens;
 import com.argus.learning.LessonEffect;
 import com.argus.learning.PatternAdvice;
 import com.argus.learning.PatternLibrary;
+import com.argus.learning.StyleFit;
+import com.argus.learning.StyleFitService;
 import com.argus.learning.Lessons;
 import com.argus.regime.SectorClassifier;
 import com.argus.technical.ChartStudy;
@@ -68,6 +70,7 @@ public class PaperInvestorService {
 	private final DeepAnalysisService deepAnalyses;
 	private final RecommendationRepository recommendations;
 	private final PatternLibrary patterns;
+	private final StyleFitService styleFit;
 
 	public PaperInvestorService(SimulatedTradeRepository trades, LivePriceService prices,
 			BenchmarkPriceSource benchmark, GraduationService graduation,
@@ -79,7 +82,7 @@ public class PaperInvestorService {
 			@Value("${argus.paper-investor.max-open-per-sector-direction:4}") int maxOpenPerSectorDirection,
 			@Value("${argus.paper-investor.max-open-per-correlated-cluster:3}") int maxOpenPerCorrelatedCluster,
 			Lessons lessons, ChartStudyService charts, DeepAnalysisService deepAnalyses,
-			RecommendationRepository recommendations, PatternLibrary patterns) {
+			RecommendationRepository recommendations, PatternLibrary patterns, StyleFitService styleFit) {
 		this.trades = trades;
 		this.prices = prices;
 		this.benchmark = benchmark;
@@ -97,6 +100,7 @@ public class PaperInvestorService {
 		this.deepAnalyses = deepAnalyses;
 		this.recommendations = recommendations;
 		this.patterns = patterns;
+		this.styleFit = styleFit;
 	}
 
 	// ---- entry-time intelligence: lessons, size, and a chart-based protective stop ----
@@ -520,7 +524,9 @@ public class PaperInvestorService {
 				log.info("Investor: pattern library skips {} {} — {}", rec.getDirection(), rec.getTicker(), pattern.note());
 				return List.of();
 			}
-			double sizeMultiplier = fx.sizeMultiplier() * pattern.sizeMultiplier();
+			// S-B6: does this call's playbook tend to win on this kind of name? Tilts size only with enough sample.
+			StyleFit.Fit fit = consultStyleFit(fingerprint);
+			double sizeMultiplier = fx.sizeMultiplier() * pattern.sizeMultiplier() * fit.multiplier();
 			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(sizeMultiplier)).setScale(2, java.math.RoundingMode.HALF_UP);
 			ChartStudy entryChart = chartAt(rec.getTicker(), entry);
 			BigDecimal stop = tightened(StopLoss.stopFor(rec.getDirection(), entryChart, entry.doubleValue()), entry, pattern.stopKeep());
@@ -537,6 +543,7 @@ public class PaperInvestorService {
 						tradeNotional, entry, horizon, spy);
 				leg.applyRisk(stop, sizeMultiplier);
 				leg.recordSetup(fingerprintJson, pattern.note());
+				leg.recordStyleFit(fit.family(), fit.note());
 				leg.setHighWater(entry);
 				leg.setTargetPrice(target);
 				opened.add(trades.save(leg));
@@ -582,6 +589,17 @@ public class PaperInvestorService {
 		catch (RuntimeException ex) {
 			log.warn("Investor: pattern library failed for {} — proceeding without it: {}", rec.getTicker(), ex.getMessage());
 			return PatternAdvice.noPattern(0, "No prior pattern — the library failed; proceeding as planned.");
+		}
+	}
+
+	/** The style-fit tilt, failing open: any error (or no answer) means no tilt. */
+	private StyleFit.Fit consultStyleFit(java.util.Set<String> fingerprint) {
+		try {
+			StyleFit.Fit fit = styleFit == null ? null : styleFit.fitFor(fingerprint);
+			return fit == null ? StyleFit.Fit.none(StyleFit.family(fingerprint), "No style fit.") : fit;
+		}
+		catch (RuntimeException ex) {
+			return StyleFit.Fit.none(StyleFit.family(fingerprint), "No style fit — the lookup failed.");
 		}
 	}
 
@@ -755,7 +773,7 @@ public class PaperInvestorService {
 			BigDecimal entryPrice, BigDecimal shares, BigDecimal amount, BigDecimal stopPrice, BigDecimal targetPrice,
 			Instant closedAt, BigDecimal exitPrice, String exitReason, Long heldDays, BigDecimal returnPct, BigDecimal pnl,
 			BigDecimal vsSpyPct, Boolean won, boolean scaleIn, boolean takeProfitHalf, BigDecimal currentPrice,
-			BigDecimal unrealizedPct, String review, String patternAdvice) {
+			BigDecimal unrealizedPct, String review, String patternAdvice, String playbook, String styleFit) {
 	}
 
 	/** Every paper trade, newest first — the Investor's full trade journal. */
@@ -778,7 +796,7 @@ public class PaperInvestorService {
 							t.getExitPrice(), open ? null : t.getExitReason(),
 							end == null ? null : java.time.Duration.between(t.getEntryAt(), end).toDays(), t.getReturnPct(), pnl,
 							t.getExcessReturnPct(), t.getWon(), t.isScaleIn(), t.getParentTradeId() != null, current, unrealized,
-							t.getReview(), t.getPatternAdvice());
+							t.getReview(), t.getPatternAdvice(), t.getPlaybook(), t.getStyleFit());
 				}).toList();
 	}
 

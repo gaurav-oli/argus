@@ -1436,6 +1436,30 @@ export const getPatternChecks = (ticker?: string, limit = 30): Promise<PatternCh
     `/api/learning/patterns?limit=${limit}${ticker ? `&ticker=${encodeURIComponent(ticker)}` : ""}`,
   );
 
+// ---- S-B6: playbook × style fit ----
+
+export interface StyleFitCell {
+  family: string;
+  dimension: string;
+  bucket: string;
+  trades: number;
+  wins: number;
+  winRatePct: number | null;
+  avgReturnPct: number | null;
+  /** False under the sample-size guard: shown, but it never moves a trade. */
+  enough: boolean;
+}
+
+export interface StyleFitReport {
+  /** Dimension key → label, in display order (vol, sector, price, regime, trend). */
+  dimensions: Record<string, string>;
+  families: { family: string; trades: number; wins: number; winRatePct: number | null }[];
+  cells: StyleFitCell[];
+  minSample: number;
+}
+
+export const getStyleFit = (): Promise<StyleFitReport> => apiGet<StyleFitReport>("/api/learning/style-fit");
+
 /** The lesson for one closed paper trade; rejects (404) until the 5-minute lessons pass has written it. */
 export const getLessonForTrade = (tradeId: number): Promise<TradeLesson> =>
   apiGet<TradeLesson>(`/api/learning/lessons/trade/${tradeId}`);
@@ -1712,6 +1736,9 @@ export interface LedgerRow {
   review: string | null;
   /** S-B4: what the pattern library advised at entry; null for trades opened before it existed. */
   patternAdvice: string | null;
+  /** S-B6: the evidence family the call led with (NEWS, DEEP, TECHNICAL, ...), and the style-fit note at entry. */
+  playbook: string | null;
+  styleFit: string | null;
 }
 
 export const getTradeLedger = (): Promise<LedgerRow[]> => apiGet<LedgerRow[]>("/api/recommendations/paper-trades/ledger");

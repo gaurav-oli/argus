@@ -21,6 +21,8 @@ import com.argus.learning.LessonEffect;
 import com.argus.learning.Lessons;
 import com.argus.learning.PatternAdvice;
 import com.argus.learning.PatternLibrary;
+import com.argus.learning.StyleFit;
+import com.argus.learning.StyleFitService;
 import com.argus.marketdata.BenchmarkPriceSource;
 import com.argus.model.ModelGateway;
 import com.argus.technical.ChartStudy;
@@ -55,6 +57,7 @@ class PaperInvestorServiceTest {
 	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
 	private final RecommendationRepository recommendationRepo = mock(RecommendationRepository.class);
 	private final PatternLibrary patterns = mock(PatternLibrary.class);
+	private final StyleFitService styleFit = mock(StyleFitService.class);
 
 	{
 		when(lessons.evaluate(any())).thenReturn(LessonEffect.none());
@@ -63,17 +66,17 @@ class PaperInvestorServiceTest {
 	// Default horizons (7/30/90); the close tests construct their own horizon-0 trades so they are
 	// immediately due. Benchmark is absent unless a test sets it.
 	private final PaperInvestorService investor = new PaperInvestorService(
-			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns);
+			trades, prices, benchmark, graduation, confirmations, gateway, new BigDecimal("100"), "", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns, styleFit);
 
 	private PaperInvestorService staggeredInvestor() {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "7,30,90", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns);
+				new BigDecimal("100"), "7,30,90", 0, sectors, 4, 3, lessons, charts, deepAnalyses, recommendationRepo, patterns, styleFit);
 	}
 
 	/** A correlation cap tight enough (1) that a single existing correlated same-direction name trips it. */
 	private PaperInvestorService investorWithCorrelationCap(int cap) {
 		return new PaperInvestorService(trades, prices, benchmark, graduation, confirmations, gateway,
-				new BigDecimal("100"), "", 0, sectors, 4, cap, lessons, charts, deepAnalyses, recommendationRepo, patterns);
+				new BigDecimal("100"), "", 0, sectors, 4, cap, lessons, charts, deepAnalyses, recommendationRepo, patterns, styleFit);
 	}
 
 	private static Recommendation rec(String ticker, SignalDirection dir, long id) {
@@ -431,6 +434,28 @@ class PaperInvestorServiceTest {
 
 		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("100.00")));
 		assertTrue(leg.getPatternAdvice().startsWith("No prior pattern"));
+	}
+
+	@Test
+	void aGoodStyleFitSizesUpAndTagsThePlaybook() {
+		pricedAapl();
+		when(styleFit.fitFor(any())).thenReturn(new StyleFit.Fit("NEWS", 1.25, 29, "NEWS-led calls win 83% ... → good fit, ×1.25."));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("125.00")));
+		assertEquals("NEWS", leg.getPlaybook());
+		assertTrue(leg.getStyleFit().endsWith("×1.25."));
+	}
+
+	@Test
+	void aFailingStyleFitMeansNoTilt() {
+		pricedAapl();
+		when(styleFit.fitFor(any())).thenThrow(new IllegalStateException("db down"));
+
+		SimulatedTrade leg = investor.open(rec("AAPL", SignalDirection.BULLISH, 7L)).get(0);
+
+		assertEquals(0, leg.getNotional().compareTo(new BigDecimal("100.00")));
 	}
 
 	@Test

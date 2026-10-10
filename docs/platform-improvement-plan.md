@@ -34,12 +34,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
 | S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
 | S-B5 | `7a0e387` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
+| S-B6 | see `feat(S-B6)` | Playbook × style matrix (V89 tags), sample-guarded ±25% size tilt on paper entries, Agents heatmap |
 
-Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B5` done.
+Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B6` done.
 
 ### Next story for the next agent
 
-**→ S-B6 — Per-stock / per-style strategy fit** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-B7 — Strategy sandbox: shadow → promote or kill** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -161,7 +162,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
 | 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
-| 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | in-progress |
+| 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | done |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
 | 15 | S-C2 | Admin uninvite / disable user / revoke-all sessions | C — Multi-user | not-started |
@@ -398,7 +399,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B6 — Per-stock / per-style strategy fit
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P2
 - **Goal:** Track which playbooks win on which kinds of names (vol regime, sector, large vs high-beta, etc.).
 - **Acceptance:**
@@ -406,8 +407,20 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Report/UI: strategy or signal family × style bucket win rates (with sample-size guards).
   - Recommendation/paper path can prefer the better-fitting playbook when enough sample exists.
 - **Hints:** `strategy/*`, paper ledger, adaptive tuning — extend rather than replace.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code).
+  - **Tagging:** V89 adds `simulated_trades.playbook` (the evidence family the call led with: NEWS, DEEP, TECHNICAL, …) and `style_fit` (the note at entry).
+    - The style dimensions are the `vol` / `sector` / `price` / `regime` / `trend` tokens in `setup_fingerprint` (V88).
+    - Older trades are read through their recommendation's `features`, so the report is populated from day one.
+  - **Report:** `learning/StyleFit` (pure) and `StyleFitService` build a playbook × style-bucket matrix over the last 2000 closed trades: trades, wins, win %, average return.
+    - Cells under 10 trades are flagged `enough=false`.
+    - API: `GET /api/learning/style-fit`.
+    - UI: the Agents card "Which playbooks win where" (`#style-fit`) has a style picker. Cells that beat or lag the playbook's overall rate by 10+ points are green or red; cells under the guard are dimmed.
+  - **Paper path:** after the pattern check, `PaperInvestorService.open` asks `StyleFitService.fitFor(fingerprint)`.
+    - It only looks at cells for this call's playbook in this name's buckets that pass the guard.
+    - The average gap vs the playbook's overall win rate sets the tilt: ≥ +10 points → ×1.25 size, ≤ −10 points → ×0.75.
+    - The tilt multiplies with the lesson and pattern sizes. The note is stored on the trade and shown in the ledger row ("Style fit at entry: …"). Any failure means no tilt.
+  - **Tests:** `StyleFitTest` (4: matrix and guard, good fit, poor fit, no-sample/no-playbook) and 2 new `PaperInvestorServiceTest` cases (size up and tag, fail open). The full backend suite passes, 1197/1197.
+- **Notes:** "Prefer the better-fitting playbook" is a size preference, not a veto: the call still comes from Agent 5. The thresholds are constants in `StyleFit`. Adaptive tuning and the strategy package are untouched; this sits beside them in `learning/`.
 
 ### S-B7 — Strategy sandbox: shadow → promote or kill
 

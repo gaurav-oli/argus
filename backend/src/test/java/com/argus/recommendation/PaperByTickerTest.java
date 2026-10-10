@@ -13,13 +13,13 @@ class PaperByTickerTest {
 	private static PaperInvestorService.LedgerRow open(String ticker, String amount, String unrealizedPct) {
 		return new PaperInvestorService.LedgerRow(1, ticker, "BULLISH", "CURRENT", "OPEN", Instant.parse("2026-10-01T14:00:00Z"),
 				BigDecimal.TEN, BigDecimal.TEN, new BigDecimal(amount), null, null, null, null, null, 3L, null, null, null, null,
-				false, false, null, unrealizedPct == null ? null : new BigDecimal(unrealizedPct), null, null);
+				false, false, null, unrealizedPct == null ? null : new BigDecimal(unrealizedPct), null, null, null, null);
 	}
 
 	private static PaperInvestorService.LedgerRow closed(String ticker, boolean won, String pnl, String closedAt) {
 		return new PaperInvestorService.LedgerRow(2, ticker, "BULLISH", "CURRENT", "CLOSED", Instant.parse("2026-09-01T14:00:00Z"),
 				BigDecimal.TEN, BigDecimal.TEN, new BigDecimal("100"), null, null, Instant.parse(closedAt), BigDecimal.ONE,
-				"HORIZON", 30L, null, new BigDecimal(pnl), null, won, false, false, null, null, null, null);
+				"HORIZON", 30L, null, new BigDecimal(pnl), null, won, false, false, null, null, null, null, null, null);
 	}
 
 	@Test

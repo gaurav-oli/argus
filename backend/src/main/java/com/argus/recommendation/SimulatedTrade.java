@@ -147,6 +147,14 @@ public class SimulatedTrade {
 	@Column(name = "pattern_advice")
 	private String patternAdvice;
 
+	/** S-B6: the evidence family this leg's call led with (NEWS, DEEP, TECHNICAL, ...). */
+	@Column(name = "playbook")
+	private String playbook;
+
+	/** S-B6: what the style-fit matrix said at entry, e.g. "NEWS-led calls win 83% on vol=high names ... → good fit, ×1.25." */
+	@Column(name = "style_fit")
+	private String styleFit;
+
 	protected SimulatedTrade() {
 		// JPA
 	}
@@ -306,6 +314,14 @@ public class SimulatedTrade {
 		this.patternAdvice = advice;
 	}
 
+	/** S-B6: remember the playbook this leg led with and the style-fit note. */
+	public void recordStyleFit(String playbook, String styleFit) {
+		this.playbook = playbook;
+		this.styleFit = styleFit;
+	}
+
+	public String getPlaybook() { return playbook; }
+	public String getStyleFit() { return styleFit; }
 	public String getSetupFingerprint() { return setupFingerprint; }
 	public String getPatternAdvice() { return patternAdvice; }
 
