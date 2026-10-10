@@ -1716,6 +1716,25 @@ export interface LedgerRow {
 
 export const getTradeLedger = (): Promise<LedgerRow[]> => apiGet<LedgerRow[]>("/api/recommendations/paper-trades/ledger");
 
+/** S-B5: the paper book for one ticker — open position with live P&L, and its past record there. */
+export interface PaperTickerView {
+  ticker: string;
+  /** BULLISH / BEARISH while legs are open; null when flat. */
+  openDirection: "BULLISH" | "BEARISH" | null;
+  openLegs: number;
+  openAmount: number | null;
+  unrealizedPct: number | null;
+  unrealizedPnl: number | null;
+  closedTrades: number;
+  wins: number;
+  realizedPnl: number | null;
+  lastClosedAt: string | null;
+  lastResult: "WON" | "LOST" | null;
+}
+
+export const getPaperByTicker = (): Promise<PaperTickerView[]> =>
+  apiGet<PaperTickerView[]>("/api/recommendations/paper-trades/by-ticker");
+
 export const getPaperTrades = (): Promise<PaperTradeScoreboard> =>
   apiGet<PaperTradeScoreboard>("/api/recommendations/paper-trades");
 

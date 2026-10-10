@@ -33,12 +33,13 @@ Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-ru
 | S-B2 | `eda43a4` | Trust bar (config + `/api/recommendations/trust-bar`), persistent paper-lab banner, checklist on the scoreboard |
 | S-B3 | `5da7bdf` | Per-trade lessons (V87 `trade_lesson`), "what changed" settled from logic review / Agent 13, lessons feed on Agents + ledger + Intelligence |
 | S-B4 | `2e18520` | Pattern library: setup fingerprints (V88), similar-trade lookup + advice (skip / half size / tighter stop), consulted on every paper entry and logged |
+| S-B5 | see `feat(S-B5)` | Intelligence thesis board: odds + top signals + paper position/P&L + pattern hint on cards and the ticker page |
 
-Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B4` done.
+Phase **A (security)** is complete. Phase **B**: `S-B1`–`S-B5` done.
 
 ### Next story for the next agent
 
-**→ S-B5 — Intelligence as active thesis board** — status `in-progress` (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
+**→ S-B6 — Per-stock / per-style strategy fit** — next up (Claude Code, 2026-10-10). Owner asked to work through the remaining stories in order in auto mode.
 
 Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B4 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before the next story.
 
@@ -159,7 +160,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 | 8 | S-B2 | Paper-validation bar (explicit “not real money until bar clears”) | B — Paper trust | done |
 | 9 | S-B3 | Post-trade learning narrative (win and loss) | B — Learning | done |
 | 10 | S-B4 | Pattern library consulted before next paper trade | B — Learning | done |
-| 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | in-progress |
+| 11 | S-B5 | Intelligence as active thesis board (confidence + paper P&L + why) | B — Learning | done |
 | 12 | S-B6 | Per-stock / per-style strategy fit tracking | B — Strategies | not-started |
 | 13 | S-B7 | Strategy sandbox: shadow → promote or kill | B — Strategies | not-started |
 | 14 | S-C1 | Per-user journal, watchlist, notification prefs | C — Multi-user | not-started |
@@ -368,7 +369,7 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
 
 ### S-B5 — Intelligence as active thesis board
 
-- **Status:** `in-progress`
+- **Status:** `done`
 - **Priority:** P1
 - **Goal:** Intelligence answers: buy/sell/hold, confidence, why, paper position/P&L if any, similar-pattern hint.
 - **Acceptance:**
@@ -377,8 +378,23 @@ Work top → bottom. Do not skip Phase A for Funnel-exposed hosts.
   - Optional link into S-B4 pattern match when available.
   - Does **not** require human Take/Decline for the loop to work.
 - **Hints:** Intelligence Today / TickerDetail; recommendation + paper-trade APIs.
-- **Completed:** —
-- **Notes:** —
+- **Completed:** 2026-10-10 (Claude Code).
+  - **Backend:** `GET /api/recommendations/paper-trades/by-ticker` comes from `PaperByTicker.fold(ledger)`, a pure fold over the same rows as the Investor record. Per ticker it gives:
+    - the open side, legs, amount, and amount-weighted live % and $;
+    - the closed count, wins, realized $, and last result.
+  - **Today → Needs your attention cards:** each card shows:
+    - the action and conviction ring (existing);
+    - the odds on its side;
+    - "Driven by" the top 3 signals on the call's side;
+    - the paper line ("Paper: long 2 legs · $150 · +3.1% live", "Paper: flat · 3 closed, 2 won · +$4.20" or "Not in the paper book yet");
+    - the pattern hint ("Pattern: 9 similar, 33% won") when the library had matches.
+  - **Ticker page:** a thesis panel under the header with:
+    - **Why** (top 4 signals with weights, plus the first reason);
+    - **Paper book** (position, live P&L, earlier record, last close), linking to Agents `#lessons`;
+    - **Similar setups** (the latest S-B4 check's action chip and note), linking to `#patterns`.
+  - Nothing depends on Take/Decline.
+  - **Tests:** `PaperByTickerTest` (2) and `lib/agentNames.test.mjs` (2; friendly agent names and the top-signal pick). The full backend suite passes, 1191/1191.
+- **Notes:** `lib/agentNames.ts` mirrors `LessonComposer.AGENT_NAMES`. Keep the two in sync when an agent is added.
 
 ### S-B6 — Per-stock / per-style strategy fit
 

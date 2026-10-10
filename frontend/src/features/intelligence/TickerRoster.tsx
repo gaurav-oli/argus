@@ -32,6 +32,12 @@ export interface RosterRow {
   /** When this call was first made, and when the latest review pass last re-checked it. Null for a WATCH. */
   callSince: string | null;
   checkedAt: string | null;
+  /** The call's side and its signals (S-B5: "driven by"); null/empty for a WATCH. */
+  direction: "BULLISH" | "BEARISH" | null;
+  signals: RecommendationCard["signals"];
+  /** The 0–100 model odds on the call's own side; null for a WATCH. */
+  odds: number | null;
+  reasons: string[];
 }
 
 const ACTION_CLS: Record<string, string> = {
@@ -80,6 +86,10 @@ export function useTickerRoster() {
             : null,
         callSince: r.callSince ?? r.createdAt,
         checkedAt: r.createdAt,
+        direction: r.direction,
+        signals: r.signals ?? [],
+        odds: Math.round(100 * (r.direction === "BEARISH" ? r.bearProbability : r.bullProbability)),
+        reasons: r.reasons ?? [],
       });
     }
     for (const w of watching) {
@@ -97,6 +107,10 @@ export function useTickerRoster() {
         forecast: null,
         callSince: null,
         checkedAt: null,
+        direction: null,
+        signals: [],
+        odds: null,
+        reasons: [],
       });
     }
     return [...byTicker.values()].sort((a, b) => {

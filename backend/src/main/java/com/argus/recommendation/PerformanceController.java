@@ -67,6 +67,12 @@ public class PerformanceController {
 		return investor.ledger();
 	}
 
+	/** S-B5: the paper book per ticker (open position + live P&L, past record) for the Intelligence thesis board. */
+	@GetMapping("/paper-trades/by-ticker")
+	public List<PaperByTicker.View> paperByTicker() {
+		return PaperByTicker.fold(investor.ledger());
+	}
+
 	@GetMapping("/paper-trades")
 	public PaperInvestorService.Scoreboard paperTrades() {
 		return investor.scoreboard();

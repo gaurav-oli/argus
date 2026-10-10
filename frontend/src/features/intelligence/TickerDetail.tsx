@@ -11,6 +11,8 @@ import {
   type FundamentalsDetail,
   type InsiderActivity,
   type NewsItem,
+  type PaperTickerView,
+  type PatternCheck,
   type StrategyReading,
   type TickerBuzz,
   type TickerSentiment,
@@ -18,6 +20,7 @@ import {
 import { CandlestickChart } from "./CandlestickChart";
 import { DeepAnalysisForTicker } from "./DeepAnalysisCard";
 import { TickerLessons } from "@/features/agents/TradeLessons";
+import { ThesisPanel } from "./ThesisContext";
 import { CompanyIcon } from "@/components/ui/CompanyIcon";
 import { ConvictionRing } from "@/components/ui/ConvictionRing";
 import { SlidingTabs } from "@/components/ui/SlidingTabs";
@@ -80,6 +83,8 @@ function levelDistance(level: number, price: number): string {
 export function TickerDetail({
   ticker,
   roster,
+  paper,
+  pattern,
   news,
   social,
   insider,
@@ -88,6 +93,8 @@ export function TickerDetail({
 }: {
   ticker: string;
   roster: RosterRow | undefined;
+  paper?: PaperTickerView;
+  pattern?: PatternCheck;
   news: NewsItem[];
   social: TickerSentiment[];
   insider: InsiderActivity[];
@@ -174,6 +181,8 @@ export function TickerDetail({
           </div>
         )}
       </div>
+
+      {roster && <ThesisPanel row={roster} paper={paper} pattern={pattern} />}
 
       {roster?.deepVerdict?.atRisk && (
         <motion.div

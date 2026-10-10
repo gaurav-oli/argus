@@ -14,6 +14,7 @@ import { AgentLabs } from "@/features/intelligence/AgentLabs";
 import { BreakingAlerts } from "@/features/intelligence/BreakingAlerts";
 import { CommandPalette, type PaletteItem } from "@/features/intelligence/CommandPalette";
 import { TickerDetail } from "@/features/intelligence/TickerDetail";
+import { ThesisLines, useThesisContext } from "@/features/intelligence/ThesisContext";
 import { TickerRow, useTickerRoster } from "@/features/intelligence/TickerRoster";
 import { TickersTable } from "@/features/intelligence/TickersTable";
 import { TrustScoreboard } from "@/features/trust/TrustScoreboard";
@@ -61,6 +62,7 @@ export function IntelligenceView() {
   const reduce = useReducedMotion();
 
   const { rows, loading, allTickers } = useTickerRoster();
+  const thesis = useThesisContext();
   const logos = useCompanyLogos(allTickers);
 
   const [news, setNews] = useState<NewsItem[] | null>(null);
@@ -121,6 +123,8 @@ export function IntelligenceView() {
               key={selectedTicker}
               ticker={selectedTicker}
               roster={selectedRoster}
+              paper={thesis.paperBy.get(selectedTicker)}
+              pattern={thesis.patternBy.get(selectedTicker)}
               news={news ?? []}
               social={social ?? []}
               insider={insider ?? []}
@@ -180,6 +184,7 @@ export function IntelligenceView() {
                                 {r.holdLabel && ` · hold ~${r.holdLabel}`}
                                 {r.deepVerdict?.atRisk && <span className="ml-1 font-semibold text-warning">⚠ at risk</span>}
                               </p>
+                              <ThesisLines row={r} paper={thesis.paperBy.get(r.ticker)} pattern={thesis.patternBy.get(r.ticker)} />
                               {r.callSince && (
                                 <p className="mt-1.5 text-[10.5px] text-text-tertiary" title={r.checkedAt ? `Last re-checked ${new Date(r.checkedAt).toLocaleString()}` : undefined}>
                                   Since {callDate(r.callSince)}

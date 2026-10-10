@@ -460,6 +460,18 @@ There are no new env vars and no model calls.
 - [ ] Watch for a few days. A SKIP shows in the card and no trade opens. A SIZE_DOWN trade has a $50 amount
       (or less, with a lesson multiplier).
 
+## 18. Intelligence thesis board (S-B5, same branch)  ⏳ TODO on the Mini
+No migration and no env vars.
+- [ ] **Intelligence → Today → Needs your attention:** each card shows its odds %, "Driven by …" (3 agents), and a
+      paper line that matches the Investor record for that ticker:
+      - an open position shows its side, legs, amount and live %;
+      - a ticker with only closed trades shows "flat · N closed, N won · $";
+      - otherwise the card says "Not in the paper book yet".
+- [ ] A card shows "Pattern: N similar, N% won" only after the pattern library found matches for it.
+- [ ] **Open a BUY/AVOID ticker:** under the header, the three-column thesis panel (Why / Paper book / Similar
+      setups) fits on a phone without sideways scroll, and both links jump to the right card on Agents.
+- [ ] A WATCH ticker with no paper history shows no thesis panel.
+
 ---
 _Keep this list updated as stories add Mini-only validation. Backup/recovery
 validation has its own runbook (`/RECOVERY.md`, Epic 10, Story 10.3)._
