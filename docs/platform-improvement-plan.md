@@ -7,9 +7,41 @@ Replaces `platform-review-2026-10.md` (findings kept below as Appendix A).
 |---|---|
 | Last updated | 2026-10-09 |
 | Product intent | Multi-source intelligence → scored buy/sell/hold → **paper trades validate** → feedback/learning → patterns & per-stock strategies → operator builds trust → **only then** consider real trades |
-| How to continue | Read **Agent protocol**, then **Story board**, start the first `not-started` story in priority order (unless user picks another) |
+| How to continue | Read **Session checkpoint**, then **Agent protocol**, then **Story board**. Start the first `not-started` story unless the user picks another. |
 
 Related: [`multi-user.md`](multi-user.md) §5 · [`deploy-runbook.md`](deploy-runbook.md) · [`design-terminal-noir.md`](design-terminal-noir.md)
+
+---
+
+## Session checkpoint (read this first)
+
+**Branch:** `feature/platform-improvement-s-a1-websocket-auth` (do **not** merge to `main` until the owner asks).  
+**Tip of branch (pushed):** `3b43977` — `feat(S-B1): put paper trust scoreboard on Home and Intelligence`  
+**Do not start a new feature branch** for the remaining stories — keep committing on this same branch.
+
+### Done on this branch (do not redo)
+
+| ID | Commit | What shipped |
+|---|---|---|
+| S-A1 | `e7a0ab0` | WS handshake requires signed-in session; block raw `/queue` subscribe |
+| S-A2 | `2f054b6` | Session list/revoke scoped to signed-in user |
+| S-A3 | `1aeae22` | Admin-gate ops mutators + global settings + Demo Mode |
+| S-A4 | `0485611` | Holdings-linked / ticker pushes → `sendToUser`; `/api/push/test` caller-only |
+| S-A5 | `a76e0b8` | All Haiku paths via `paidFallback` + Cost Governor (≥95% refuses paid) |
+| S-A6 | `89cd746` | Userless sessions fail auth; PDF `%PDF` magic; push unsub ownership |
+| S-B1 | `3b43977` | `TrustScoreboard` on Home + Intelligence; accuracy `prior30d` trend |
+
+Phase **A (security)** is complete. Phase **B** has started (`S-B1` done).
+
+### Next story for the next agent
+
+**→ S-B2 — Paper-validation bar (explicit “not real money until bar clears”)** — status `not-started`.
+
+Follow the **Agent protocol** below: mark `in-progress` in this file first, implement only S-B2 acceptance criteria, mark `done` + Completed note, commit + push on this branch, then **stop and ask** before S-B3.
+
+### Owner follow-up
+
+When the remaining stories (or a batch) are done, the owner will return to the original session for a **validation pass** against this plan’s acceptance criteria — keep Completed notes accurate so that review is easy.
 
 ---
 
