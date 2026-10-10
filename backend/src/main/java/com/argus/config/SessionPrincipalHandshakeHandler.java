@@ -17,10 +17,9 @@ import org.springframework.web.socket.server.support.DefaultHandshakeHandler;
  * same-origin request. This is what lets a per-user STOMP destination ({@code /user/queue/...})
  * target exactly one person's own open connection(s), never anyone else's (Phase 2, multi-user).
  *
- * <p>A handshake with no valid session still connects, just with no Principal: it can receive the
- * shared {@code /topic/...} broadcasts (agent status, market pulse — not private), but Spring's
- * {@code convertAndSendToUser} can never deliver to it, so a personal push like the live portfolio
- * value fails closed rather than falling back to a public broadcast.
+ * <p>Unauthenticated upgrades are rejected earlier by {@link SessionAuthHandshakeInterceptor}
+ * (S-A1). This handler therefore expects a session with a {@code userId}; if somehow missing, it
+ * returns null and personal {@code convertAndSendToUser} delivery fails closed.
  */
 public class SessionPrincipalHandshakeHandler extends DefaultHandshakeHandler {
 

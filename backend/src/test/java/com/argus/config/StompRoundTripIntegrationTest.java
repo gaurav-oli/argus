@@ -2,10 +2,17 @@ package com.argus.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.argus.TestcontainersConfiguration;
 import com.argus.common.LivePushService;
+import com.argus.security.AppUserRepository;
+import com.argus.security.SessionCookie;
+import com.argus.security.SessionStore;
+import com.argus.security.TestUserSessions;
+import jakarta.servlet.http.Cookie;
 import java.lang.reflect.Type;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -28,8 +35,8 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 /**
- * Live round-trip (AC #3): a real STOMP-over-WebSocket client connects, subscribes to
- * {@code /topic/demo}, and receives a message published via {@link LivePushService}.
+ * Live STOMP-over-WebSocket checks, including S-A1: handshake requires a signed-in session, and
+ * raw {@code /queue/portfolio-user\{id\}} subscribe is blocked.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("dev")
@@ -42,30 +49,22 @@ class StompRoundTripIntegrationTest {
 	@Autowired
 	LivePushService livePushService;
 
+	@Autowired
+	AppUserRepository appUsers;
+
+	@Autowired
+	SessionStore sessions;
+
 	@Test
 	void connectedClientReceivesLivePush() throws Exception {
-		WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
-		stompClient.setMessageConverter(new StringMessageConverter());
+		Cookie login = TestUserSessions.loginAsNewUser(appUsers, sessions);
+		WebSocketStompClient stompClient = newClient();
 
-		StompSession session = stompClient
-				.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {
-				})
-				.get(5, TimeUnit.SECONDS);
+		StompSession session = connect(stompClient, cookieHeaders(login));
 
 		BlockingQueue<String> received = new LinkedBlockingQueue<>();
-		session.subscribe("/topic/demo", new StompFrameHandler() {
-			@Override
-			public Type getPayloadType(StompHeaders headers) {
-				return String.class;
-			}
+		session.subscribe("/topic/demo", stringHandler(received));
 
-			@Override
-			public void handleFrame(StompHeaders headers, Object payload) {
-				received.add((String) payload);
-			}
-		});
-
-		// Give the SUBSCRIBE frame time to register on the broker before publishing.
 		Thread.sleep(300);
 		livePushService.publish("/topic/demo", "hello-live");
 
@@ -77,29 +76,138 @@ class StompRoundTripIntegrationTest {
 		stompClient.stop();
 	}
 
-	/**
-	 * The other half of the fix (Epic 1 hardening backlog — WebSocket origin lock-down, closed
-	 * 2026-07-23): {@code /ws} used to accept every origin ({@code setAllowedOriginPatterns("*")}).
-	 * It now shares {@code argus.web.allowed-origins} with CORS, which in the {@code dev} profile
-	 * defaults to {@code http://localhost:3000} only — so a handshake claiming a different origin
-	 * must be rejected, not merely "not explicitly allowed."
-	 */
+	@Test
+	void handshakeWithoutSessionIsRejected() {
+		WebSocketStompClient stompClient = newClient();
+
+		ExecutionException ex = assertThrows(ExecutionException.class, () -> stompClient
+				.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {
+				})
+				.get(5, TimeUnit.SECONDS));
+		assertNotNull(ex.getCause());
+
+		stompClient.stop();
+	}
+
+	@Test
+	void handshakeWithUserlessSessionIsRejected() {
+		String sessionId = sessions.create("legacy-device"); // no userId
+		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
+		headers.add("Cookie", SessionCookie.NAME + "=" + sessionId);
+
+		WebSocketStompClient stompClient = newClient();
+		ExecutionException ex = assertThrows(ExecutionException.class,
+				() -> stompClient.connectAsync("ws://localhost:" + port + "/ws", headers,
+						new StompSessionHandlerAdapter() {
+						}).get(5, TimeUnit.SECONDS));
+		assertNotNull(ex.getCause());
+		stompClient.stop();
+	}
+
 	@Test
 	void handshakeFromDisallowedOriginIsRejected() {
-		WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
-		stompClient.setMessageConverter(new StringMessageConverter());
+		Cookie login = TestUserSessions.loginAsNewUser(appUsers, sessions);
+		WebSocketStompClient stompClient = newClient();
 
-		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
+		WebSocketHttpHeaders headers = cookieHeaders(login);
 		headers.setOrigin("https://evil.example.com");
 
 		ExecutionException ex = assertThrows(ExecutionException.class, () -> stompClient
 				.connectAsync("ws://localhost:" + port + "/ws", headers, new StompSessionHandlerAdapter() {
 				})
 				.get(5, TimeUnit.SECONDS));
-		// A rejected handshake surfaces as an HTTP failure wrapping the upgrade attempt — the
-		// meaningful assertion is that it fails at all, not the exact exception shape.
 		assertNotNull(ex.getCause());
 
 		stompClient.stop();
+	}
+
+	@Test
+	void authenticatedUserReceivesPersonalPortfolioQueue() throws Exception {
+		Cookie login = TestUserSessions.loginAsNewUser(appUsers, sessions);
+		Long userId = sessions.userId(login.getValue()).orElseThrow();
+
+		WebSocketStompClient stompClient = newClient();
+		StompSession session = connect(stompClient, cookieHeaders(login));
+
+		BlockingQueue<String> received = new LinkedBlockingQueue<>();
+		session.subscribe("/user/queue/portfolio", stringHandler(received));
+
+		Thread.sleep(300);
+		livePushService.publishToUser(userId, "/queue/portfolio", "my-portfolio");
+
+		assertEquals("my-portfolio", received.poll(5, TimeUnit.SECONDS));
+
+		session.disconnect();
+		stompClient.stop();
+	}
+
+	@Test
+	void rawPortfolioUserQueueSubscribeIsRejected() throws Exception {
+		Cookie victim = TestUserSessions.loginAsNewUser(appUsers, sessions);
+		Long victimId = sessions.userId(victim.getValue()).orElseThrow();
+		Cookie stranger = TestUserSessions.loginAsNewUser(appUsers, sessions);
+
+		WebSocketStompClient stompClient = newClient();
+		StompSession session = connect(stompClient, cookieHeaders(stranger));
+
+		BlockingQueue<String> received = new LinkedBlockingQueue<>();
+		boolean subscribeRejectedLocally = false;
+		try {
+			session.subscribe("/queue/portfolio-user" + victimId, stringHandler(received));
+		} catch (RuntimeException ex) {
+			subscribeRejectedLocally = true;
+		}
+
+		Thread.sleep(400);
+		livePushService.publishToUser(victimId, "/queue/portfolio", "secret-holdings");
+
+		assertNull(received.poll(1, TimeUnit.SECONDS),
+				"stranger must not receive another user's portfolio via raw /queue/portfolio-user{id}");
+		// Guard closes the STOMP session on illegal SUBSCRIBE — either local throw or closed socket.
+		assertTrue(subscribeRejectedLocally || !session.isConnected(),
+				"raw /queue/portfolio-user{id} subscribe must be rejected");
+
+		try {
+			if (session.isConnected()) {
+				session.disconnect();
+			}
+		} catch (IllegalStateException ignored) {
+			// already closed by the guard — expected
+		}
+		stompClient.stop();
+	}
+
+	private static WebSocketStompClient newClient() {
+		WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
+		stompClient.setMessageConverter(new StringMessageConverter());
+		return stompClient;
+	}
+
+	private StompSession connect(WebSocketStompClient stompClient, WebSocketHttpHeaders headers)
+			throws Exception {
+		return stompClient
+				.connectAsync("ws://localhost:" + port + "/ws", headers, new StompSessionHandlerAdapter() {
+				})
+				.get(5, TimeUnit.SECONDS);
+	}
+
+	private static WebSocketHttpHeaders cookieHeaders(Cookie login) {
+		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
+		headers.add("Cookie", login.getName() + "=" + login.getValue());
+		return headers;
+	}
+
+	private static StompFrameHandler stringHandler(BlockingQueue<String> received) {
+		return new StompFrameHandler() {
+			@Override
+			public Type getPayloadType(StompHeaders headers) {
+				return String.class;
+			}
+
+			@Override
+			public void handleFrame(StompHeaders headers, Object payload) {
+				received.add((String) payload);
+			}
+		};
 	}
 }

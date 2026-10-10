@@ -105,16 +105,13 @@ Inherited from the single-user / tailnet-only design; still open as of the Octob
 Work queue with story statuses (S-A1…): **[`docs/platform-improvement-plan.md`](platform-improvement-plan.md)**.
 Strike items here when fixed and set the matching story to `done` in that plan.
 
-### 5.0 Critical — WebSocket portfolio queue (C2)
+### 5.0 Critical — WebSocket portfolio queue (C2) — **fixed (S-A1, 2026-10-09)**
 
-`SessionAuthFilter` only registers for `/api/*`. `/ws` is Funnel-public. Handshake allows a
-connection with **no** Principal (`SessionPrincipalHandshakeHandler`). The simple broker exposes
-`/queue` with **no** STOMP `ChannelInterceptor`. Live portfolio uses
-`convertAndSendToUser(userId, "/queue/portfolio", …)`, which clients can address as
-`/queue/portfolio-user{id}` with sequential `userId`s — **without a valid session**.
+`/ws` still sits outside `SessionAuthFilter` (`/api/*` only), but:
 
-Until fixed: require an authenticated handshake with `userId`, and deny client SUBSCRIBE to raw
-`/queue/**` (only rewritten user destinations for the Principal).
+- `SessionAuthHandshakeInterceptor` rejects the upgrade unless `ARGUS_SESSION` has a `userId`.
+- `StompDestinationGuard` rejects client SUBSCRIBE/SEND to raw `/queue/**` (including
+  `/queue/portfolio-user{id}`). Clients use `/user/queue/portfolio` only.
 
 ### 5.1 Critical — Session list / revoke not scoped (C1)
 

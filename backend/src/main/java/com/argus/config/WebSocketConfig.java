@@ -3,6 +3,7 @@ package com.argus.config;
 import com.argus.security.SessionStore;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -19,6 +20,10 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * wide-open {@code "*"} — a naive single hardcoded origin would break the Mini's single-origin
  * Tailscale deploy (the tailnet host must be allowed), which is exactly why this now reuses the
  * same env-configurable list CORS already validates against, instead of introducing a second one.
+ *
+ * <p>S-A1: the handshake requires a signed-in session ({@link SessionAuthHandshakeInterceptor}), and
+ * {@link StompDestinationGuard} rejects client SUBSCRIBE/SEND to raw {@code /queue/**} so
+ * {@code /queue/portfolio-user\{id\}} cannot be guessed over Funnel.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -41,9 +46,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 	}
 
 	@Override
+	public void configureClientInboundChannel(ChannelRegistration registration) {
+		registration.interceptors(new StompDestinationGuard());
+	}
+
+	@Override
 	public void registerStompEndpoints(StompEndpointRegistry registry) {
 		registry.addEndpoint("/ws")
 				.setAllowedOriginPatterns(webProperties.allowedOrigins().toArray(String[]::new))
+				.addInterceptors(new SessionAuthHandshakeInterceptor(sessions))
 				.setHandshakeHandler(new SessionPrincipalHandshakeHandler(sessions));
 	}
 }
