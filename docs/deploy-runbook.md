@@ -6,10 +6,10 @@ How to run Argus on the **Mac Mini M3** and expose it to invited users over HTTP
 > to the internet with **Tailscale Funnel**, so invited friends don't need to join your tailnet.
 > Google Sign-In plus the invite allowlist (`invited_email`) is the gate. See
 > **[`docs/multi-user.md`](multi-user.md)** for the auth flow, what's private vs shared, and the
-> known gaps that matter now that the app is public. Full hardening checklist:
-> **[`docs/platform-review-2026-10.md`](platform-review-2026-10.md)** (includes critical WebSocket
-> portfolio-queue gap while Funnel exposes `/ws`). Before October 2026 the rule was "tailnet-only,
-> never Funnel" (NFR-3). That rule is **superseded**.
+> known gaps that matter now that the app is public. Hardening stories (start at **S-A1**):
+> **[`docs/platform-improvement-plan.md`](platform-improvement-plan.md)** (includes critical
+> WebSocket portfolio-queue gap while Funnel exposes `/ws`). Before October 2026 the rule was
+> "tailnet-only, never Funnel" (NFR-3). That rule is **superseded**.
 
 **Topology:** the Mini runs the full stack — Postgres + Redis + backend + frontend
 in Docker Compose, and **Ollama natively on the host** (Docker on macOS has no

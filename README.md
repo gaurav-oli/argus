@@ -8,8 +8,9 @@ Funnel. People sign in with Google, but only if the admin has invited their emai
 portfolio, briefing and investor profile are private. The market intelligence the agents produce
 (news, recommendations, analysis) is shared. See **[docs/multi-user.md](docs/multi-user.md)**.
 
-**Platform review (Oct 2026):** open security/product findings and fix sequencing —
-**[docs/platform-review-2026-10.md](docs/platform-review-2026-10.md)** (pick this up for hardening).
+**Improvement plan:** prioritized stories (security → paper trust/learning → multi-user) with
+status tracking for multi-session agents —
+**[docs/platform-improvement-plan.md](docs/platform-improvement-plan.md)**.
 
 > Argus is a **decision-support & discipline tool, not an alpha-generation engine.** Its value is
 > behavioral: stay informed without being overwhelmed, confront the bear case, size positions sensibly,
@@ -25,7 +26,7 @@ argus/  (this repo)
 ├── docker-compose.yml  # Postgres 18 (pgvector) + Redis 8; backend + frontend under the `deploy` profile
 ├── .env.example        # copy to .env (gitignored) and fill in keys
 ├── scripts/            # backup.sh + launchd installer (Story 10.1)
-├── docs/               # runbooks, multi-user, platform review, Mini validation
+├── docs/               # runbooks, multi-user, improvement plan, Mini validation
 ├── _bmad-output/       # planning + implementation artifacts (PRD, architecture, epics, stories)
 ├── RECOVERY.md         # restore / restart runbook
 └── README.md

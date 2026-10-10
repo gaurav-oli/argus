@@ -101,10 +101,9 @@ Isolation uses Hibernate `@TenantId` on `user_id`:
 
 ## 5. Known gaps (security-relevant now that the app is public via Funnel)
 
-Inherited from the single-user / tailnet-only design; still open as of the October 2026 platform
-review. Full checklist with IDs (C1–L4), product gaps, and sequencing:
-**[`docs/platform-review-2026-10.md`](platform-review-2026-10.md)**. Strike items here when fixed
-and mark the matching ID done in that file.
+Inherited from the single-user / tailnet-only design; still open as of the October 2026 review.
+Work queue with story statuses (S-A1…): **[`docs/platform-improvement-plan.md`](platform-improvement-plan.md)**.
+Strike items here when fixed and set the matching story to `done` in that plan.
 
 ### 5.0 Critical — WebSocket portfolio queue (C2)
 
@@ -187,12 +186,11 @@ monthly Haiku budget. `escalate()` also bypasses the BIG-tier concurrency semaph
 - Statement upload `isPdf` accepts content-type **or** `.pdf` filename — no `%PDF` magic bytes
   (15MB cap still applies).
 
-### 5.12 Product (not authz) — Take/Decline UI orphaned (C4)
+### 5.12 Product (optional) — Take/Decline UI orphaned (C4 → story S-D1)
 
 `RecommendationCards` (Take/Decline, debate, personas) is unmounted after the Intelligence
-rebuild; `decideRecommendation` is only called from that dead component. Trade Journal copy still
-promises “by you” decisions, but the live path is largely the Investor auto-paper book. See
-`design-terminal-noir.md` and `platform-review-2026-10.md`.
+rebuild. Owner vision prioritizes the **Investor paper → learn** loop; human Agree/Disagree is
+optional later (**S-D1** in `platform-improvement-plan.md`). See also `design-terminal-noir.md`.
 
 ## 6. Leftovers from the single-user era
 

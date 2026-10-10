@@ -136,8 +136,8 @@ covered by `npm test` (16 tests, Node's built-in runner, no new dependencies).
 > That component is no longer mounted anywhere (it predates the Intelligence rebuild), so the bar
 > now lives in the ticker detail instead. `RecommendationCards` also owned human Take/Decline,
 > debate, and personas — orphaning it broke the discipline loop. **Do not delete until that UX is
-> remounted on Intelligence** (platform review finding **C4** —
-> [`platform-review-2026-10.md`](platform-review-2026-10.md)).
+> remounted or replaced** if you want human Agree/Disagree (**S-D1** in
+> [`platform-improvement-plan.md`](platform-improvement-plan.md); optional vs paper loop).
 
 ## Argie, the pixel mascot
 

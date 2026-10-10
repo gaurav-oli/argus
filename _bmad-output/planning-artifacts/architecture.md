@@ -17,8 +17,8 @@ date: '2026-06-15'
 ## Living amendments (October 2026) — code is source of truth
 
 The body below is the June 2026 design record. Where it disagrees with the running system, **prefer
-the code** and these amendments. Hardening backlog:
-[`docs/platform-review-2026-10.md`](../../docs/platform-review-2026-10.md) and
+the code** and these amendments. Improvement stories (status-tracked):
+[`docs/platform-improvement-plan.md`](../../docs/platform-improvement-plan.md) and
 [`docs/multi-user.md`](../../docs/multi-user.md).
 
 | Topic | June 2026 doc | Current reality |
