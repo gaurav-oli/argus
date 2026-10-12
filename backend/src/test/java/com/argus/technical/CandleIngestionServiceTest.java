@@ -1,6 +1,7 @@
 package com.argus.technical;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -46,6 +47,7 @@ class CandleIngestionServiceTest {
 	private final LivePortfolioService livePrices = mock(LivePortfolioService.class);
 	private final NotificationService notifications = mock(NotificationService.class);
 	private final ChartStudyService charts = mock(ChartStudyService.class);
+	private final org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
 	private final TechnicalAnalysisProperties props = new TechnicalAnalysisProperties(400);
 	private final CandleIngestionService service = service("test-key", props);
 
@@ -63,7 +65,7 @@ class CandleIngestionServiceTest {
 
 	private CandleIngestionService service(String avKey, TechnicalAnalysisProperties p) {
 		CandleIngestionService s = new CandleIngestionService(avKey, yahoo, alphaVantage, candles, universe,
-				livePrices, p, notifications, new ListingResolver("VFV,DOL"), charts);
+				livePrices, p, notifications, new ListingResolver("VFV,DOL"), charts, events);
 		s.setRequestSpacingMs(0);
 		return s;
 	}
@@ -277,5 +279,78 @@ class CandleIngestionServiceTest {
 				"Saturday → Friday");
 		assertEquals(LocalDate.of(2026, 9, 25), CandleIngestionService.lastCompletedSession(ny(2026, 9, 28, 9, 0)),
 				"Monday before the close → the previous Friday");
+	}
+
+	// ---- splits and spin-offs ----
+
+	private static YahooChartClient.Bar closeAt(LocalDate d, String close) {
+		BigDecimal p = new BigDecimal(close);
+		return new YahooChartClient.Bar(d, p, p, p, p, 1000);
+	}
+
+	@Test
+	void aConsistentMismatchWithYahooIsASplit() {
+		LocalDate d = LocalDate.of(2026, 9, 28);
+		// RETO: stored 0.142 / 0.091 / 0.0933 before its 1-for-20 reverse split; Yahoo now shows 2.84 / 1.82 / 1.866.
+		java.util.Map<LocalDate, BigDecimal> stored = java.util.Map.of(d, new BigDecimal("0.142"), d.plusDays(1),
+				new BigDecimal("0.091"), d.plusDays(3), new BigDecimal("0.0933"), d.plusDays(4), new BigDecimal("1.55"));
+		var adj = CandleIngestionService.readjustment(stored, List.of(closeAt(d, "2.84"), closeAt(d.plusDays(1), "1.82"),
+				closeAt(d.plusDays(3), "1.866"), closeAt(d.plusDays(4), "1.55")));
+		assertTrue(adj.isPresent());
+		assertEquals(20.0, adj.get().factor(), 0.01);
+		assertEquals(d.plusDays(3), adj.get().newestAffected(), "the post-split bar already matches");
+	}
+
+	@Test
+	void aLoneDifferingBarOrMatchingHistoryIsNotASplit() {
+		LocalDate d = LocalDate.of(2026, 9, 28);
+		java.util.Map<LocalDate, BigDecimal> stored = java.util.Map.of(d, new BigDecimal("100"), d.plusDays(1),
+				new BigDecimal("101"), d.plusDays(2), new BigDecimal("102"));
+		assertTrue(CandleIngestionService.readjustment(stored, List.of(closeAt(d, "100"), closeAt(d.plusDays(1), "101.3"),
+				closeAt(d.plusDays(2), "102"))).isEmpty(), "within tolerance");
+		assertTrue(CandleIngestionService.readjustment(stored, List.of(closeAt(d, "100"), closeAt(d.plusDays(1), "90"),
+				closeAt(d.plusDays(2), "102"))).isEmpty(), "one corrected bar is a data fix, not a split");
+		assertTrue(CandleIngestionService.readjustment(stored, List.of(closeAt(d, "200"), closeAt(d.plusDays(1), "50"),
+				closeAt(d.plusDays(2), "102"))).isEmpty(), "inconsistent ratios are not one corporate action");
+	}
+
+	@Test
+	void aReBasedHistoryIsRebuiltAndAnnounced() {
+		LocalDate last = lastSession();
+		LocalDate before = last.minusDays(7);
+		while (before.getDayOfWeek().getValue() > 5) {
+			before = before.minusDays(1);
+		}
+		LocalDate older = before.minusDays(1);
+		while (older.getDayOfWeek().getValue() > 5) {
+			older = older.minusDays(1);
+		}
+		when(universe.knownTickers()).thenReturn(Set.of("RETO"));
+		when(candles.latestDateFor("RETO")).thenReturn(before);
+		when(candles.countByTicker("RETO")).thenReturn(300L);
+		when(candles.datesFor("RETO")).thenReturn(Set.of(older, before));
+		when(candles.findTop300ByTickerOrderByCandleDateDesc("RETO")).thenReturn(List.of(
+				new PriceCandle("RETO", before, new BigDecimal("0.1"), new BigDecimal("0.1"), new BigDecimal("0.1"), new BigDecimal("0.1"), 1L),
+				new PriceCandle("RETO", older, new BigDecimal("0.2"), new BigDecimal("0.2"), new BigDecimal("0.2"), new BigDecimal("0.2"), 1L)));
+		YahooChartClient.Series rebased = new YahooChartClient.Series("RETO", "USD", null, null,
+				List.of(closeAt(older, "4.0"), closeAt(before, "2.0"), closeAt(last, "1.9")));
+		when(yahoo.fetch(eq("RETO"), anyString())).thenReturn(Optional.of(rebased));
+
+		service.ingestOnce();
+
+		verify(candles).deleteByTicker("RETO");
+		verify(candles, times(3)).save(any(PriceCandle.class));
+		var event = org.mockito.ArgumentCaptor.forClass(HistoryReadjusted.class);
+		verify(events).publishEvent(event.capture());
+		assertEquals(20.0, event.getValue().factor(), 1e-9);
+		assertTrue(event.getValue().effectiveFrom().isAfter(before));
+	}
+
+	@Test
+	void anOrdinaryLivePriceIsNotCheckedForASplit() {
+		when(candles.findFirstByTickerOrderByCandleDateDesc("MU")).thenReturn(Optional.of(
+				new PriceCandle("MU", lastSession(), new BigDecimal("100"), new BigDecimal("100"), new BigDecimal("100"), new BigDecimal("100"), 1L)));
+		assertFalse(service.checkForSplit("MU", 70)); // a −30% day is a real move
+		verify(yahoo, never()).fetch(anyString(), anyString());
 	}
 }

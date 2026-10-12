@@ -72,6 +72,7 @@ public class HoldingGuard {
 	private final PushService push;
 	private final EmailSender email;
 	private final MarketClock clock;
+	private final com.argus.technical.CandleIngestionService splits;
 
 	/** Off in tests so no guard pass or escalation runs against the shared test database. */
 	@Value("${argus.holding-guard.enabled:true}")
@@ -79,7 +80,8 @@ public class HoldingGuard {
 
 	public HoldingGuard(JdbcTemplate jdbc, LivePriceService prices, ChartStudyService charts,
 			EarningsQuietPeriodService quietPeriod, RecommendationRepository recommendations, DeepAnalysisService deepAnalyses,
-			PushService push, EmailSender email, MarketClock clock) {
+			PushService push, EmailSender email, MarketClock clock, com.argus.technical.CandleIngestionService splits) {
+		this.splits = splits;
 		this.jdbc = jdbc;
 		this.prices = prices;
 		this.charts = charts;
@@ -128,6 +130,7 @@ public class HoldingGuard {
 			return;
 		}
 		double price = live.doubleValue();
+		splits.checkForSplit(h.ticker(), price); // a split re-bases the stop below before it can read as "broken"
 		ChartStudy chart = charts.studyFor(h.ticker(), price).orElse(null);
 		List<Map<String, Object>> rows = jdbc.queryForList(
 				"select stop_price, start_price, high_water, initial_stop from holding_guard where user_id = ? and ticker = ? and account = ?",

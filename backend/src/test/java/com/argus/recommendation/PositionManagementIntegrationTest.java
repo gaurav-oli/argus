@@ -268,4 +268,23 @@ class PositionManagementIntegrationTest {
 		assertEquals(0, investor.lockProfitOnAdverseEvent("AAPL", -1, "bad news"));
 		assertEquals(0, new BigDecimal("92").compareTo(reload(t).getStopPrice()));
 	}
+
+	@Autowired
+	org.springframework.context.ApplicationEventPublisher events;
+
+	@Test
+	void aSplitReBasesAnOpenTradeSoItIsNotReadAsACrash() {
+		SimulatedTrade t = longAapl(92.0, 110.0, 3); // entered at 100 before a 4-for-1 split
+		events.publishEvent(new com.argus.technical.HistoryReadjusted("AAPL", 0.25, java.time.LocalDate.now(java.time.ZoneId.of("America/New_York"))));
+
+		SimulatedTrade after = reload(t);
+		assertEquals(0, new BigDecimal("25").compareTo(after.getEntryPrice()));
+		assertEquals(0, new BigDecimal("23").compareTo(after.getStopPrice()));
+		assertEquals(0, new BigDecimal("27.5").compareTo(after.getTargetPrice()));
+		assertEquals(0, t.getShares().multiply(new BigDecimal("4")).compareTo(after.getShares()), "4× the shares, same $ value");
+
+		price("AAPL", "26"); // +4% in new shares — no stop-out at a fake −74%
+		manager.manageAll(Instant.now());
+		assertEquals(SimulatedTrade.Status.OPEN, reload(t).getStatus());
+	}
 }

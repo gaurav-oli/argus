@@ -46,6 +46,13 @@ import tools.jackson.databind.json.JsonMapper;
  * also handles TSX names (via a {@code .TO} suffix, chosen by the live-price currency). Alpha Vantage
  * remains as a US-only fallback and only ever requests {@code compact}.
  *
+ * <p><b>Splits and spin-offs.</b> Only new dates are ever added, so when Yahoo re-bases a ticker's history (RETO's
+ * 1-for-20 reverse split, CTVA's spin-off) the stored bars before the event stop matching Yahoo's. Every fetch
+ * compares the overlap; a consistent mismatch rebuilds the ticker's history from Yahoo and publishes
+ * {@link HistoryReadjusted} so prices recorded elsewhere (open trades, holding stops) are re-based too. A live
+ * price far from the last close ({@link #checkForSplit}) triggers the same check during the day, before a stop
+ * acts on a split as if it were a crash.
+ *
  * <p>An in-progress session's bar is never stored: a partial day frozen into the table by the dedup
  * check would corrupt RSI/MACD until the next backfill.
  */
@@ -62,6 +69,12 @@ public class CandleIngestionService {
 	static final int FULL_HISTORY_BARS = 200;
 	/** Yahoo carries no published daily cap, but it is an unofficial endpoint — stay polite. */
 	private static final long REQUEST_SPACING_MS = 300;
+	/** A stored close further than this from Yahoo's for the same day means Yahoo has re-based the history. */
+	static final double READJUST_TOLERANCE = 0.02;
+	/** A live price this far from the last close (×2.5 or ÷2.5) is checked for a split before anything acts on it. */
+	static final double SPLIT_SUSPECT_RATIO = 2.5;
+	/** Re-check a suspicious ticker at most this often — Yahoo may re-base a little after the open. */
+	private static final java.time.Duration SPLIT_RECHECK = java.time.Duration.ofHours(1);
 
 	private final String alphaVantageKey;
 	private final YahooChartClient yahoo;
@@ -73,13 +86,17 @@ public class CandleIngestionService {
 	private final TechnicalAnalysisProperties props;
 	private final NotificationService notifications;
 	private final ChartStudyService charts;
+	private final org.springframework.context.ApplicationEventPublisher events;
+	private final Map<String, java.time.Instant> splitChecked = new java.util.concurrent.ConcurrentHashMap<>();
 	private volatile long requestSpacingMs = REQUEST_SPACING_MS;
 
 	public CandleIngestionService(@Value("${argus.alpha-vantage.api-key:}") String alphaVantageKey,
 			YahooChartClient yahoo, AlphaVantageRest alphaVantage, PriceCandleRepository candles,
 			KnownUniverse universe, LivePortfolioService livePrices, TechnicalAnalysisProperties props,
-			NotificationService notifications, ListingResolver listings, ChartStudyService charts) {
+			NotificationService notifications, ListingResolver listings, ChartStudyService charts,
+			org.springframework.context.ApplicationEventPublisher events) {
 		this.charts = charts;
+		this.events = events;
 		this.alphaVantageKey = alphaVantageKey;
 		this.yahoo = yahoo;
 		this.alphaVantage = alphaVantage;
@@ -120,12 +137,146 @@ public class CandleIngestionService {
 					int saved = ingestOnce();
 					log.info("Candle startup catch-up saved {} candle(s)", saved);
 				}
+				verifyAll(); // current tickers are skipped by the nightly pass, so a split since the last fetch hides there
 			}
 			catch (RuntimeException ex) {
 				log.warn("Candle startup catch-up failed: {}", ex.getMessage());
 			}
 		});
 	}
+
+	/** Compare every ticker's stored history with Yahoo's and rebuild the ones Yahoo has re-based. */
+	public int verifyAll() {
+		LocalDate lastSession = lastCompletedSession(ZonedDateTime.now(NEW_YORK));
+		int rebuilt = 0;
+		for (String ticker : tickersToMaintain()) {
+			try {
+				if (candles.countByTicker(ticker) > 0 && verify(ticker, lastSession)) {
+					rebuilt++;
+				}
+			}
+			catch (RuntimeException ex) {
+				log.warn("Candle history check for {} failed: {}", ticker, ex.getMessage());
+			}
+			pause();
+		}
+		if (rebuilt > 0) {
+			charts.evictAll();
+		}
+		return rebuilt;
+	}
+
+	/**
+	 * Called before a live price is acted on (a stop, a holding alert). If it is ×{@value #SPLIT_SUSPECT_RATIO} away
+	 * from the last close, check whether Yahoo has re-based the history (a split): if so, the history is rebuilt and
+	 * {@link HistoryReadjusted} re-bases what was recorded in old-share prices before this returns. At most hourly per
+	 * ticker; a genuine crash just passes through. Returns whether a re-basing happened.
+	 */
+	public boolean checkForSplit(String ticker, double price) {
+		if (ticker == null || price <= 0) {
+			return false;
+		}
+		Optional<PriceCandle> last = candles.findFirstByTickerOrderByCandleDateDesc(ticker);
+		if (last.isEmpty() || last.get().getClose() == null || last.get().getClose().signum() <= 0) {
+			return false;
+		}
+		double ratio = price / last.get().getClose().doubleValue();
+		if (ratio < SPLIT_SUSPECT_RATIO && ratio > 1 / SPLIT_SUSPECT_RATIO) {
+			return false;
+		}
+		java.time.Instant now = java.time.Instant.now();
+		java.time.Instant previous = splitChecked.get(ticker);
+		if (previous != null && previous.isAfter(now.minus(SPLIT_RECHECK))) {
+			return false;
+		}
+		splitChecked.put(ticker, now);
+		log.info("Candles: {} is at {} vs a last close of {} (×{}) — checking for a split", ticker, price,
+				last.get().getClose(), String.format(java.util.Locale.ROOT, "%.2f", ratio));
+		try {
+			boolean rebuilt = verify(ticker, lastCompletedSession(ZonedDateTime.now(NEW_YORK)));
+			if (rebuilt) {
+				charts.evictAll();
+			}
+			return rebuilt;
+		}
+		catch (RuntimeException ex) {
+			log.warn("Split check for {} failed: {}", ticker, ex.getMessage());
+			return false;
+		}
+	}
+
+	/** Fetch a month and rebuild the history if Yahoo has re-based it. */
+	private synchronized boolean verify(String ticker, LocalDate lastSession) {
+		Optional<YahooChartClient.Series> month = fetchYahoo(ticker, "1mo");
+		return month.isPresent() && rebuildIfReadjusted(ticker, month.get().bars(), lastSession);
+	}
+
+	/**
+	 * The factor Yahoo re-based this ticker's history by, if it did, and the newest stored day it affects. Stored
+	 * closes that differ from Yahoo's by more than {@value #READJUST_TOLERANCE} all by (about) the same ratio are a
+	 * split or spin-off; a lone differing bar is a data correction and is ignored.
+	 */
+	public static Optional<Readjustment> readjustment(Map<LocalDate, BigDecimal> stored, List<YahooChartClient.Bar> bars) {
+		List<Double> ratios = new ArrayList<>();
+		LocalDate newest = null;
+		int overlap = 0;
+		for (YahooChartClient.Bar b : bars) {
+			BigDecimal mine = stored.get(b.date());
+			if (mine == null || mine.signum() <= 0 || b.close() == null || b.close().signum() <= 0) {
+				continue;
+			}
+			overlap++;
+			double r = b.close().doubleValue() / mine.doubleValue();
+			if (Math.abs(r - 1) > READJUST_TOLERANCE) {
+				ratios.add(r);
+				newest = newest == null || b.date().isAfter(newest) ? b.date() : newest;
+			}
+		}
+		if (ratios.size() < Math.min(2, overlap) || ratios.isEmpty()) {
+			return Optional.empty();
+		}
+		List<Double> sorted = ratios.stream().sorted().toList();
+		double median = sorted.get(sorted.size() / 2);
+		boolean consistent = ratios.stream().allMatch(r -> Math.abs(r / median - 1) <= READJUST_TOLERANCE);
+		return consistent ? Optional.of(new Readjustment(median, newest)) : Optional.empty();
+	}
+
+	public record Readjustment(double factor, LocalDate newestAffected) {
+	}
+
+	/** Rebuild from a fresh year of Yahoo history and announce the re-basing; false if the history still matches. */
+	private boolean rebuildIfReadjusted(String ticker, List<YahooChartClient.Bar> fetched, LocalDate lastSession) {
+		Map<LocalDate, BigDecimal> stored = new java.util.HashMap<>();
+		for (PriceCandle c : candles.findTop300ByTickerOrderByCandleDateDesc(ticker)) {
+			stored.put(c.getCandleDate(), c.getClose());
+		}
+		Optional<Readjustment> adj = readjustment(stored, fetched);
+		if (adj.isEmpty()) {
+			return false;
+		}
+		Optional<YahooChartClient.Series> year = fetchYahoo(ticker, "1y");
+		if (year.isEmpty() || year.get().bars().isEmpty()) {
+			return false; // keep the old history rather than none
+		}
+		LocalDate oldestWanted = LocalDate.now().minusDays(props.backfillDays());
+		candles.deleteByTicker(ticker);
+		int saved = 0;
+		for (YahooChartClient.Bar b : year.get().bars()) {
+			if (!b.date().isBefore(oldestWanted) && !b.date().isAfter(lastSession)) {
+				candles.save(new PriceCandle(ticker, b.date(), b.open(), b.high(), b.low(), b.close(), b.volume()));
+				saved++;
+			}
+		}
+		LocalDate effective = adj.get().newestAffected().plusDays(1);
+		while (!isWeekday(effective)) {
+			effective = effective.plusDays(1);
+		}
+		log.warn("Candles: Yahoo re-based {} history ×{} (split or spin-off effective {}) — rebuilt {} bar(s)", ticker,
+				String.format(java.util.Locale.ROOT, "%.4f", adj.get().factor()), effective, saved);
+		events.publishEvent(new HistoryReadjusted(ticker, adj.get().factor(), effective));
+		return true;
+	}
+
 
 	/** The tracked universe plus the benchmark, deduplicated. */
 	private List<String> tickersToMaintain() {
@@ -182,11 +333,15 @@ public class CandleIngestionService {
 	}
 
 	/** @param deepHistory whether a year of history is already stored — decides a 1-year backfill vs. a 1-month top-up */
-	private int ingestTicker(String ticker, boolean deepHistory, LocalDate lastSession) {
+	private synchronized int ingestTicker(String ticker, boolean deepHistory, LocalDate lastSession) {
 		LocalDate oldestWanted = LocalDate.now().minusDays(props.backfillDays());
 		Set<LocalDate> existing = new HashSet<>(candles.datesFor(ticker));
 
 		Optional<YahooChartClient.Series> series = fetchYahoo(ticker, deepHistory ? "1mo" : "1y");
+		if (series.isPresent() && !series.get().bars().isEmpty() && !existing.isEmpty()
+				&& rebuildIfReadjusted(ticker, series.get().bars(), lastSession)) {
+			return (int) candles.countByTicker(ticker);
+		}
 		if (series.isPresent() && !series.get().bars().isEmpty()) {
 			int saved = 0;
 			for (YahooChartClient.Bar b : series.get().bars()) {

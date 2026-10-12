@@ -49,11 +49,14 @@ public class StrategyCandleIngestion {
 	private final String range;
 	private final boolean enabled;
 	private volatile long requestSpacingMs = REQUEST_SPACING_MS;
+	private final org.springframework.context.ApplicationEventPublisher events;
 
 	public StrategyCandleIngestion(YahooChartClient yahoo, JdbcTemplate jdbc, StrategyUniverseService universe,
 			@Value("${argus.strategy.tickers-per-run:80}") int tickersPerRun,
 			@Value("${argus.strategy.history-range:10y}") String range,
-			@Value("${argus.strategy.enabled:true}") boolean enabled) {
+			@Value("${argus.strategy.enabled:true}") boolean enabled,
+			org.springframework.context.ApplicationEventPublisher events) {
+		this.events = events;
 		this.yahoo = yahoo;
 		this.jdbc = jdbc;
 		this.universe = universe;
@@ -176,6 +179,35 @@ public class StrategyCandleIngestion {
 		if (series.isEmpty() || series.get().bars().isEmpty()) {
 			return 0;
 		}
+		if (!fetchRange.equals(range)) {
+			// A top-up: if Yahoo has re-based this ticker (split, spin-off), the stored bars no longer match its
+			// overlap and "on conflict do nothing" would keep them forever — rebuild the whole history instead.
+			java.util.Map<LocalDate, java.math.BigDecimal> stored = new java.util.HashMap<>();
+			jdbc.query("select candle_date, close from price_candles where ticker = ? and candle_date >= ?",
+					rs -> { stored.put(rs.getDate(1).toLocalDate(), rs.getBigDecimal(2)); }, ticker,
+					series.get().bars().get(0).date());
+			var adj = com.argus.technical.CandleIngestionService.readjustment(stored, series.get().bars());
+			if (adj.isPresent()) {
+				var full = yahoo.fetch(ticker, range);
+				if (full.isPresent() && !full.get().bars().isEmpty()) {
+					jdbc.update("delete from price_candles where ticker = ?", ticker);
+					log.warn("Agent 15: Yahoo re-based {} history ×{} (split or spin-off) — rebuilding it", ticker,
+							String.format(java.util.Locale.ROOT, "%.4f", adj.get().factor()));
+					LocalDate effective = adj.get().newestAffected().plusDays(1);
+					while (effective.getDayOfWeek().getValue() > 5) {
+						effective = effective.plusDays(1);
+					}
+					int written = store(ticker, full.get());
+					events.publishEvent(new com.argus.technical.HistoryReadjusted(ticker, adj.get().factor(), effective));
+					return written;
+				}
+			}
+		}
+		return store(ticker, series.get());
+	}
+
+	private int store(String ticker, YahooChartClient.Series s) {
+		var series = java.util.Optional.of(s);
 		LocalDate liveDate = series.get().liveDate();
 		List<Object[]> rows = new ArrayList<>();
 		for (YahooChartClient.Bar b : series.get().bars()) {

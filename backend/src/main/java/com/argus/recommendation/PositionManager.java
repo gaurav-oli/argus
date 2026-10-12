@@ -30,13 +30,15 @@ public class PositionManager {
 	private final PaperInvestorService investor;
 	private final EarningsQuietPeriodService quietPeriod;
 	private final MarketClock clock;
+	private final com.argus.technical.CandleIngestionService splits;
 
 	/** Off in tests so no management pass runs against the shared test database. */
 	@Value("${argus.paper-investor.manage-enabled:true}")
 	private boolean enabled = true;
 
 	public PositionManager(SimulatedTradeRepository trades, LivePriceService prices, PaperInvestorService investor,
-			EarningsQuietPeriodService quietPeriod, MarketClock clock) {
+			EarningsQuietPeriodService quietPeriod, MarketClock clock, com.argus.technical.CandleIngestionService splits) {
+		this.splits = splits;
 		this.trades = trades;
 		this.prices = prices;
 		this.investor = investor;
@@ -68,6 +70,13 @@ public class PositionManager {
 		BigDecimal price = prices.latestPrice(trade.getTicker()).orElse(null);
 		if (price == null || price.signum() <= 0) {
 			return;
+		}
+		// A split overnight must not read as a crash (stop-out) or a moonshot: re-base the trade first.
+		if (splits.checkForSplit(trade.getTicker(), price.doubleValue())) {
+			trade = trades.findById(trade.getId()).orElse(null);
+			if (trade == null || trade.getStatus() != SimulatedTrade.Status.OPEN) {
+				return;
+			}
 		}
 		ChartStudy chart = investor.chartAt(trade.getTicker(), price);
 		if (trade.getStopPrice() == null) {

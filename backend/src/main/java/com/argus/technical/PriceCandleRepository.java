@@ -21,6 +21,15 @@ public interface PriceCandleRepository extends JpaRepository<PriceCandle, Long> 
 
 	long countByTicker(String ticker);
 
+	/** The newest stored bar — the reference a live price is compared with to spot a split. */
+	java.util.Optional<PriceCandle> findFirstByTickerOrderByCandleDateDesc(String ticker);
+
+	/** Drop a ticker's history so it can be rebuilt after Yahoo re-based it (split, spin-off). */
+	@org.springframework.data.jpa.repository.Modifying
+	@org.springframework.transaction.annotation.Transactional
+	@Query("delete from PriceCandle c where c.ticker = :ticker")
+	int deleteByTicker(@org.springframework.data.repository.query.Param("ticker") String ticker);
+
 	/** Up to a year+ of history, most-recent-first — what {@link ChartReader} needs for a 200-day average. */
 	List<PriceCandle> findTop300ByTickerOrderByCandleDateDesc(String ticker);
 
