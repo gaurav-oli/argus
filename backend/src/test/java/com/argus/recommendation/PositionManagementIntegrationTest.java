@@ -130,7 +130,7 @@ class PositionManagementIntegrationTest {
 
 		SimulatedTrade after = reload(t);
 		assertEquals(0, new BigDecimal("112.000000").compareTo(after.getHighWater()));
-		assertEquals(112 * (1 - 2.5 * 0.03), after.getStopPrice().doubleValue(), 1e-6, "2.5 × the 3% default ATR behind 112");
+		assertEquals(112 * (1 - 0.03), after.getStopPrice().doubleValue(), 1e-6, "+12% = 4 × the 3% default ATR: 1 ATR behind 112");
 		assertTrue(after.isStopTrailed());
 	}
 

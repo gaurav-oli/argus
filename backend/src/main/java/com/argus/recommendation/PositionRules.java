@@ -12,8 +12,10 @@ import java.time.Instant;
  *       stop fills at the worse price, never the stop's). A stop tightened since entry exits as a
  *       TRAILING_STOP.</li>
  *   <li><b>Breakeven, then trail</b> — once the best price since entry is {@value #BREAKEVEN_ATRS} ATR in
- *       the money, the stop moves to entry; from there it trails {@value #TRAIL_ATRS} ATR behind the best
- *       price, or just beyond the nearest live support/resistance when that is tighter (but at least
+ *       the money, the stop moves to entry; from there it trails behind the best price — {@value #TRAIL_ATRS} ATR
+ *       at first, {@value #TRAIL_ATRS_MID} once the best price is {@value #TIGHTEN_MID_ATRS} ATR in the money,
+ *       {@value #TRAIL_ATRS_LATE} from {@value #TIGHTEN_LATE_ATRS} ATR (a big winner keeps more of its gain) — or
+ *       just beyond the nearest live support/resistance when that is tighter (but at least
  *       {@value #MIN_LEVEL_GAP_ATRS} ATR from price, so ordinary noise doesn't shake the position out).</li>
  *   <li><b>Take profit</b> — a swing call's target takes half off; the rest trails from at least breakeven.
  *       A core hold has no target and only trails.</li>
@@ -27,6 +29,10 @@ public final class PositionRules {
 
 	static final double BREAKEVEN_ATRS = 1.0;
 	static final double TRAIL_ATRS = 2.5;
+	static final double TIGHTEN_MID_ATRS = 2.0;
+	static final double TRAIL_ATRS_MID = 1.5;
+	static final double TIGHTEN_LATE_ATRS = 3.0;
+	static final double TRAIL_ATRS_LATE = 1.0;
 	static final double EARNINGS_ATRS = 1.0;
 	static final double MIN_LEVEL_GAP_ATRS = 1.0;
 	static final double LEVEL_BUFFER_ATRS = 0.5;
@@ -88,7 +94,8 @@ public final class PositionRules {
 		double favourable = p.bullish() ? hw / p.entry() - 1 : 1 - hw / p.entry();
 		if (favourable >= BREAKEVEN_ATRS * atr || p.scaledOut()) {
 			stop = tighten(p.bullish(), stop, p.entry(), price, atr);
-			double trail = p.bullish() ? hw * (1 - TRAIL_ATRS * atr) : hw * (1 + TRAIL_ATRS * atr);
+			double width = trailAtrs(favourable / atr);
+			double trail = p.bullish() ? hw * (1 - width * atr) : hw * (1 + width * atr);
 			stop = tighten(p.bullish(), stop, trail, price, atr);
 			Double level = p.bullish() ? m.support() : m.resistance();
 			if (level != null && (p.bullish() ? level <= price * (1 - MIN_LEVEL_GAP_ATRS * atr)
@@ -102,6 +109,16 @@ public final class PositionRules {
 			stop = tighten(p.bullish(), stop, tight, price, atr);
 		}
 		return new Decision(Action.HOLD, null, stop, hw);
+	}
+
+	/**
+	 * How many ATRs the stop trails behind the best price, given how many ATRs in the money that best price is.
+	 * Wide while a trade is young so noise doesn't shake it out; narrower as the gain grows, so a big winner that
+	 * quietly fades gives back less (a 2.5-ATR trail on a 4%-ATR stock is ~10% behind the high).
+	 */
+	static double trailAtrs(double atrsInTheMoney) {
+		return atrsInTheMoney >= TIGHTEN_LATE_ATRS ? TRAIL_ATRS_LATE
+				: atrsInTheMoney >= TIGHTEN_MID_ATRS ? TRAIL_ATRS_MID : TRAIL_ATRS;
 	}
 
 	/**
