@@ -120,6 +120,20 @@ public class PaperInvestorService {
 	/** This many stop-outs inside {@link #BREAKER_WINDOW} pause all new entries until the window clears. */
 	static final int BREAKER_STOP_OUTS = 3;
 	static final java.time.Duration BREAKER_WINDOW = java.time.Duration.ofHours(24);
+	/**
+	 * Entry discipline, from the first current-system losses (MU, NBIS, SMCI, NKE on 2026-10-12): all were bought
+	 * while Agent 11 said WAIT, most with the stop further away than the target, and four of the seven open trades
+	 * were one AI-chips bet.
+	 *
+	 * <p>Agent 11's WAIT is its default answer (~70% of verdicts; WORTH_BUYING is ~2%), so it doesn't block a trade
+	 * outright — it raises the bar to this conviction and halves the size.
+	 */
+	static final int WAIT_MIN_CONVICTION = 80;
+	static final double WAIT_SIZE = 0.5;
+	/** The target must be at least this many times as far from entry as the stop (a 0.5:1 trade must win 2 in 3). */
+	static final double MIN_REWARD_TO_RISK = 1.5;
+	/** At most this many open same-direction current-system names per theme ({@link SectorClassifier#themeOf}). */
+	static final int MAX_OPEN_PER_THEME = 2;
 	/** An early exit's counterfactual is only taken within this long after its horizon, so it reflects that day's price. */
 	static final java.time.Duration COUNTERFACTUAL_WINDOW = java.time.Duration.ofDays(3);
 
@@ -144,6 +158,43 @@ public class PaperInvestorService {
 		}
 	}
 
+	private PriceGuidance.Guidance guidance(Recommendation rec, BigDecimal entry, ChartStudy chart) {
+		String valuation = com.argus.learning.FeatureTokens.fromJson(rec.getFeatures()).stream()
+				.filter(t -> t.startsWith("val=")).map(t -> t.substring(4)).findFirst().orElse(null);
+		return PriceGuidance.build(rec.getAction(), rec.getHoldDays() == null ? 0 : rec.getHoldDays(),
+				entry.doubleValue(), chart, deepAnalyses.viewFor(rec.getTicker()).orElse(null), valuation);
+	}
+
+	/**
+	 * Why this entry's payoff is too lopsided to take, or null when it's fine: the target must be at least
+	 * {@value #MIN_REWARD_TO_RISK}× as far away as the stop. A core hold has no fixed target (it only trails), so it
+	 * passes; a swing call whose target is missing (under 1% away) does not.
+	 */
+	String rewardToRiskProblem(Recommendation rec, BigDecimal entry, BigDecimal stop, BigDecimal target, ChartStudy chart) {
+		if (stop == null) {
+			return null;
+		}
+		double risk = Math.abs(entry.doubleValue() - stop.doubleValue());
+		if (target == null) {
+			boolean coreHold;
+			try {
+				PriceGuidance.Guidance g = rec.getAction() == null ? null : guidance(rec, entry, chart);
+				coreHold = g == null || g.style() == PriceGuidance.Style.CORE_HOLD;
+			}
+			catch (RuntimeException ex) {
+				coreHold = true; // no guidance to judge by — don't block on an infra failure
+			}
+			return coreHold ? null : "no room to a target (the nearest level is under 1% away)";
+		}
+		double reward = Math.abs(target.doubleValue() - entry.doubleValue());
+		if (risk > 0 && reward < MIN_REWARD_TO_RISK * risk) {
+			return String.format(java.util.Locale.ROOT, "target %s is %.1f%% away but the stop %s is %.1f%% away (%.2f:1, need %.1f:1)",
+					target.stripTrailingZeros().toPlainString(), 100 * reward / entry.doubleValue(),
+					stop.stripTrailingZeros().toPlainString(), 100 * risk / entry.doubleValue(), reward / risk, MIN_REWARD_TO_RISK);
+		}
+		return null;
+	}
+
 	/**
 	 * Where half the position comes off: the same sell target the recommendation card shows (Agent 10's nearest
 	 * resistance for a long, support for a short). Null for a core hold (no fixed target — trail only), or when the
@@ -154,10 +205,7 @@ public class PaperInvestorService {
 			return null;
 		}
 		try {
-			String valuation = com.argus.learning.FeatureTokens.fromJson(rec.getFeatures()).stream()
-					.filter(t -> t.startsWith("val=")).map(t -> t.substring(4)).findFirst().orElse(null);
-			PriceGuidance.Guidance g = PriceGuidance.build(rec.getAction(), rec.getHoldDays() == null ? 0 : rec.getHoldDays(),
-					entry.doubleValue(), chart, deepAnalyses.viewFor(rec.getTicker()).orElse(null), valuation);
+			PriceGuidance.Guidance g = guidance(rec, entry, chart);
 			BigDecimal sell = g == null ? null : g.sellPrice();
 			if (sell == null) {
 				return null;
@@ -493,7 +541,9 @@ public class PaperInvestorService {
 				return List.of();
 			}
 			Instant now = Instant.now();
-			long recentStopOuts = trades.countByExitReasonInAndClosedAtAfter(STOP_OUTS, now.minus(BREAKER_WINDOW));
+			// Only the current system's own stop-outs: old-system legs being wound down say nothing about its entries.
+			long recentStopOuts = trades.countByExitReasonInAndClosedAtAfterAndEntryAtGreaterThanEqual(STOP_OUTS,
+					now.minus(BREAKER_WINDOW), NEW_SYSTEM_SINCE);
 			if (recentStopOuts >= BREAKER_STOP_OUTS) {
 				log.info("Investor: circuit breaker — {} stop-outs in the last 24h; not opening {} {}", recentStopOuts,
 						rec.getDirection(), rec.getTicker());
@@ -511,6 +561,28 @@ public class PaperInvestorService {
 						rec.getTicker());
 				return List.of();
 			}
+			String theme = sectors.themeOf(rec.getTicker());
+			List<String> sameTheme = trades.findByStatus(SimulatedTrade.Status.OPEN).stream()
+					.filter(t -> t.getDirection() == rec.getDirection() && !t.getTicker().equals(rec.getTicker())
+							&& !t.getEntryAt().isBefore(NEW_SYSTEM_SINCE) && theme != null && theme.equals(sectors.themeOf(t.getTicker())))
+					.map(SimulatedTrade::getTicker).distinct().toList();
+			if (sameTheme.size() >= MAX_OPEN_PER_THEME) {
+				log.info("Investor: already {} on {} {} names ({}) — not adding {}", rec.getDirection(), sameTheme.size(), theme,
+						String.join(", ", sameTheme), rec.getTicker());
+				return List.of();
+			}
+			// Agent 11 says WAIT: only a strong call goes ahead, and at half size.
+			double deepSize = 1.0;
+			var deep = deepAnalyses.viewFor(rec.getTicker()).orElse(null);
+			if (deep != null && deep.verdict() == com.argus.deepanalysis.DeepVerdict.WAIT) {
+				Integer conviction = rec.getConvictionScore();
+				if (conviction == null || conviction < WAIT_MIN_CONVICTION) {
+					log.info("Investor: Agent 11 says wait on {} and conviction is {} (< {}) — not opening {}", rec.getTicker(),
+							conviction, WAIT_MIN_CONVICTION, rec.getDirection());
+					return List.of();
+				}
+				deepSize = WAIT_SIZE;
+			}
 			if (correlatedClusterFull(rec)) {
 				log.info("Investor: book already holds {} {} names correlated with {} — not stacking a concentrated bet",
 						maxOpenPerCorrelatedCluster, rec.getDirection(), rec.getTicker());
@@ -526,11 +598,13 @@ public class PaperInvestorService {
 			}
 			// S-B6: does this call's playbook tend to win on this kind of name? Tilts size only with enough sample.
 			StyleFit.Fit fit = consultStyleFit(fingerprint);
-			double sizeMultiplier = fx.sizeMultiplier() * pattern.sizeMultiplier() * fit.multiplier();
+			double sizeMultiplier = fx.sizeMultiplier() * pattern.sizeMultiplier() * fit.multiplier() * deepSize;
 			BigDecimal tradeNotional = notional.multiply(BigDecimal.valueOf(sizeMultiplier)).setScale(2, java.math.RoundingMode.HALF_UP);
 			ChartStudy entryChart = chartAt(rec.getTicker(), entry);
 			BigDecimal stop = tightened(StopLoss.stopFor(rec.getDirection(), entryChart, entry.doubleValue()), entry, pattern.stopKeep());
 			BigDecimal target = targetFor(rec, entry, entryChart);
+			// Gates a new position only: adding to a winner reuses that position's own stop and target.
+			String skew = rewardToRiskProblem(rec, entry, stop, target, entryChart);
 			String fingerprintJson = fingerprint.isEmpty() ? null : FeatureTokens.toJson(fingerprint);
 
 			List<SimulatedTrade> opened = new java.util.ArrayList<>();
@@ -538,6 +612,9 @@ public class PaperInvestorService {
 				if (trades.existsByTickerAndDirectionAndHorizonDaysAndStatusAndEntryAtGreaterThanEqual(
 						rec.getTicker(), rec.getDirection(), horizon, SimulatedTrade.Status.OPEN, NEW_SYSTEM_SINCE)) {
 					continue; // this leg of the thesis is already on the book
+				}
+				if (skew != null) {
+					continue;
 				}
 				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
 						tradeNotional, entry, horizon, spy);
@@ -551,6 +628,10 @@ public class PaperInvestorService {
 			if (opened.isEmpty()) {
 				List<SimulatedTrade> existing = trades.findByTickerAndDirectionAndStatusAndEntryAtGreaterThanEqual(
 						rec.getTicker(), rec.getDirection(), SimulatedTrade.Status.OPEN, NEW_SYSTEM_SINCE);
+				if (existing.isEmpty()) {
+					log.info("Investor: not opening {} {} — {}", rec.getDirection(), rec.getTicker(), skew);
+					return List.of();
+				}
 				SimulatedTrade added = scaleIn(rec, existing, entry, entryChart, tradeNotional, spy);
 				if (added != null) {
 					confirmations.recordAgentDecision(rec.getId(), Decision.TAKEN);

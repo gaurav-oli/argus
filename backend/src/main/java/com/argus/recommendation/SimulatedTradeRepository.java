@@ -39,6 +39,10 @@ public interface SimulatedTradeRepository extends JpaRepository<SimulatedTrade, 
 	/** Stop-outs (STOP / TRAILING_STOP) since {@code since} — the circuit breaker's count. */
 	long countByExitReasonInAndClosedAtAfter(java.util.Collection<String> reasons, java.time.Instant since);
 
+	/** Stop-outs of legs opened on/after {@code entrySince} — the current system's own, for its circuit breaker. */
+	long countByExitReasonInAndClosedAtAfterAndEntryAtGreaterThanEqual(java.util.Collection<String> reasons,
+			java.time.Instant since, java.time.Instant entrySince);
+
 	/** A recent stop-out on this exact thesis — the re-entry cooldown. */
 	boolean existsByTickerAndDirectionAndExitReasonInAndClosedAtAfter(String ticker, SignalDirection direction,
 			java.util.Collection<String> reasons, java.time.Instant since);

@@ -46,6 +46,13 @@ public class SectorClassifier {
 			Map.entry("VDY", Sector.CANADIAN_EQUITY), Map.entry("ZGLD", Sector.GOLD),
 			Map.entry("RETO", Sector.MATERIALS));
 
+	/**
+	 * Names whose sector label hides what really moves them: AI server builders trade with the chip makers, not
+	 * with "technology" at large.
+	 */
+	private static final String AI_AND_CHIPS = "AI & chips";
+	private static final Map<String, String> THEME_OVERRIDES = Map.of("SMCI", AI_AND_CHIPS, "DELL", AI_AND_CHIPS);
+
 	private final FinnhubRest finnhub;
 	private final String apiKey;
 	private final Map<String, Sector> resolved = new ConcurrentHashMap<>();
@@ -73,6 +80,20 @@ public class SectorClassifier {
 			resolved.put(t, fetched);
 		}
 		return fetched;
+	}
+
+	/**
+	 * The investment theme a ticker trades with — coarser than its sector. Semiconductors and AI infrastructure
+	 * (plus AI server builders) are one theme: a single AI-capex headline moves MU, NBIS, SMCI and TSM together,
+	 * so holding all four is one bet, not four. Every other sector is its own theme.
+	 */
+	public String themeOf(String ticker) {
+		String override = ticker == null ? null : THEME_OVERRIDES.get(ticker.trim().toUpperCase(Locale.ROOT));
+		if (override != null) {
+			return override;
+		}
+		Sector sector = sectorOf(ticker);
+		return sector == Sector.SEMICONDUCTORS || sector == Sector.AI_INFRA ? AI_AND_CHIPS : sector.label();
 	}
 
 	private Sector lookup(String ticker) {

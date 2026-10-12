@@ -2,6 +2,7 @@ package com.argus.recommendation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -707,5 +708,72 @@ class PaperInvestorServiceTest {
 
 		assertEquals(SimulatedTrade.Status.CLOSED, t.getStatus());
 		assertEquals("THESIS_FLIP", t.getExitReason());
+	}
+
+	// ---- entry discipline (2026-10-12 losses): theme cap, Agent 11 WAIT, reward-to-risk, own-system breaker ----
+
+	private void opensFreely(String ticker, long recId) {
+		when(trades.existsByRecommendationId(recId)).thenReturn(false);
+		when(prices.latestPrice(ticker)).thenReturn(Optional.of(bd(100)));
+		when(benchmark.latest()).thenReturn(Optional.empty());
+		when(trades.save(any())).thenAnswer(i -> i.getArgument(0));
+	}
+
+	@Test
+	void aThirdNameInTheSameThemeIsNotOpened() {
+		SimulatedTrade mu = new SimulatedTrade(1L, "MU", SignalDirection.BULLISH, bd(100), bd(1000), 30, null);
+		SimulatedTrade nbis = new SimulatedTrade(2L, "NBIS", SignalDirection.BULLISH, bd(100), bd(230), 30, null);
+		when(trades.findByStatus(SimulatedTrade.Status.OPEN)).thenReturn(List.of(mu, nbis));
+		for (String t : List.of("MU", "NBIS", "SMCI")) {
+			when(sectors.themeOf(t)).thenReturn("AI & chips");
+		}
+		opensFreely("SMCI", 7L);
+
+		assertTrue(investor.open(rec("SMCI", SignalDirection.BULLISH, 7L)).isEmpty(), "MU + NBIS already make one AI-chips bet");
+		verify(trades, never()).save(any());
+
+		when(sectors.themeOf("WMT")).thenReturn("Consumer staples");
+		opensFreely("WMT", 8L);
+		assertFalse(investor.open(rec("WMT", SignalDirection.BULLISH, 8L)).isEmpty(), "a different theme is a different bet");
+	}
+
+	@Test
+	void agent11WaitNeedsStrongConvictionAndOpensAtHalfSize() {
+		when(deepAnalyses.viewFor("AAPL")).thenReturn(Optional.of(new com.argus.deepanalysis.DeepView(
+				com.argus.deepanalysis.DeepVerdict.WAIT, null, 60, "stretched", null, 1)));
+		opensFreely("AAPL", 7L);
+		Recommendation lukewarm = rec("AAPL", SignalDirection.BULLISH, 7L);
+		when(lukewarm.getConvictionScore()).thenReturn(70);
+		assertTrue(investor.open(lukewarm).isEmpty());
+
+		opensFreely("AAPL", 8L);
+		Recommendation strong = rec("AAPL", SignalDirection.BULLISH, 8L);
+		when(strong.getConvictionScore()).thenReturn(85);
+		List<SimulatedTrade> opened = investor.open(strong);
+		assertFalse(opened.isEmpty());
+		assertEquals(0, bd(50).compareTo(opened.get(0).getNotional()), "half the usual $100");
+	}
+
+	@Test
+	void aTargetCloserThanTheStopIsNotWorthTheRisk() {
+		Recommendation r = rec("AAPL", SignalDirection.BULLISH, 7L);
+		assertNotNull(investor.rewardToRiskProblem(r, bd(100), bd(90), bd(105), null), "risk 10 to make 5");
+		assertNull(investor.rewardToRiskProblem(r, bd(100), bd(95), bd(110), null), "2:1 is fine");
+
+		Recommendation shortCall = rec("NKE", SignalDirection.BEARISH, 8L);
+		assertNotNull(investor.rewardToRiskProblem(shortCall, new BigDecimal("34.74"), new BigDecimal("37.03"), new BigDecimal("31.97"), null), "NKE's 1.2:1 short");
+	}
+
+	@Test
+	void onlyTheCurrentSystemsOwnStopOutsTripTheBreaker() {
+		when(trades.countByExitReasonInAndClosedAtAfter(any(), any())).thenReturn(9L); // old legs wound down today
+		when(trades.countByExitReasonInAndClosedAtAfterAndEntryAtGreaterThanEqual(any(), any(), any())).thenReturn(0L);
+		opensFreely("WMT", 7L);
+		assertFalse(investor.open(rec("WMT", SignalDirection.BULLISH, 7L)).isEmpty());
+
+		when(trades.countByExitReasonInAndClosedAtAfterAndEntryAtGreaterThanEqual(any(), any(), any()))
+				.thenReturn((long) PaperInvestorService.BREAKER_STOP_OUTS);
+		opensFreely("WMT", 8L);
+		assertTrue(investor.open(rec("WMT", SignalDirection.BULLISH, 8L)).isEmpty());
 	}
 }
