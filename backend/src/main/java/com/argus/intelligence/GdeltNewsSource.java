@@ -45,7 +45,10 @@ public class GdeltNewsSource implements NewsSource {
 	// GDELT seendate: e.g. 20260623T120000Z.
 	private static final DateTimeFormatter SEENDATE = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
 	private static final Duration INITIAL_BACKOFF = Duration.ofMinutes(10);
-	private static final Duration MAX_BACKOFF = Duration.ofHours(2);
+	// 30 min, not 2h: GDELT now refuses most calls from this IP (HTTP 429, ~1 in 4 gets through even well
+	// spaced, measured 2026-10-13), so a long cap meant ~12 tries a day and none landed for 3 days. Retrying
+	// every half hour is still far under GDELT's one-per-5-seconds ask.
+	private static final Duration MAX_BACKOFF = Duration.ofMinutes(30);
 
 	private final String query;
 	private final int maxRecords;

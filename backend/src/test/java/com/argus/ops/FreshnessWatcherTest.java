@@ -46,6 +46,18 @@ class FreshnessWatcherTest {
 	}
 
 	@Test
+	void aStaleSupplementarySourceIsOnlyAnInfoNote() {
+		when(freshness.snapshot()).thenReturn(new FreshnessView(List.of(
+				new SourceFreshness("news-gdelt", "World news: GDELT", Instant.now(), 4_320L, true, 720, true)), false));
+		watcher.check();
+
+		ArgumentCaptor<Notification> sent = ArgumentCaptor.forClass(Notification.class);
+		verify(notifications).notify(sent.capture());
+		assertEquals(UrgencyTier.INFO, sent.getValue().tier());
+		assertEquals("World news: GDELT is stale", sent.getValue().title());
+	}
+
+	@Test
 	void agesReadLikeAPerson() {
 		assertEquals("45 min", FreshnessWatcher.humanAge(45L));
 		assertEquals("36h", FreshnessWatcher.humanAge(2_160L));

@@ -63,8 +63,11 @@ public class FreshnessService {
 		List<SourceFreshness> sources = List.of(
 				freshness("news", "News (Agent 1)", news::latestIngestedAt, AgentCadence.NEWS.staleAfter(), now),
 				// Each news source on its own too: GDELT (the world-news source) was dead for three months while
-				// the combined "news" line stayed fresh from the others.
-				freshness("news-gdelt", "World news: GDELT", () -> latestFromSource("gdelt"), Duration.ofHours(12), now),
+				// the combined "news" line stayed fresh from the others. Supplementary since 2026-10-13: GDELT's
+				// free API refuses most calls from this IP (HTTP 429, ~1 in 4 gets through), and RSS + Finnhub
+				// cover the news, so a dry spell is shown but not raised as "something may be stuck".
+				supplementary(freshness("news-gdelt", "World news: GDELT", () -> latestFromSource("gdelt"),
+						Duration.ofHours(12), now)),
 				freshness("news-rss", "News feeds (world, markets, central banks)", () -> latestFromSource("rss"), Duration.ofHours(6), now),
 				freshness("news-finnhub", "Market news: Finnhub", () -> latestFromSource("finnhub"), Duration.ofHours(6), now),
 				freshness("social", "Social (Agent 2)", social::latestIngestedAt, AgentCadence.SOCIAL.staleAfter(), now),
@@ -80,7 +83,7 @@ public class FreshnessService {
 						FUNDAMENTALS_STALE_AFTER, now),
 				freshness("deep", "Deep analysis (Agent 11)", deep::latestFinishedAt, AgentCadence.DEEP.staleAfter(), now),
 				freshness("briefing", "Morning briefing", this::latestBriefing, BRIEFING_STALE_AFTER, now));
-		boolean anyStale = sources.stream().anyMatch(SourceFreshness::stale);
+		boolean anyStale = sources.stream().anyMatch(s -> s.stale() && !s.supplementary());
 		return new FreshnessView(sources, anyStale);
 	}
 
@@ -110,6 +113,11 @@ public class FreshnessService {
 		Instant last = latest.get();
 		Long ageMinutes = last == null ? null : Duration.between(last, now).toMinutes();
 		return new SourceFreshness(key, label, last, ageMinutes, isStale(last, threshold, now), threshold.toMinutes());
+	}
+
+	private static SourceFreshness supplementary(SourceFreshness s) {
+		return new SourceFreshness(s.source(), s.label(), s.lastUpdateAt(), s.ageMinutes(), s.stale(),
+				s.thresholdMinutes(), true);
 	}
 
 	/** Stale when never updated, or older than the threshold. Pure — unit-tested. */

@@ -12,7 +12,14 @@ import java.time.Instant;
  * @param ageMinutes      minutes since the last update, or null if never
  * @param stale           true when older than the threshold (or never)
  * @param thresholdMinutes the staleness threshold for this source
+ * @param supplementary   other sources cover for it: stale still shows on the Agents page, but it doesn't
+ *                        raise the site-wide banner and its alert is INFO, not IMPORTANT
  */
 public record SourceFreshness(String source, String label, Instant lastUpdateAt, Long ageMinutes,
-		boolean stale, long thresholdMinutes) {
+		boolean stale, long thresholdMinutes, boolean supplementary) {
+
+	public SourceFreshness(String source, String label, Instant lastUpdateAt, Long ageMinutes, boolean stale,
+			long thresholdMinutes) {
+		this(source, label, lastUpdateAt, ageMinutes, stale, thresholdMinutes, false);
+	}
 }

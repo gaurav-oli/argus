@@ -1844,6 +1844,8 @@ export interface SourceFreshness {
   ageMinutes: number | null;
   stale: boolean;
   thresholdMinutes: number;
+  /** Other sources cover for it: shown when stale, but it doesn't raise the site-wide banner. */
+  supplementary: boolean;
 }
 
 export interface FreshnessView {

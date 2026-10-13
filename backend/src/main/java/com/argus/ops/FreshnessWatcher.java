@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * Tells someone when data goes stale instead of waiting to be noticed. The freshness rollup only lit a
  * header on the Agents page, so a source could sit stale for days (fundamentals did) unless somebody
  * happened to open it. Every 30 minutes this checks {@link FreshnessService} and sends one IMPORTANT
- * alert when a source turns stale — not again while it stays stale — and a note when it recovers.
+ * alert (INFO for a supplementary source) when a source turns stale — not again while it stays stale — and a note when it recovers.
  */
 @Component
 public class FreshnessWatcher {
@@ -44,7 +44,7 @@ public class FreshnessWatcher {
 		try {
 			for (SourceFreshness s : freshness.snapshot().sources()) {
 				if (s.stale() && alerted.add(s.source())) {
-					notify(UrgencyTier.IMPORTANT, s.label() + " is stale",
+					notify(s.supplementary() ? UrgencyTier.INFO : UrgencyTier.IMPORTANT, s.label() + " is stale",
 							(s.lastUpdateAt() == null ? "It has never updated" : "Last updated " + humanAge(s.ageMinutes()) + " ago")
 									+ " — expected within " + humanAge(s.thresholdMinutes()) + ". Anything built on it may be out of date.");
 				}

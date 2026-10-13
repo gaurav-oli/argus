@@ -47,7 +47,7 @@ export function SystemAlertBanner() {
   }, [load]);
 
   const frozen = graduation?.state === "FROZEN";
-  const staleSources = freshness?.sources.filter((s) => s.stale) ?? [];
+  const staleSources = freshness?.sources.filter((s) => s.stale && !s.supplementary) ?? [];
   const alert: { key: string; tone: "losses" | "warning"; text: string } | null = frozen
     ? { key: "frozen", tone: "losses", text: "🧊 Agent 5 has frozen — it stopped producing any new recommendation until this is reviewed." }
     : staleSources.length > 0
