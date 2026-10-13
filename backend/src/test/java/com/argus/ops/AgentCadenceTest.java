@@ -41,7 +41,8 @@ class AgentCadenceTest {
 		assertThat(AgentCadence.NEWS.staleAfter()).isEqualTo(Duration.ofMinutes(30));
 		assertThat(AgentCadence.SOCIAL.staleAfter()).isEqualTo(Duration.ofHours(1));
 		assertThat(AgentCadence.INTERNET.staleAfter()).isEqualTo(Duration.ofHours(12));
-		assertThat(AgentCadence.FILINGS.staleAfter()).isEqualTo(Duration.ofHours(72));
+		// Widened 2026-10-13: Fri filing, weekend + Columbus Day, false alarm at 72h.
+		assertThat(AgentCadence.FILINGS.staleAfter()).isEqualTo(Duration.ofDays(4));
 		assertThat(AgentCadence.RECOMMENDER.staleAfter()).isEqualTo(Duration.ofHours(12));
 		assertThat(AgentCadence.CALENDAR.staleAfter()).isEqualTo(Duration.ofHours(72));
 	}

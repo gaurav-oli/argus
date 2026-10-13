@@ -24,7 +24,8 @@ public enum AgentCadence {
 	NEWS("news", Duration.ofMinutes(5), Duration.ofMinutes(30)),
 	SOCIAL("social", Duration.ofMinutes(10), Duration.ofHours(1)),
 	INTERNET("internet", Duration.ofHours(6), Duration.ofHours(12)),
-	FILINGS("filings", Duration.ofHours(1), Duration.ofHours(72)),
+	/** EDGAR takes nothing on weekends or federal holidays: a Friday filing then nothing until Tuesday is normal. */
+	FILINGS("filings", Duration.ofHours(1), Duration.ofDays(4)),
 	RECOMMENDER("recommender", Duration.ofHours(6), Duration.ofHours(12)),
 	CALENDAR("calendar", Duration.ofHours(2), Duration.ofHours(72)),
 	/** Tags Agent 1's articles, but only macro stories count, and those can be hours apart. */
