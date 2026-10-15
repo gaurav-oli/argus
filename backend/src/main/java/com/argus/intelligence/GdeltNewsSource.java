@@ -63,8 +63,8 @@ public class GdeltNewsSource implements NewsSource {
 	private static final Pattern GKG_URL = Pattern.compile("(\\d{14})\\.gkg\\.csv\\.zip");
 
 	// The terms the old Doc API query asked for, split so markets outrank geopolitics when a file has more
-	// matches than the cap.
-	static final Pattern MARKET = Pattern.compile("\\b(stock market|stocks?|shares|earnings|inflation|central bank"
+	// matches than the cap. Not "shares": as a verb it pulled in "TikToker shares how...".
+	static final Pattern MARKET = Pattern.compile("\\b(stock market|stocks?|earnings|inflation|central bank"
 			+ "|fed|rate hikes?|rate cuts?|recession|tariffs?|opec|treasury yields?|bond yields?)\\b",
 			Pattern.CASE_INSENSITIVE);
 	static final Pattern WORLD = Pattern.compile("\\b(war|sanctions?|ceasefire)\\b", Pattern.CASE_INSENSITIVE);

@@ -36,6 +36,7 @@ class GdeltNewsSourceTest {
 				row("https://c.example/1", "Asian Stocks Slide After Hot US Inflation Data!"), // syndicated copy
 				row("https://d.example/1", "Local bakery wins county prize"), // off topic
 				row("https://e.example/1", "Civil War ship modelled in 3D"), // history, not news
+				row("https://h.example/1", "TikToker shares how her cousin proved parents wrong"), // verb, not equity
 				row("https://f.example/1", "Dollar jumps on Fed rate hike bets &amp; yields"),
 				row("https://g.example/1", "US lifts sanctions on Venezuela official"),
 				"too\tfew\tcolumns");
