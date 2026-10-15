@@ -33,7 +33,7 @@ class NewsIngestionServiceTest {
 	private final MacroRelevanceTagger macroTagger = new MacroRelevanceTagger();
 
 	private final NewsIngestionProperties props = new NewsIngestionProperties(
-			60_000, 300_000, 900_000, 60, new Gdelt(true, "q", 10), new Rss(List.of()));
+			60_000, 300_000, 900_000, 60, new Gdelt(true, 10), new Rss(List.of()));
 
 	private static RawArticle raw(String source, String id, String headline) {
 		return new RawArticle(source, id, "http://x/" + id, headline, null, Instant.now(), List.of());
