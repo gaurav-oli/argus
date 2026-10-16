@@ -183,7 +183,7 @@ public class AgentStatusService {
 						"Reads the company's own words from SEC EDGAR — earnings releases (8-K) and 10-Q/10-K MD&A — "
 								+ "for guidance, tone, going-concern and new-risk language. Every figure is verified against "
 								+ "the filing text before it is trusted.",
-						filingDigests.count(), "filings digested", filingDigests.latestCreatedAt(), "every 2h", null),
+						filingDigests.count(), "filings digested", filingDigests.latestActivityAt(), "every 2h", null),
 				active("strategies", "Agent 15", "Academic Strategies",
 						"Holds the published return-predictor literature as a library — each strategy's exact rule, its "
 								+ "original paper and the authors' own replication grade — computes the ones Argus has data "
