@@ -111,7 +111,9 @@ argus:
     rss:
       feeds:
         # Markets
-        - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
+        # WSJ Markets. Dow Jones moved its feeds here; the old feeds.a.dj.com URL still answers 200 but has been
+        # frozen at 2025-01-27 (found 2026-10-20 — 0 WSJ articles for ~21 months).
+        - https://feeds.content.dowjones.io/public/rss/RSSMarketsMain
         - https://www.cnbc.com/id/100003114/device/rss/rss.html
         # World & geopolitics — macro/political stories move every holding at once (MacroRelevanceTagger,
         # MacroTheme); with only two US business feeds Argus was blind to most of the world.
