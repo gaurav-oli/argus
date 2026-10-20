@@ -114,6 +114,8 @@ argus:
         # WSJ Markets. Dow Jones moved its feeds here; the old feeds.a.dj.com URL still answers 200 but has been
         # frozen at 2025-01-27 (found 2026-10-20 — 0 WSJ articles for ~21 months).
         - https://feeds.content.dowjones.io/public/rss/RSSMarketsMain
+        # MarketWatch Top Stories (Dow Jones host). Not mw_marketpulse — that one is frozen at 2025-07-03.
+        - https://feeds.content.dowjones.io/public/rss/mw_topstories
         - https://www.cnbc.com/id/100003114/device/rss/rss.html
         # World & geopolitics — macro/political stories move every holding at once (MacroRelevanceTagger,
         # MacroTheme); with only two US business feeds Argus was blind to most of the world.
