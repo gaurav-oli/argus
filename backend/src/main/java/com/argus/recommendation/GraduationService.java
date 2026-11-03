@@ -75,6 +75,9 @@ public class GraduationService {
 	 * again from zero trust", same posture as every other cold-start in this app (e.g. Agent 3's
 	 * re-admission), not "assume the fix worked". No-ops (returns the unchanged state) if not
 	 * currently FROZEN, so this can't be used to skip the earn-your-way-up ladder outside a real freeze.
+	 *
+	 * <p>The outcomes behind the freeze stop counting (they stay in the all-time record): with them still in the
+	 * rolling window, the next close would refreeze it even if it won, e.g. 1/10 becomes at best 2/10.
 	 */
 	@Transactional
 	public GraduationState resume() {
@@ -82,6 +85,7 @@ public class GraduationService {
 		if (g.getState() != GraduationState.FROZEN) {
 			return g.getState();
 		}
+		trades.retireFromGraduation();
 		g.setState(GraduationState.SHADOW);
 		graduation.save(g);
 		log.info("Agent 5 graduation: FROZEN -> SHADOW (manual review — resumed)");

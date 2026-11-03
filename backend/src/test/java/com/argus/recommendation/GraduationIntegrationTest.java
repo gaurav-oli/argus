@@ -64,4 +64,19 @@ class GraduationIntegrationTest {
 		assertEquals(GraduationState.SHADOW, service.currentState(), "the old record must not freeze the new system");
 		assertEquals(10, trades.count(), "but every outcome is still recorded");
 	}
+
+	@Test
+	void resumeStartsTheRecordFromZeroSoTheNextCloseCannotRefreeze() {
+		record(1, 9);
+		assertEquals(GraduationState.FROZEN, service.currentState());
+
+		assertEquals(GraduationState.SHADOW, service.resume());
+
+		assertEquals(GraduationState.SHADOW, service.recordOutcome(true, null), "a win must not refreeze it");
+		assertEquals(GraduationState.SHADOW, service.recordOutcome(false, null), "nor one loss in a fresh window");
+		assertEquals(12, trades.count(), "the outcomes behind the freeze stay in the all-time record");
+
+		record(0, 8); // ten fresh outcomes, one win: a new failure run still freezes
+		assertEquals(GraduationState.FROZEN, service.currentState());
+	}
 }
