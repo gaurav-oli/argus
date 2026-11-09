@@ -37,6 +37,14 @@ public final class FillModel {
 		return COMMISSION_PCT + halfSpreadPct(price) + slippage;
 	}
 
+	/** Annual cost of borrowing shares to short, in percent (easy-to-borrow large caps; hard-to-borrow costs far more). */
+	static final double BORROW_PCT_PER_YEAR = 1.0;
+
+	/** Borrow cost for a short held {@code holdDays} trading days, in percent (strategy rebuild, Phase 4). */
+	public static double borrowPct(int holdDays) {
+		return BORROW_PCT_PER_YEAR * Math.max(1, holdDays) / 252.0;
+	}
+
 	/** Cost of a full round trip (entry + exit), in percent — what gets subtracted from a trade's return. */
 	public static double roundTripPct(double price, Double atrPct) {
 		return 2 * perSidePct(price, atrPct);

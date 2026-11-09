@@ -301,6 +301,8 @@ public class RecommendationPolicy {
 			t.add("trend=" + ctx.chart().trend().name());
 			t.add("chart=" + ctx.chart().bias());
 			FeatureTokens.addIfPresent(t, "vol", FeatureTokens.volatilityBucket(ctx.chart().atrPct()));
+			FeatureTokens.addIfPresent(t, "stretch",
+					FeatureTokens.stretchBucket(ctx.chart().lastClose(), ctx.chart().sma20(), ctx.chart().atrPct()));
 		}
 		t.add("deep=" + (deep == null ? "NONE" : deep.verdict().name()));
 		if (ctx.standing() != null) {

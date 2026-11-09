@@ -84,12 +84,17 @@ public class ShadowBook implements NightlyStep {
 					values (?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
 					rec.getId(), rec.getTicker(), dir, rec.getSector(), today, livePrice, spy,
 					stop == null ? null : stop.doubleValue(), stop == null ? null : stop.doubleValue(),
-					target == null ? null : target.doubleValue(), livePrice, atr, FillModel.roundTripPct(livePrice, atr),
-					rec.getHoldDays() == null ? DEFAULT_HOLD_DAYS : rec.getHoldDays());
+					target == null ? null : target.doubleValue(), livePrice, atr, FillModel.roundTripPct(livePrice, atr)
+							+ (rec.getDirection() == SignalDirection.BEARISH ? FillModel.borrowPct(holdDays(rec)) : 0),
+					holdDays(rec));
 		}
 		catch (RuntimeException ex) {
 			log.debug("Shadow trade for {} failed: {}", rec.getTicker(), ex.getMessage());
 		}
+	}
+
+	private static int holdDays(Recommendation rec) {
+		return rec.getHoldDays() == null ? DEFAULT_HOLD_DAYS : rec.getHoldDays();
 	}
 
 	/** Walk every open shadow trade forward over the daily candles that have arrived since it was last evaluated. */

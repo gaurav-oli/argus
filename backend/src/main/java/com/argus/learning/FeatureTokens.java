@@ -30,6 +30,17 @@ public final class FeatureTokens {
 		return price < 10 ? "under10" : price < 50 ? "10-50" : price < 200 ? "50-200" : "200+";
 	}
 
+	/**
+	 * How far the price sits from its 20-day average, in normal daily moves (ATR): {@code up} at 3+ above, {@code down}
+	 * at 3+ below, else {@code normal}. Strategy rebuild, Phase 3: the "don't chase" rule failed its backtest, so this is
+	 * only recorded — the Trade Learner can still find it if stretched calls lose for Argus specifically.
+	 */
+	public static String stretchBucket(Double close, Double sma20, Double atrPct) {
+		if (close == null || sma20 == null || atrPct == null || atrPct <= 0 || close <= 0) return null;
+		double stretch = (close - sma20) / (atrPct / 100.0 * close);
+		return stretch >= 3 ? "up" : stretch <= -3 ? "down" : "normal";
+	}
+
 	public static String volatilityBucket(Double atrPct) {
 		if (atrPct == null) return null;
 		return atrPct < 2 ? "low" : atrPct < 4 ? "mid" : "high";

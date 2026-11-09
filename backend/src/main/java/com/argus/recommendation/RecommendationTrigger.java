@@ -53,13 +53,15 @@ public class RecommendationTrigger implements Agent {
 	private final DeepAnalysisService deepAnalyses;
 	private final LivePriceService livePrices;
 	private final ShadowBook shadowBook;
+	private final com.argus.regime.MacroEventCalendar macroCalendar;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
 			GraduationService graduation, EarningsQuietPeriodService quietPeriod, KnownUniverse universe,
 			PaperInvestorService investor, RecommendationPolicy policy, SectorClassifier sectors,
 			MarketRegimeService regimes, LivePriceService livePrices, ChartStudyService charts,
-			DeepAnalysisService deepAnalyses, ShadowBook shadowBook) {
+			DeepAnalysisService deepAnalyses, ShadowBook shadowBook, com.argus.regime.MacroEventCalendar macroCalendar) {
 		this.shadowBook = shadowBook;
+		this.macroCalendar = macroCalendar;
 		this.livePrices = livePrices;
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
@@ -158,6 +160,22 @@ public class RecommendationTrigger implements Agent {
 	}
 
 	/**
+	 * Strategy rebuild, Phase 4: tag a call made the day before an FOMC decision or jobs report. Untested as a rule (the
+	 * defense backtest failed), so it only lets the Trade Learner find out, with hold-out and probation, whether such
+	 * calls lose for Argus.
+	 */
+	private RecommendationPolicy.Verdict withMacroTag(RecommendationPolicy.Verdict v) {
+		var next = macroCalendar.nextTradingDay(java.time.LocalDate.now(java.time.ZoneId.of("America/New_York")));
+		if (next.isEmpty()) {
+			return v;
+		}
+		java.util.Set<String> features = new java.util.LinkedHashSet<>(v.features());
+		features.add("macro=" + next.get().kind().name().toLowerCase(java.util.Locale.ROOT) + "_tomorrow");
+		return new RecommendationPolicy.Verdict(v.action(), v.score(), v.holdDays(), v.horizonLabel(), v.thesis(), v.reasons(),
+				v.caveats(), v.exitPlan(), features, v.learned());
+	}
+
+	/**
 	 * What the other weighting would have called (strategy rebuild, Phase 1): stamped on the call so the two can be
 	 * graded side by side. Best-effort — a shadow failure must never stop the real call.
 	 */
@@ -218,8 +236,8 @@ public class RecommendationTrigger implements Agent {
 		RecommendationPolicy.Standing standing = gatherer.standing(ticker);
 
 		Recommendation rec = recommendations.create(ticker, signals,
-				score -> policy.evaluate(new RecommendationPolicy.Context(ticker, score, signals, sector, regime,
-						lastPrice, move1d, earningsSoon, chart, deep, standing)),
+				score -> withMacroTag(policy.evaluate(new RecommendationPolicy.Context(ticker, score, signals, sector, regime,
+						lastPrice, move1d, earningsSoon, chart, deep, standing))),
 				sector.name(), reason == null || reason.length() <= 120 ? reason : reason.substring(0, 117) + "...");
 		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());

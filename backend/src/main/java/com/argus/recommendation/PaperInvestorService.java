@@ -300,7 +300,8 @@ public class PaperInvestorService {
 		SimulatedTrade add = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
 				baseNotional.divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP), price, first.getHorizonDays(), spy);
 		add.applyRisk(first.getStopPrice() != null ? first.getStopPrice() : StopLoss.stopFor(rec.getDirection(), chart, price.doubleValue()), 1.0);
-		add.applyCosts(FillModel.roundTripPct(price.doubleValue(), chart == null ? null : chart.atrPct()));
+		add.applyCosts(FillModel.roundTripPct(price.doubleValue(), chart == null ? null : chart.atrPct())
+				+ (rec.getDirection() == SignalDirection.BEARISH ? FillModel.borrowPct(first.getHorizonDays()) : 0));
 		add.setHighWater(price);
 		add.setTargetPrice(first.getTargetPrice());
 		add.markScaleIn();
@@ -620,7 +621,8 @@ public class PaperInvestorService {
 				SimulatedTrade leg = new SimulatedTrade(rec.getId(), rec.getTicker(), rec.getDirection(),
 						tradeNotional, entry, horizon, spy);
 				leg.applyRisk(stop, sizeMultiplier);
-				leg.applyCosts(FillModel.roundTripPct(entry.doubleValue(), entryChart == null ? null : entryChart.atrPct()));
+				leg.applyCosts(FillModel.roundTripPct(entry.doubleValue(), entryChart == null ? null : entryChart.atrPct())
+						+ (rec.getDirection() == SignalDirection.BEARISH ? FillModel.borrowPct(horizon) : 0));
 				leg.recordSetup(fingerprintJson, pattern.note());
 				leg.recordStyleFit(fit.family(), fit.note());
 				leg.setHighWater(entry);
