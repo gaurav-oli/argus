@@ -59,6 +59,8 @@ class TradeLearnerTest {
 		when(rules.findAll()).thenAnswer(inv -> List.copyOf(store));
 		when(rules.findByStatusOrderByActivatedAtDesc(LearnedRule.Status.ACTIVE)).thenAnswer(inv ->
 				store.stream().filter(r -> r.getStatus() == LearnedRule.Status.ACTIVE).toList());
+		when(rules.findByStatusOrderByActivatedAtDesc(LearnedRule.Status.PROBATION)).thenAnswer(inv ->
+				store.stream().filter(r -> r.getStatus() == LearnedRule.Status.PROBATION).toList());
 		when(reports.save(any(LearningReport.class))).thenAnswer(inv -> inv.getArgument(0));
 		when(signals.rowsFor(anyCollection())).thenReturn(List.of());
 		when(sectors.sectorOf(anyString())).thenAnswer(inv -> {
@@ -88,8 +90,9 @@ class TradeLearnerTest {
 
 		LearningReport report = learner(false).run();
 
-		LearnedRule rule = store.stream().filter(r -> r.getStatus() == LearnedRule.Status.ACTIVE && r.getPredicates().contains("sector=AUTOS_EV"))
-				.findFirst().orElseThrow(() -> new AssertionError("no active autos rule; store=" + store.stream().map(LearnedRule::getPredicates).toList()));
+		// A replicated pattern enters probation first; it changes nothing until fresh trades confirm it.
+		LearnedRule rule = store.stream().filter(r -> r.getStatus() == LearnedRule.Status.PROBATION && r.getPredicates().contains("sector=AUTOS_EV"))
+				.findFirst().orElseThrow(() -> new AssertionError("no autos rule on probation; store=" + store.stream().map(LearnedRule::getPredicates).toList()));
 		assertTrue(rule.getKind() == LearnedRule.Kind.PENALTY || rule.getKind() == LearnedRule.Kind.BLOCK);
 		assertTrue(rule.getDescription().contains("Autos & EV") && rule.getDescription().contains("underperformed the S&P 500"), rule.getDescription());
 		assertTrue(rule.getSupportClusters() >= 8 && rule.getMeanExcess().doubleValue() < -3);
@@ -106,8 +109,8 @@ class TradeLearnerTest {
 
 		learner(false).run();
 
-		assertTrue(store.stream().anyMatch(r -> r.getKind() == LearnedRule.Kind.PENALTY && r.getStatus() == LearnedRule.Status.ACTIVE));
-		assertTrue(store.stream().anyMatch(r -> r.getKind() == LearnedRule.Kind.SIZE && r.getStatus() == LearnedRule.Status.ACTIVE
+		assertTrue(store.stream().anyMatch(r -> r.getKind() == LearnedRule.Kind.PENALTY && r.getStatus() == LearnedRule.Status.PROBATION));
+		assertTrue(store.stream().anyMatch(r -> r.getKind() == LearnedRule.Kind.SIZE && r.getStatus() == LearnedRule.Status.PROBATION
 				&& r.getEffectValue().doubleValue() == 0.6), "a cohort averaging ≤ -3% earns a size cut as well");
 	}
 
@@ -169,7 +172,7 @@ class TradeLearnerTest {
 
 		assertEquals("Autos names keep losing.", report.getNarrative());
 		assertTrue(store.stream().anyMatch(r -> "High rates hurt capital-heavy EV makers.".equals(r.getExplanation())));
-		assertTrue(store.stream().anyMatch(r -> r.getStatus() == LearnedRule.Status.ACTIVE), "the rule exists because of the numbers, with or without the model");
+		assertTrue(store.stream().anyMatch(r -> r.getStatus() == LearnedRule.Status.PROBATION), "the rule exists because of the numbers, with or without the model");
 	}
 
 	@Test
@@ -179,7 +182,7 @@ class TradeLearnerTest {
 
 		LearningReport report = learner(true).run();
 
-		assertTrue(store.stream().anyMatch(r -> r.getStatus() == LearnedRule.Status.ACTIVE));
+		assertTrue(store.stream().anyMatch(r -> r.getStatus() == LearnedRule.Status.PROBATION));
 		assertEquals("deterministic", report.getModel());
 	}
 
@@ -221,5 +224,30 @@ class TradeLearnerTest {
 				"regime, chart and deep tokens can't be recovered for old trades, so they are absent");
 		assertFalse(t.contains("has=INSIDER"), "an opposing signal is not support");
 		assertFalse(t.contains("has=CALENDAR"));
+	}
+
+	private LearnedRule onProbation(LearnedRule.Kind kind, String predicate, java.time.Instant since) {
+		LearnedRule r = new LearnedRule(kind, Set.of(predicate), "probation rule", 5);
+		r.startProbation("replicated");
+		ReflectionTestUtils.setField(r, "probationStartedAt", since);
+		ReflectionTestUtils.setField(r, "id", 99L);
+		store.add(r);
+		return r;
+	}
+
+	@Test
+	void aRuleOnProbationGoesLiveWhenFreshTradesConfirmIt() {
+		closedBook(150, -4.0, 0.4, 5);
+		LearnedRule r = onProbation(LearnedRule.Kind.PENALTY, "sector=AUTOS_EV", BASE.plusSeconds(86_400L * 100));
+		learner(false).run();
+		assertEquals(LearnedRule.Status.ACTIVE, r.getStatus(), r.getDescription());
+	}
+
+	@Test
+	void aRuleOnProbationIsRejectedWhenFreshTradesContradictIt() {
+		closedBook(150, -4.0, 0.4, 5);
+		LearnedRule r = onProbation(LearnedRule.Kind.PENALTY, "sector=TECHNOLOGY", BASE.plusSeconds(86_400L * 100));
+		learner(false).run();
+		assertEquals(LearnedRule.Status.REJECTED, r.getStatus());
 	}
 }

@@ -52,12 +52,14 @@ public class RecommendationTrigger implements Agent {
 	private final ChartStudyService charts;
 	private final DeepAnalysisService deepAnalyses;
 	private final LivePriceService livePrices;
+	private final ShadowBook shadowBook;
 
 	public RecommendationTrigger(AgentSignalGatherer gatherer, RecommendationService recommendations,
 			GraduationService graduation, EarningsQuietPeriodService quietPeriod, KnownUniverse universe,
 			PaperInvestorService investor, RecommendationPolicy policy, SectorClassifier sectors,
 			MarketRegimeService regimes, LivePriceService livePrices, ChartStudyService charts,
-			DeepAnalysisService deepAnalyses) {
+			DeepAnalysisService deepAnalyses, ShadowBook shadowBook) {
+		this.shadowBook = shadowBook;
 		this.livePrices = livePrices;
 		this.gatherer = gatherer;
 		this.recommendations = recommendations;
@@ -223,6 +225,7 @@ public class RecommendationTrigger implements Agent {
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());
 		recordShadow(rec, gatherer.weigh(ticker, raw, !reportCardLive), sector, regime, lastPrice, move1d, earningsSoon,
 				chart, deep, standing);
+		shadowBook.onCall(rec, lastPrice, chart);
 		// Every call — WATCH included — is first checked against what the book already holds on this ticker:
 		// a call the other way exits those legs, a WATCH tightens their stops.
 		investor.reviewOpenAgainst(rec);

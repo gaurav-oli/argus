@@ -23,7 +23,14 @@ public class LearnedRule {
 
 	public enum Kind { PENALTY, BOOST, BLOCK, CAP_HOLD, SIZE }
 
-	public enum Status { PROPOSED, ACTIVE, RETIRED, REJECTED }
+	public enum Status {
+		PROPOSED,
+		/** Passed the hold-out test; running silently against fresh trades before it may change behaviour. */
+		PROBATION,
+		ACTIVE,
+		RETIRED,
+		REJECTED
+	}
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -101,6 +108,22 @@ public class LearnedRule {
 		this.holdoutClusters = holdoutClusters;
 		this.holdoutMeanExcess = holdoutMeanExcess == null ? null : BigDecimal.valueOf(holdoutMeanExcess).setScale(3, RoundingMode.HALF_UP);
 		this.lastEvaluatedAt = Instant.now();
+	}
+
+	@jakarta.persistence.Column(name = "probation_started_at")
+	private Instant probationStartedAt;
+
+	/** Start (or keep) probation: the rule counts nothing until fresh trades confirm it. */
+	public void startProbation(String note) {
+		if (this.status != Status.PROBATION) {
+			this.probationStartedAt = Instant.now();
+		}
+		this.status = Status.PROBATION;
+		this.verdictNote = note;
+	}
+
+	public Instant getProbationStartedAt() {
+		return probationStartedAt;
 	}
 
 	public void activate(String note) {

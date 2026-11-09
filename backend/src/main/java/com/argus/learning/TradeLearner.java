@@ -105,6 +105,7 @@ public class TradeLearner {
 				}
 			}
 			retireStale(observations, newlyActive);
+			reviewProbation(observations);
 			book.reload();
 		}
 
@@ -151,7 +152,82 @@ public class TradeLearner {
 			BigDecimal excess = t.getExcessReturnPct() != null ? t.getExcessReturnPct() : t.getReturnPct();
 			out.add(new Observation(t.getId(), t.getTicker(), t.getDirection().name(), t.getEntryAt(), tokens, excess.doubleValue()));
 		}
+		out.addAll(shadowObservations());
 		return out;
+	}
+
+	/**
+	 * Strategy rebuild, Phase 2: closed shadow trades are evidence too — far more of them than real trades. A shadow
+	 * trade whose call also became a real trade is skipped so the same bet isn't counted twice; lookalikes are pooled
+	 * into independent clusters by the miner as for real trades. Ids are negated so they can't collide with real ones.
+	 */
+	List<Observation> shadowObservations() {
+		if (jdbc == null) {
+			return List.of();
+		}
+		List<Observation> out = new ArrayList<>();
+		jdbc.query("""
+				select s.id, s.ticker, s.direction, s.entry_at, s.hold_days, s.excess_return_pct, r.features
+				from shadow_trades s join recommendations r on r.id = s.recommendation_id
+				where s.status = 'CLOSED' and s.excess_return_pct is not null and r.features is not null
+				  and not exists (select 1 from simulated_trades t where t.recommendation_id = s.recommendation_id)""", rs -> {
+			Set<String> tokens = new java.util.LinkedHashSet<>(FeatureTokens.fromJson(rs.getString("features")));
+			tokens.removeIf(x -> x.startsWith("hold="));
+			tokens.add(FeatureTokens.horizonToken(rs.getInt("hold_days")));
+			out.add(new Observation(-rs.getLong("id"), rs.getString("ticker"), rs.getString("direction"),
+					rs.getTimestamp("entry_at").toInstant(), tokens, rs.getDouble("excess_return_pct")));
+		});
+		return out;
+	}
+
+	/** Fresh-trade evidence a rule on probation needs before it may go live, and how long it may wait for it. */
+	static final java.time.Duration PROBATION_MIN_AGE = java.time.Duration.ofDays(21);
+	static final java.time.Duration PROBATION_MAX_AGE = java.time.Duration.ofDays(90);
+	static final int PROBATION_MIN_CLUSTERS = 5;
+
+	/**
+	 * Promote or reject rules on probation using only trades entered after probation began — data the rule has never
+	 * seen. It goes ACTIVE if the pattern still holds the same way it did on the hold-out; it's rejected if it doesn't,
+	 * or if not enough fresh evidence arrives within {@link #PROBATION_MAX_AGE}.
+	 */
+	void reviewProbation(List<Observation> observations) {
+		java.time.Instant now = java.time.Instant.now();
+		for (LearnedRule r : rules.findByStatusOrderByActivatedAtDesc(LearnedRule.Status.PROBATION)) {
+			java.time.Instant since = r.getProbationStartedAt() == null ? now : r.getProbationStartedAt();
+			if (now.isBefore(since.plus(PROBATION_MIN_AGE))) continue;
+			List<Observation> fresh = observations.stream().filter(o -> o.entryAt() != null && o.entryAt().isAfter(since)).toList();
+			LessonMiner.Stats s = LessonMiner.recheck(fresh, r.predicateSet());
+			if (s.clusters() < PROBATION_MIN_CLUSTERS) {
+				if (now.isAfter(since.plus(PROBATION_MAX_AGE))) {
+					r.reject(String.format(Locale.ROOT, "Probation ended without enough fresh evidence (%d of %d independent bets).",
+							s.clusters(), PROBATION_MIN_CLUSTERS));
+					rules.save(r);
+				}
+				continue;
+			}
+			boolean holds = switch (r.getKind()) {
+				case BOOST -> s.delta() >= RETIRE_DELTA_PTS && s.meanExcess() > 0;
+				default -> s.delta() <= -RETIRE_DELTA_PTS && s.meanExcess() < 0;
+			};
+			if (holds) {
+				r.activate(String.format(Locale.ROOT, "Confirmed on probation: %d fresh bets averaged %+.1f%% vs %+.1f%% for the rest.",
+						s.clusters(), s.meanExcess(), s.complementMean()));
+				log.info("Trade learner: rule {} passed probation ({})", r.getId(), r.getDescription());
+			}
+			else {
+				r.reject(String.format(Locale.ROOT, "Failed probation: %d fresh bets averaged %+.1f%% vs %+.1f%% for the rest.",
+						s.clusters(), s.meanExcess(), s.complementMean()));
+				log.info("Trade learner: rule {} failed probation ({})", r.getId(), r.getDescription());
+			}
+			rules.save(r);
+		}
+	}
+
+	private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+	@org.springframework.beans.factory.annotation.Autowired(required = false)
+	void setJdbc(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+		this.jdbc = jdbc;
 	}
 
 	// ---- rules ----
@@ -164,9 +240,12 @@ public class TradeLearner {
 		rule.describe(RuleText.describe(c.predicates(), c.fit().meanExcess(), c.fit().clusters(), c.fit().winRate()));
 		rule.recordEvidence(c.fit().trades(), c.fit().clusters(), c.fit().winRate(), c.fit().meanExcess(), c.holdoutClusters(), c.holdoutMean());
 		if (c.decision() == LessonMiner.Decision.ACTIVATE) {
-			rule.activate(c.note());
+			// Strategy rebuild, Phase 2: replicating on the hold-out isn't enough — it must also hold on fresh trades.
+			if (rule.getStatus() != LearnedRule.Status.ACTIVE) {
+				rule.startProbation(c.note());
+			}
 		}
-		else if (rule.getStatus() != LearnedRule.Status.ACTIVE) {
+		else if (rule.getStatus() != LearnedRule.Status.ACTIVE && rule.getStatus() != LearnedRule.Status.PROBATION) {
 			rule.reject(c.note());
 		}
 		LearnedRule saved = rules.save(rule);
@@ -182,7 +261,9 @@ public class TradeLearner {
 				.orElseGet(() -> new LearnedRule(LearnedRule.Kind.SIZE, c.predicates(), "", 0.6));
 		size.describe(RuleText.describe(c.predicates(), c.fit().meanExcess(), c.fit().clusters(), c.fit().winRate()) + " — so positions in it are sized down.");
 		size.recordEvidence(c.fit().trades(), c.fit().clusters(), c.fit().winRate(), c.fit().meanExcess(), c.holdoutClusters(), c.holdoutMean());
-		size.activate(c.note());
+		if (size.getStatus() != LearnedRule.Status.ACTIVE) {
+			size.startProbation(c.note());
+		}
 		rules.save(size);
 	}
 
@@ -225,7 +306,7 @@ public class TradeLearner {
 		for (Candidate c : notReplicated) {
 			facts.append(String.format(Locale.ROOT, "- %s (%s)%n", RuleText.subject(c.predicates()), c.note()));
 		}
-		facts.append("Rules just activated (each replicated on newer trades):\n");
+		facts.append("Rules that just entered probation (each replicated on newer trades; they change nothing until fresh trades confirm them):\n");
 		if (newlyActive.isEmpty()) facts.append("(none)\n");
 		for (LearnedRule r : newlyActive) {
 			facts.append(String.format(Locale.ROOT, "- rule %d [%s]: %s%n", r.getId(), r.getKind(), r.getDescription()));
@@ -234,7 +315,7 @@ public class TradeLearner {
 				You are Argus's Trade Learner, reviewing the paper-trading record to understand why trades win and lose.
 				Below are MEASURED facts. Do not invent any number or event that is not listed. The trades are plain \\
 				stock positions (long or short) — do not mention options, leverage, derivatives or any instrument that is \\
-				not in the facts. Only patterns listed under "activated" are established; anything listed as not replicated \\
+				not in the facts. Only patterns listed under "entered probation" have replicated so far; anything listed as not replicated \\
 				must be described as unproven if you mention it at all. Everything you write is a hypothesis for a human \\
 				to weigh — you cannot change any rule.
 

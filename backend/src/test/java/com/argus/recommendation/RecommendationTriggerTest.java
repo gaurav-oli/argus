@@ -40,7 +40,7 @@ class RecommendationTriggerTest {
 	private final DeepAnalysisService deepAnalyses = mock(DeepAnalysisService.class);
 	private final RecommendationTrigger trigger = new RecommendationTrigger(
 			gatherer, recommendations, graduation, quietPeriod, universe, investor, policy, sectors, regimes,
-			prices, charts, deepAnalyses);
+			prices, charts, deepAnalyses, mock(ShadowBook.class));
 
 	private final AgentSignal aSignal = new AgentSignal("agent-1-news", SignalDirection.BULLISH, 1, "x");
 

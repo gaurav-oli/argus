@@ -20,10 +20,12 @@ public class GradingJob {
 	private final SignalGrader grader;
 	private final ReportCardService cards;
 	private final List<GateEvaluator> evaluators;
+	private final List<NightlyStep> steps;
 	private final boolean enabled;
 
-	public GradingJob(SignalGrader grader, ReportCardService cards, List<GateEvaluator> evaluators,
+	public GradingJob(SignalGrader grader, ReportCardService cards, List<GateEvaluator> evaluators, List<NightlyStep> steps,
 			@Value("${argus.grading.enabled:true}") boolean enabled) {
+		this.steps = steps;
 		this.grader = grader;
 		this.cards = cards;
 		this.evaluators = evaluators;
@@ -45,6 +47,14 @@ public class GradingJob {
 		}
 		catch (RuntimeException ex) {
 			log.warn("Grading failed: {}", ex.toString(), ex);
+		}
+		for (NightlyStep step : steps) {
+			try {
+				step.run();
+			}
+			catch (RuntimeException ex) {
+				log.warn("Nightly step {} failed: {}", step.name(), ex.toString(), ex);
+			}
 		}
 		try {
 			cards.recompute();
