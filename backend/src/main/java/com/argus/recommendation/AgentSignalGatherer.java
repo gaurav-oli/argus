@@ -58,6 +58,10 @@ public class AgentSignalGatherer {
 	private static final double SIGNAL_DIRECTION_DEADZONE = 0.15;
 
 	private static final Duration NEWS_WINDOW = Duration.ofDays(7);
+	/** The stretch before {@link #NEWS_WINDOW} that sets a stock's normal news tone. */
+	private static final Duration NEWS_NORMAL_WINDOW = Duration.ofDays(30);
+	/** Fewer distinct stories than this in the normal window and the stock has no normal yet (raw tone is used). */
+	static final int NEWS_NORMAL_MIN_STORIES = 5;
 	private static final int FULL_COVERAGE_ARTICLES = 5;
 	/** Average sentiment magnitude at which news reaches its full conviction weight. */
 	private static final double NEWS_FULL_CONVICTION_SENTIMENT = 0.35;
@@ -93,6 +97,9 @@ public class AgentSignalGatherer {
 	private static final double TECHNICAL_MAX_WEIGHT = 0.7;
 	/** The chart score must clear this magnitude before Agent 10 calls a direction. */
 	private static final double TECHNICAL_DEADZONE = 0.2;
+	/** Against its normal the chart moves less than in level, so the bar to vote and the full-weight point are lower. */
+	static final double TECHNICAL_CHANGE_DEADZONE = 0.1;
+	static final double TECHNICAL_CHANGE_FULL = 0.4;
 	/** Fundamentals (Agent 12) move slowly — a supporting signal, capped below News. */
 	private static final double FUNDAMENTAL_MAX_WEIGHT = 0.6;
 	private static final double FUNDAMENTAL_DEADZONE = 0.2;
@@ -163,7 +170,8 @@ public class AgentSignalGatherer {
 		insiderSignal(ticker).ifPresent(signals::add);
 		internetSignal(ticker).ifPresent(signals::add);
 		calendarSignal(ticker).ifPresent(signals::add);
-		chartStudies.studyFor(ticker).ifPresent(study -> technicalSignal(study).ifPresent(signals::add));
+		chartStudies.studyFor(ticker)
+				.ifPresent(study -> technicalSignal(study, chartStudies.normalScore(ticker).orElse(null)).ifPresent(signals::add));
 		fundamentalSignal(ticker).ifPresent(signals::add);
 		filingSignal(ticker).ifPresent(signals::add);
 		academicSignal(ticker).ifPresent(signals::add);
@@ -314,8 +322,16 @@ public class AgentSignalGatherer {
 		return Optional.of(new AgentSignal("agent-2-social", dir, weight, rationale, 5));
 	}
 
+	/**
+	 * Agent 1 — news tone, scored against the stock's own normal: this week's average sentiment minus its average
+	 * over the 30 days before. The local model reads most headlines as positive (464 of 514 graded calls were bullish)
+	 * and the steady lean carried no information; graded on the past six weeks, the change from normal did, in both
+	 * halves (strategy rebuild, 2026-11-10).
+	 */
 	private Optional<AgentSignal> newsSignal(String ticker) {
-		List<NewsArticle> articles = news.findAnalyzedForTicker(ticker, Instant.now().minus(NEWS_WINDOW));
+		Instant weekAgo = Instant.now().minus(NEWS_WINDOW);
+		List<NewsArticle> all = news.findAnalyzedForTicker(ticker, weekAgo.minus(NEWS_NORMAL_WINDOW));
+		List<NewsArticle> articles = all.stream().filter(a -> a.getPublishedAt().isAfter(weekAgo)).toList();
 		if (articles.isEmpty()) {
 			return Optional.empty();
 		}
@@ -323,20 +339,29 @@ public class AgentSignalGatherer {
 		// coverage weight and the sentiment average with duplicates. Cluster by normalized headline and
 		// score over one representative per distinct story (Fable 5 follow-up).
 		List<NewsArticle> stories = clusterByHeadline(articles);
+		List<NewsArticle> before = clusterByHeadline(all.stream().filter(a -> !a.getPublishedAt().isAfter(weekAgo)).toList());
 		double avgSentiment = average(stories, NewsArticle::getSentimentScore);
+		Double normal = before.size() >= NEWS_NORMAL_MIN_STORIES ? average(before, NewsArticle::getSentimentScore) : null;
+		double tone = newsToneVsNormal(avgSentiment, normal);
 		double avgRelevance = average(stories, NewsArticle::getRelevanceScore);
-		SignalDirection dir = avgSentiment > 0.1 ? SignalDirection.BULLISH
-				: avgSentiment < -0.1 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
+		SignalDirection dir = tone > 0.1 ? SignalDirection.BULLISH
+				: tone < -0.1 ? SignalDirection.BEARISH : SignalDirection.NEUTRAL;
 		double coverage = Math.min(1.0, (double) stories.size() / FULL_COVERAGE_ARTICLES);
-		// Scale by how strong the sentiment actually is: a barely-positive 0.11 average across many stories
-		// used to carry the same weight as a decisive 0.6 (weight was coverage × relevance only).
-		double conviction = Math.min(1.0, Math.abs(avgSentiment) / NEWS_FULL_CONVICTION_SENTIMENT);
+		// Scale by how far from normal the tone actually is: a barely-changed tone across many stories
+		// shouldn't carry the same weight as a decisive shift.
+		double conviction = Math.min(1.0, Math.abs(tone) / NEWS_FULL_CONVICTION_SENTIMENT);
 		double weight = coverage * (0.5 + 0.5 * avgRelevance) * conviction;
 		String rationale = String.format(
-				"Avg news sentiment %.2f across %d distinct stor%s (%d article%s), relevance %.0f%%",
+				"News tone %.2f across %d distinct stor%s (%d article%s) vs its normal %s → %+.2f, relevance %.0f%%",
 				avgSentiment, stories.size(), stories.size() == 1 ? "y" : "ies",
-				articles.size(), articles.size() == 1 ? "" : "s", avgRelevance * 100);
+				articles.size(), articles.size() == 1 ? "" : "s",
+				normal == null ? "(not enough history)" : String.format("%.2f", normal), tone, avgRelevance * 100);
 		return Optional.of(new AgentSignal("agent-1-news", dir, weight, rationale, 10));
+	}
+
+	/** This week's tone minus the stock's normal; the raw tone when there's no normal yet. */
+	static double newsToneVsNormal(double thisWeek, Double normal) {
+		return normal == null ? thisWeek : thisWeek - normal;
 	}
 
 	/**
@@ -438,21 +463,30 @@ public class AgentSignalGatherer {
 	 * the blended score is. A trend-led read is a slower edge than a mean-reversion/pattern one, which
 	 * feeds the recommended holding period.
 	 */
-	private Optional<AgentSignal> technicalSignal(ChartStudy study) {
-		double score = study.score();
-		if (Math.abs(score) < TECHNICAL_DEADZONE) {
+	Optional<AgentSignal> technicalSignal(ChartStudy study, Double normal) {
+		double level = study.score();
+		// Against the chart's own 20-session normal (strategy rebuild, 2026-11-10): the level kept voting "buy" on
+		// semiconductors that had trended up for weeks, right into their sell-off; the change from normal graded
+		// right in both halves of the past six weeks. Without enough history the level is used as before.
+		boolean vsNormal = normal != null;
+		double score = vsNormal ? level - normal : level;
+		double deadzone = vsNormal ? TECHNICAL_CHANGE_DEADZONE : TECHNICAL_DEADZONE;
+		double full = vsNormal ? TECHNICAL_CHANGE_FULL : 0.7;
+		if (Math.abs(score) < deadzone) {
 			return Optional.empty();
 		}
 		SignalDirection dir = score > 0 ? SignalDirection.BULLISH : SignalDirection.BEARISH;
-		double weight = TECHNICAL_MAX_WEIGHT * Math.min(1.0, Math.abs(score) / 0.7);
+		double weight = TECHNICAL_MAX_WEIGHT * Math.min(1.0, Math.abs(score) / full);
 		boolean trendLed = study.trend() != ChartStudy.Trend.SIDEWAYS && study.sma200() != null;
 		String rationale = study.notes().stream()
 				.filter(n -> n.startsWith("Trend:") || n.startsWith("Candlestick (") || n.startsWith("Relative strength")
 						|| n.startsWith("Volume:"))
 				.limit(4).reduce((x, y) -> x + " " + y).orElse("Chart study " + study.bias());
-		return Optional.of(new AgentSignal("agent-10-technical", dir, weight,
-				String.format("Chart %s (score %+.2f): %s", study.bias().toLowerCase(), score, rationale),
-				trendLed ? 30 : 10));
+		String head = vsNormal
+				? String.format("Chart %s vs its 20-day normal (score %+.2f vs %+.2f → %+.2f)", score > 0 ? "improving" : "weakening",
+						level, normal, score)
+				: String.format("Chart %s (score %+.2f)", study.bias().toLowerCase(), level);
+		return Optional.of(new AgentSignal("agent-10-technical", dir, weight, head + ": " + rationale, trendLed ? 30 : 10));
 	}
 
 	/**

@@ -195,3 +195,26 @@ whether it predicts better. The Claude CLI/subscription route was considered and
 | 3 — Don't chase | **Failed its backtest → not built as a rule.** Buy side: hold-out gain −0.01 pts (1,581 clusters), expired calls beat filled ones. Mirror: −0.02 pts. Only 1–2 of Agent 5's 28 graded BUYs were stretched. A `stretch=` feature token lets the learner find it if it matters for Argus specifically. (`research/phase3_stretch_backtest.py`) |
 | 4 — Defense | **Defense failed narrowly → not built.** Max drop cut 30% (bar ≥ 20%) but 28% of return given up (bar ≤ 25%). Macro short: −11.6% over 78 FOMC days, −22.2% over 113 jobs Fridays; runs as a 12-release shadow that drops itself. Calls the day before FOMC/jobs carry a `macro=` token for the learner. Not built: weakest-sector filter, short-interest skip (no data source), CPI dates (no schedule source). (`research/phase4_defense_backtest.py`) |
 | 5 — Core bucket | **Failed its gate → engine not built.** Survivorship-honest test lagged VFV by 1.5 pts/yr (all-zero: −8.4). Buyout deal prices weren't extracted (counted as 0%, conservative); membership came from Wikipedia's S&P 500 change log. Informational: a 25% cash ladder into VFV returned +283–288% vs +304% fully invested over 10y. (`research/phase5_core_backtest.py`) |
+
+## Change log
+
+**2026-11-10 — grading robustness, and News / Chart Reader score against their own normal.**
+Why: the first report cards muted Chart Reader (−10.4 pts) and News (−1.5 pts). Digging in:
+- One 80¢ stock (RETO, +402% in ten days) that Chart Reader called bearish 14 times decided most of its grade.
+  Without it, or with every result capped at ±30 pts, its spread was −0.6 pts instead of −5.5.
+- The 44-stock universe trailed SPY (semis −10.5, AI infra −18.8 pts at 10 days); even News's neutral calls trailed by
+  9.5 pts. Against same-sector peers neither agent was badly wrong.
+- Tested on the graded calls (results capped, sub-$5 dropped), the signal *minus its own trailing normal* correlated
+  with 10-day excess in both halves of the period (Chart Reader +0.15 / +0.36; News +0.23 / +0.23 at its 5-day
+  window). Sector-relative scoring helped Chart Reader but hurt News, and combining both was unstable — not adopted.
+
+What changed:
+1. Report-card grading (live cards and the Phase 1 backfill fit): each result capped at ±30 pts; stocks under $5 at
+   entry are not graded. The Phase 1 *pass test itself* (rec_grade calls, margin, spread, clusters) is unchanged.
+2. News votes on this week's tone minus the stock's tone over the 30 days before (raw tone if fewer than 5 stories).
+3. Chart Reader votes on today's chart score minus its average over the prior 20 sessions, each re-read from candles
+   as they stood (level as before if there's too little history); vote bar 0.1, full weight at 0.4.
+4. News's and Chart Reader's live report cards restart on 2026-11-10 — older grades describe the old signals.
+   They're UNGRADED (weight back toward 1.0, 0.1 a night) until 30 fresh clusters (~5–6 weeks).
+
+Caveat: six weeks of overlapping data; the correlations are promising, not proof. The restarted cards are the test.

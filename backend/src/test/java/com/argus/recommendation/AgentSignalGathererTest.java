@@ -102,6 +102,63 @@ class AgentSignalGathererTest {
 		assertTrue(signals.get(0).weight() > 0);
 	}
 
+	private static NewsArticle analyzedOn(String headline, double score, Instant publishedAt) {
+		NewsArticle a = new NewsArticle("RSS", "id" + Math.random(), "u", headline, "s", publishedAt, new String[] {"AAPL"});
+		a.applySentiment(new SentimentAnalysis(SentimentLabel.BULLISH, score, 0.9, false), Instant.now());
+		return a;
+	}
+
+	private static List<NewsArticle> normalWeeks(double score) {
+		List<NewsArticle> out = new java.util.ArrayList<>();
+		for (int i = 0; i < 6; i++) {
+			out.add(analyzedOn("Older story " + i, score, Instant.now().minus(java.time.Duration.ofDays(10 + 3L * i))));
+		}
+		return out;
+	}
+
+	@Test
+	void newsAsUpbeatAsUsualIsNoSignal() {
+		// The stock's news always reads +0.5: this week's +0.5 is its normal, not a reason to buy.
+		List<NewsArticle> all = new java.util.ArrayList<>(normalWeeks(0.5));
+		all.add(analyzedOn("This week A", 0.5, Instant.now()));
+		all.add(analyzedOn("This week B", 0.5, Instant.now()));
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(all);
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+
+		AgentSignal s = gatherer.gather("AAPL").get(0);
+		assertEquals(SignalDirection.NEUTRAL, s.direction());
+		assertEquals(0.0, s.weight(), 1e-9);
+	}
+
+	@Test
+	void newsLessUpbeatThanUsualLeansBearish() {
+		List<NewsArticle> all = new java.util.ArrayList<>(normalWeeks(0.6));
+		all.add(analyzedOn("This week A", 0.2, Instant.now()));
+		all.add(analyzedOn("This week B", 0.2, Instant.now()));
+		when(news.findAnalyzedForTicker(eq("AAPL"), any())).thenReturn(all);
+		when(quietPeriod.statusFor("AAPL")).thenReturn(QuietPeriodStatus.clear());
+
+		AgentSignal s = gatherer.gather("AAPL").get(0);
+		assertEquals(SignalDirection.BEARISH, s.direction()); // +0.2 is good news in words, but well below its normal
+		assertTrue(s.rationale().contains("normal 0.60"));
+	}
+
+	@Test
+	void chartReaderVotesOnTheChangeFromItsNormalNotTheLevel() {
+		com.argus.technical.ChartStudy study = org.mockito.Mockito.mock(com.argus.technical.ChartStudy.class);
+		when(study.score()).thenReturn(0.6);
+		when(study.trend()).thenReturn(com.argus.technical.ChartStudy.Trend.UPTREND);
+		when(study.notes()).thenReturn(List.of());
+		when(study.bias()).thenReturn("BULLISH");
+
+		// a strong uptrend that has looked this strong for weeks is no vote
+		assertTrue(gatherer.technicalSignal(study, 0.55).isEmpty());
+		// the same chart weakening from a stronger normal leans bearish
+		assertEquals(SignalDirection.BEARISH, gatherer.technicalSignal(study, 0.9).orElseThrow().direction());
+		// with no history yet the level decides, as before
+		assertEquals(SignalDirection.BULLISH, gatherer.technicalSignal(study, null).orElseThrow().direction());
+	}
+
 	// ---- headline dedup clustering (Fable 5 follow-up) ----
 
 	@Test

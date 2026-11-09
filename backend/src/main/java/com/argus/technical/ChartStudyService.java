@@ -32,6 +32,7 @@ public class ChartStudyService {
 
 	private final PriceCandleRepository candles;
 	private final Map<String, Cached<Optional<ChartStudy>>> studies = new ConcurrentHashMap<>();
+	private final Map<String, Cached<Optional<Double>>> normals = new ConcurrentHashMap<>();
 	/** The candles each cached study was built from, so a live re-measure of its levels needs no query. */
 	private final Map<String, Cached<List<PriceCandle>>> series = new ConcurrentHashMap<>();
 	private volatile Cached<List<PriceCandle>> benchmark;
@@ -62,6 +63,49 @@ public class ChartStudyService {
 		studies.put(t, new Cached<>(fresh, now));
 		series.put(t, new Cached<>(bars, now));
 		return fresh;
+	}
+
+	/** Sessions that set a chart's normal score. */
+	static final int NORMAL_SESSIONS = 20;
+
+	/**
+	 * The chart score's own normal: its average over the {@value #NORMAL_SESSIONS} sessions before the latest,
+	 * each re-read from the candles as they stood that day (nothing stored, no look-ahead). Empty when there's too
+	 * little history. Agent 10 votes on the change from this, not the level — a stock that has looked like a
+	 * strong uptrend for weeks is no news (strategy rebuild, 2026-11-10).
+	 */
+	public Optional<Double> normalScore(String ticker) {
+		String t = normalize(ticker);
+		Cached<Optional<Double>> c = normals.get(t);
+		if (c != null && c.fresh()) {
+			return c.value();
+		}
+		Optional<Double> fresh;
+		try {
+			fresh = normalScore(ascending(t), benchmarkCandles());
+		}
+		catch (RuntimeException ex) {
+			log.warn("Chart normal for {} failed — no normal: {}", t, ex.toString());
+			fresh = Optional.empty();
+		}
+		normals.put(t, new Cached<>(fresh, Instant.now()));
+		return fresh;
+	}
+
+	static Optional<Double> normalScore(List<PriceCandle> bars, List<PriceCandle> benchmark) {
+		double sum = 0;
+		int n = 0;
+		for (int back = 1; back <= NORMAL_SESSIONS && bars.size() - back >= ChartReader.MIN_BARS; back++) {
+			List<PriceCandle> asOf = bars.subList(0, bars.size() - back);
+			java.time.LocalDate day = asOf.get(asOf.size() - 1).getCandleDate();
+			List<PriceCandle> bench = benchmark.stream().filter(b -> !b.getCandleDate().isAfter(day)).toList();
+			Optional<ChartStudy> st = ChartReader.study(asOf, bench);
+			if (st.isPresent()) {
+				sum += st.get().score();
+				n++;
+			}
+		}
+		return n < NORMAL_SESSIONS / 2 ? Optional.empty() : Optional.of(sum / n);
 	}
 
 	/** A live price further than this from the last close is distrusted (e.g. a wrong-listing quote). */
@@ -106,6 +150,7 @@ public class ChartStudyService {
 	/** Drop cached studies (after a candle ingest, or in tests). */
 	public void evictAll() {
 		studies.clear();
+		normals.clear();
 		series.clear();
 		benchmark = null;
 	}

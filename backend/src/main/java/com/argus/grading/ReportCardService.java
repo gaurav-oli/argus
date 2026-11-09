@@ -26,6 +26,24 @@ public class ReportCardService {
 
 	private static final Logger log = LoggerFactory.getLogger(ReportCardService.class);
 
+	/**
+	 * One graded result counts at most this many points either way. A single sub-dollar spike (RETO, +402% in ten
+	 * days) once decided most of Chart Reader's grade on its own; capped, it still counts as a big miss.
+	 */
+	static final double EXCESS_CAP = 30;
+
+	/** Stocks under this price at entry aren't graded — Argus doesn't buy them, and their swings swamp the rest. */
+	static final double MIN_ENTRY_PRICE = 5;
+
+	/**
+	 * Agents whose signal changed meaning on a date: their live card restarts there, since older grades describe
+	 * the old signal. (News and Chart Reader now score against each stock's own normal, 2026-11-10.) The Phase 1
+	 * backfill fit ({@link #fittedUntil}) still uses everything — it judges the calls that were actually made.
+	 */
+	static final Map<String, LocalDate> RESTARTED = Map.of(
+			"agent-1-news", LocalDate.of(2026, 11, 10),
+			"agent-10-technical", LocalDate.of(2026, 11, 10));
+
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper json = tools.jackson.databind.json.JsonMapper.builder().build();
 	private final Map<String, Weight> cache = new ConcurrentHashMap<>();
@@ -53,6 +71,10 @@ public class ReportCardService {
 		});
 		List<Card> cards = new ArrayList<>();
 		for (Map.Entry<String, List<Obs>> e : byAgent.entrySet()) {
+			LocalDate restart = RESTARTED.get(e.getKey());
+			if (restart != null) {
+				e.setValue(e.getValue().stream().filter(o -> !o.date().isBefore(restart)).toList());
+			}
 			double mult = current.containsKey(e.getKey()) ? current.get(e.getKey())[0] : 1.0;
 			Card c = ReportCardMath.card(e.getKey(), e.getValue(), mult, currentSits.getOrDefault(e.getKey(), Map.of()));
 			save(c);
@@ -82,10 +104,11 @@ public class ReportCardService {
 				       excess_5, excess_10, excess_20, excess_60
 				from signal_grade
 				where direction in ('BULLISH', 'BEARISH') and (?::date is null or call_date <= ?::date)
+				  and (entry_close is null or entry_close >= ?)
 				order by agent, call_date""", rs -> {
 			String agent = rs.getString("agent");
 			int h = ReportCardMath.horizonFor(agent);
-			double excess = rs.getDouble("excess_" + h);
+			double excess = Math.max(-EXCESS_CAP, Math.min(EXCESS_CAP, rs.getDouble("excess_" + h)));
 			if (rs.wasNull()) {
 				out.computeIfAbsent(agent, k -> new ArrayList<>()); // still listed, just nothing graded yet
 				return;
@@ -94,7 +117,7 @@ public class ReportCardService {
 			out.computeIfAbsent(agent, k -> new ArrayList<>()).add(new Obs(rs.getDate("call_date").toLocalDate(),
 					rs.getString("sector"), rs.getDouble("strength"), sign, excess, rs.getString("regime"),
 					rs.getBoolean("earnings_week")));
-		}, until, until);
+		}, until, until, MIN_ENTRY_PRICE);
 		return out;
 	}
 
