@@ -122,7 +122,8 @@ public class Phase1Gate implements GateEvaluator {
 				select g.agent, g.ticker, g.call_date, g.direction, g.strength, r.sector, r.excess_20
 				from signal_grade g
 				join rec_grade r on r.ticker = g.ticker and r.call_date = g.call_date
-				where g.call_date >= ? and r.excess_20 is not null and g.direction in ('BULLISH', 'BEARISH')""", rs -> {
+				where g.call_date >= ? and r.excess_20 is not null and g.direction in ('BULLISH', 'BEARISH')
+				  and g.agent not like 'exp-%'""", rs -> {
 			String key = rs.getString("ticker") + "|" + rs.getDate("call_date");
 			int sign = "BULLISH".equals(rs.getString("direction")) ? 1 : -1;
 			double strength = rs.getDouble("strength");
