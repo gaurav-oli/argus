@@ -47,7 +47,8 @@ class RecommendationTriggerTest {
 	private void notFrozenClearWithSignals() {
 		lenient().when(graduation.currentState()).thenReturn(GraduationState.ACTIVE);
 		lenient().when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
-		lenient().when(gatherer.gather(anyString())).thenReturn(List.of(aSignal));
+		lenient().when(gatherer.gatherRaw(anyString())).thenReturn(List.of(aSignal));
+		lenient().when(gatherer.weigh(anyString(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(List.of(aSignal));
 		lenient().when(sectors.sectorOf(anyString())).thenReturn(Sector.TECHNOLOGY);
 		lenient().when(regimes.current()).thenReturn(MarketRegime.unavailable());
 		lenient().when(regimes.moveOf(anyString())).thenReturn(java.util.Optional.empty());
@@ -85,7 +86,8 @@ class RecommendationTriggerTest {
 	void noSignalsProducesNothing() {
 		when(graduation.currentState()).thenReturn(GraduationState.ACTIVE);
 		when(quietPeriod.statusFor(anyString())).thenReturn(QuietPeriodStatus.clear());
-		when(gatherer.gather("AAPL")).thenReturn(List.of());
+		when(gatherer.gatherRaw("AAPL")).thenReturn(List.of());
+		when(gatherer.weigh(anyString(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(List.of());
 		assertTrue(trigger.trigger("AAPL").isEmpty());
 		verify(recommendations, never()).create(anyString(), any(), any(), anyString(), anyString());
 	}

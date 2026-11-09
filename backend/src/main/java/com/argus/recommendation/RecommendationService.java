@@ -44,6 +44,18 @@ public class RecommendationService {
 		return repository.save(rec);
 	}
 
+	/** The calibrated score for a signal set, without persisting anything (the Phase 1 shadow verdict uses it). */
+	public ProbabilityScore score(List<AgentSignal> signals) {
+		return calibrate(engine.score(signals));
+	}
+
+	/** Stamp the report-card shadow verdict on a saved call. */
+	@Transactional
+	public void recordShadow(Recommendation rec, RecommendationAction action, int conviction) {
+		rec.recordShadow(action, conviction);
+		repository.save(rec);
+	}
+
 	/**
 	 * Phase B: nudge the stated directional probability toward the realized hit rate (isotonic
 	 * calibration). The engine stays pure — this adjusts only the reported probability, never the

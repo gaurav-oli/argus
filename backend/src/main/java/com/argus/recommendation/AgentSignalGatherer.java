@@ -1,5 +1,8 @@
 package com.argus.recommendation;
 
+import com.argus.grading.ReportCardWeights;
+import com.argus.grading.StrategyGateService;
+
 import com.argus.calendar.EarningsQuietPeriodService;
 import com.argus.calendar.QuietPeriodStatus;
 import com.argus.intelligence.MacroRelevanceTagger;
@@ -117,13 +120,17 @@ public class AgentSignalGatherer {
 	private final DeepAnalysisRepository deepAnalyses;
 	private final SectorClassifier sectors;
 	private final MarketRegimeService regimes;
+	private final ReportCardWeights reportCard;
+	private final StrategyGateService gates;
 
 	public AgentSignalGatherer(NewsArticleRepository news, SocialPostRepository social,
 			SecFilingRepository sec, WebMentionRepository web, EarningsQuietPeriodService quietPeriod,
 			AdaptiveTuningService tuning, ChartStudyService chartStudies, FundamentalsService fundamentals,
 			DeepAnalysisRepository deepAnalyses, SectorClassifier sectors, MarketRegimeService regimes, FilingDigestService filings,
-			StrategyScoreService strategies) {
+			StrategyScoreService strategies, ReportCardWeights reportCard, StrategyGateService gates) {
 		this.strategies = strategies;
+		this.reportCard = reportCard;
+		this.gates = gates;
 		this.news = news;
 		this.social = social;
 		this.sec = sec;
@@ -144,6 +151,11 @@ public class AgentSignalGatherer {
 	 * the evidence base Agent 11 reasons over; it deliberately excludes Agent 11's own verdict.
 	 */
 	public List<AgentSignal> gatherBase(String ticker) {
+		return weigh(ticker, gatherBaseRaw(ticker), reportCardLive());
+	}
+
+	/** {@link #gatherBase} before any learned weighting — what both weightings start from. */
+	public List<AgentSignal> gatherBaseRaw(String ticker) {
 		List<AgentSignal> signals = new ArrayList<>();
 		newsSignal(ticker).ifPresent(signals::add);
 		macroSignal(ticker).ifPresent(signals::add);
@@ -153,19 +165,47 @@ public class AgentSignalGatherer {
 		calendarSignal(ticker).ifPresent(signals::add);
 		chartStudies.studyFor(ticker).ifPresent(study -> technicalSignal(study).ifPresent(signals::add));
 		fundamentalSignal(ticker).ifPresent(signals::add);
-		filingSignal(ticker).map(this::applyReliability).ifPresent(signals::add);
-		academicSignal(ticker).map(this::applyReliability).ifPresent(signals::add);
-		// Phase B: scale each agent's weight by its learned reliability (identity when tuning is disabled).
-		return signals.stream().map(this::applyReliability).toList();
+		filingSignal(ticker).ifPresent(signals::add);
+		academicSignal(ticker).ifPresent(signals::add);
+		return signals;
 	}
 
 	/** The full signal set for a recommendation: {@link #gatherBase} plus Agent 11's stored deep verdict, if fresh. */
 	public List<AgentSignal> gather(String ticker) {
-		List<AgentSignal> tuned = new ArrayList<>(gatherBase(ticker));
-		deepSignal(ticker).map(this::applyReliability).ifPresent(tuned::add);
+		List<AgentSignal> tuned = weigh(ticker, gatherRaw(ticker), reportCardLive());
 		log.info("gather({}) → [{}]", ticker,
 				tuned.stream().map(AgentSignal::agent).reduce((a, b) -> a + "," + b).orElse("NONE"));
 		return tuned;
+	}
+
+	/** {@link #gather} before any learned weighting. */
+	public List<AgentSignal> gatherRaw(String ticker) {
+		List<AgentSignal> raw = new ArrayList<>(gatherBaseRaw(ticker));
+		deepSignal(ticker).ifPresent(raw::add);
+		return raw;
+	}
+
+	/**
+	 * Weigh raw signals with either the report card (strategy rebuild, Phase 1) or the legacy reliability multipliers.
+	 * The live path uses whichever the Phase 1 gate says; the other one is still computed as the shadow so the two can
+	 * be compared, and so a reverted gate falls straight back.
+	 */
+	public List<AgentSignal> weigh(String ticker, List<AgentSignal> raw, boolean useReportCard) {
+		if (!useReportCard) {
+			return raw.stream().map(this::applyReliability).toList();
+		}
+		boolean riskOff = "RISK_OFF".equals(regimes.current().label());
+		boolean earnings = quietPeriod.statusFor(ticker).status() != QuietPeriodStatus.Status.CLEAR;
+		List<AgentSignal> out = new ArrayList<>();
+		for (AgentSignal s : raw) {
+			reportCard.apply(s, riskOff, earnings).ifPresent(out::add);
+		}
+		return out;
+	}
+
+	/** Whether the report card has passed its pre-registered test and drives the live weights. */
+	public boolean reportCardLive() {
+		return gates.live(StrategyGateService.PHASE1_WEIGHTS);
 	}
 
 	/** Multiply a signal's weight by its agent's learned reliability multiplier. */

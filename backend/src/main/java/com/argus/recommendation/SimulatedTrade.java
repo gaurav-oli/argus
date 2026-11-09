@@ -128,6 +128,10 @@ public class SimulatedTrade {
 	@Column(name = "scale_in", nullable = false)
 	private boolean scaleIn;
 
+	/** Round-trip trading cost in percent (spread + slippage + commission), taken off the return at close. */
+	@Column(name = "cost_pct", nullable = false)
+	private BigDecimal costPct = BigDecimal.ZERO;
+
 	/** For the taken-off half of a scaled-out trade: the trade it came from. */
 	@Column(name = "parent_trade_id")
 	private Long parentTradeId;
@@ -186,14 +190,16 @@ public class SimulatedTrade {
 	public void close(BigDecimal exit, BigDecimal benchmarkExit) {
 		this.exitPrice = exit;
 		BigDecimal rawPct = pctChange(entryPrice, exit);
-		this.returnPct = rawPct.multiply(BigDecimal.valueOf(direction.sign()))
+		// Realistic fills: the round-trip trading cost comes off the return (zero for trades opened before it existed).
+		BigDecimal cost = costPct == null ? BigDecimal.ZERO : costPct;
+		this.returnPct = rawPct.multiply(BigDecimal.valueOf(direction.sign())).subtract(cost)
 				.setScale(4, RoundingMode.HALF_UP);
 		if (benchmarkEntry != null && benchmarkEntry.signum() > 0
 				&& benchmarkExit != null && benchmarkExit.signum() > 0) {
 			this.benchmarkExit = benchmarkExit;
 			BigDecimal spyPct = pctChange(benchmarkEntry, benchmarkExit);
 			this.excessReturnPct = rawPct.subtract(spyPct)
-					.multiply(BigDecimal.valueOf(direction.sign()))
+					.multiply(BigDecimal.valueOf(direction.sign())).subtract(cost)
 					.setScale(4, RoundingMode.HALF_UP);
 			this.won = excessReturnPct.signum() > 0;
 		}
@@ -209,6 +215,15 @@ public class SimulatedTrade {
 		this.stopPrice = stopPrice;
 		this.initialStop = stopPrice;
 		this.sizeMultiplier = BigDecimal.valueOf(sizeMultiplier).setScale(3, RoundingMode.HALF_UP);
+	}
+
+	/** Record this trade's round-trip cost (see {@link FillModel}). */
+	public void applyCosts(double roundTripPct) {
+		this.costPct = BigDecimal.valueOf(roundTripPct).setScale(4, RoundingMode.HALF_UP);
+	}
+
+	public BigDecimal getCostPct() {
+		return costPct;
 	}
 
 	/** Give a legacy trade (opened before stops existed) its first stop. */
@@ -249,6 +264,7 @@ public class SimulatedTrade {
 		half.horizonDays = horizonDays;
 		half.benchmarkEntry = benchmarkEntry;
 		half.sizeMultiplier = sizeMultiplier;
+		half.costPct = costPct;
 		half.stopPrice = stopPrice;
 		half.initialStop = initialStop;
 		half.parentTradeId = id;

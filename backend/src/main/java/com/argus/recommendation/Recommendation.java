@@ -90,6 +90,23 @@ public class Recommendation {
 	/** The learned lessons that shaped this call, newline-separated. */
 	private String lessons;
 
+	/**
+	 * The pre-registered "worth acting on" bar, stamped when the call is made and never recomputed: shadow trades and
+	 * grading select on this, so the selection can't quietly be redone after the outcome is known.
+	 */
+	@Column(name = "actionable_bar")
+	private Boolean actionableBar;
+
+	@Column(name = "bar_version")
+	private String barVersion;
+
+	/** What Agent 5 would have said with the report-card weights (Phase 1 shadow), for the side-by-side test. */
+	@Column(name = "shadow_action")
+	private String shadowAction;
+
+	@Column(name = "shadow_conviction")
+	private Integer shadowConviction;
+
 	@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "recommendation_id", nullable = false)
 	private List<RecommendationSignal> signals = new ArrayList<>();
@@ -125,10 +142,33 @@ public class Recommendation {
 		this.sector = sector;
 		this.features = com.argus.learning.FeatureTokens.toJson(verdict.features());
 		this.lessons = String.join("\n", verdict.learned());
+		this.actionableBar = verdict.action().actionable();
+		this.barVersion = BAR_VERSION;
 		if (verdict.action().actionable()) {
 			// The call's direction follows the action; a WATCH keeps the engine's lean for the audit trail.
 			this.direction = verdict.action().direction();
 		}
+	}
+
+	/** Version of the actionable bar: v1 = the policy's own BUY/STRONG_BUY/AVOID/STRONG_AVOID (conviction ≥ 62). */
+	public static final String BAR_VERSION = "v1";
+
+	/** Record the report-card shadow verdict for this call. */
+	public void recordShadow(RecommendationAction shadow, int conviction) {
+		this.shadowAction = shadow.name();
+		this.shadowConviction = conviction;
+	}
+
+	public Boolean getActionableBar() {
+		return actionableBar;
+	}
+
+	public String getShadowAction() {
+		return shadowAction;
+	}
+
+	public Integer getShadowConviction() {
+		return shadowConviction;
 	}
 
 	public void markStatus(RecommendationStatus newStatus) {

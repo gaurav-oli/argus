@@ -77,6 +77,7 @@ public class StrategyCandleIngestion {
 			return;
 		}
 		try {
+			deepenBenchmarks();
 			int saved = ingestOnce();
 			if (saved > 0) {
 				log.info("Agent 15: ranking-universe candles — {} new bar(s)", saved);
@@ -103,7 +104,7 @@ public class StrategyCandleIngestion {
 				for (int attempt = 0; attempt < 10 && universe.activeTickers().isEmpty(); attempt++) {
 					Thread.sleep(3000); // the universe seeds on its own startup thread
 				}
-				int total = 0;
+				int total = deepenBenchmarks();
 				for (int pass = 1; pass <= MAX_CATCHUP_PASSES; pass++) {
 					long covered = countWithHistory();
 					int wanted = universe.activeTickers().size();
@@ -135,6 +136,39 @@ public class StrategyCandleIngestion {
 	 * One bounded pass, stalest first. Returns bars written. Per-ticker try/catch: one dead symbol (a ticker
 	 * renamed, an index member that no longer trades) must not stop the rest of the pass.
 	 */
+	/**
+	 * Benchmarks the grader and the rebuild's backtests measure against (strategy rebuild, Phase 0). Agent 10 only
+	 * keeps a year of SPY; grading at 60 days and the 10-year backtests need the long history too.
+	 */
+	static final List<String> BENCHMARKS = List.of("SPY", "QQQ", "^VIX");
+
+	/** Deepen any benchmark whose stored history starts later than ~9 years ago. Returns bars written. */
+	public int deepenBenchmarks() {
+		int saved = 0;
+		LocalDate wantFrom = LocalDate.now().minusYears(9);
+		for (String b : BENCHMARKS) {
+			List<java.sql.Date> first = jdbc.queryForList("select min(candle_date) from price_candles where ticker = ?",
+					java.sql.Date.class, b);
+			LocalDate have = first.isEmpty() || first.get(0) == null ? null : first.get(0).toLocalDate();
+			if (have != null && !have.isAfter(wantFrom)) {
+				continue;
+			}
+			try {
+				var series = yahoo.fetch(b, range);
+				if (series.isPresent()) {
+					int n = store(b, series.get());
+					saved += n;
+					log.info("Benchmark history: {} deepened by {} bar(s)", b, n);
+				}
+			}
+			catch (RuntimeException ex) {
+				log.warn("Benchmark history for {} failed: {}", b, ex.getMessage());
+			}
+			pause();
+		}
+		return saved;
+	}
+
 	public int ingestOnce() {
 		List<String> candidates = universe.activeTickers();
 		if (candidates.isEmpty()) {

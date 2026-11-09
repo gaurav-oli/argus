@@ -57,7 +57,8 @@ class AgentSignalGathererTest {
 	private final com.argus.filings.FilingDigestService filings = mock(com.argus.filings.FilingDigestService.class);
 	private final com.argus.strategy.StrategyScoreService academicStrategies = mock(com.argus.strategy.StrategyScoreService.class);
 	private final AgentSignalGatherer gatherer = new AgentSignalGatherer(news, social, sec, web, quietPeriod,
-			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes, filings, academicStrategies);
+			tuning, chartStudies, fundamentals, deepAnalyses, sectors, regimes, filings, academicStrategies,
+			mock(com.argus.grading.ReportCardWeights.class), mock(com.argus.grading.StrategyGateService.class));
 
 	{
 		// Tuning off by default in these tests → identity weight multipliers.

@@ -46,11 +46,13 @@ public class LogicReviewService {
 	private final JdbcTemplate jdbc;
 	private final LogicReviewProperties props;
 	private final AdaptiveTuningProperties tuningProps;
+	private final com.argus.grading.StrategyGateService gates;
 
 	public LogicReviewService(SimulatedTradeRepository trades, RecommendationRepository recommendations,
 			AgentReliabilityRepository reliabilities, AdaptiveTuningService tuning, ProbabilityScoringEngine engine,
 			ModelGateway gateway, JdbcTemplate jdbc, LogicReviewProperties props,
-			AdaptiveTuningProperties tuningProps) {
+			AdaptiveTuningProperties tuningProps, com.argus.grading.StrategyGateService gates) {
+		this.gates = gates;
 		this.trades = trades;
 		this.recommendations = recommendations;
 		this.reliabilities = reliabilities;
@@ -86,6 +88,12 @@ public class LogicReviewService {
 		if (!props.enabled()) {
 			return persist(new Result(false, false, 0, null, null, null, null, "Logic review disabled.", List.of()),
 					"n/a");
+		}
+		// Strategy rebuild, Phase 1: once the report card drives the weights, this loop is retired (kept behind the
+		// gate, not deleted, so a reverted gate brings it straight back).
+		if (gates.live(com.argus.grading.StrategyGateService.PHASE1_WEIGHTS)) {
+			return persist(new Result(false, false, 0, null, null, null, null,
+					"Retired: the report card now sets agent weights.", List.of()), "n/a");
 		}
 
 		// Build the evaluable, labelled backtest set: closed trades with a directional call + outcome.

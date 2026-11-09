@@ -156,6 +156,24 @@ public class RecommendationTrigger implements Agent {
 	}
 
 	/**
+	 * What the other weighting would have called (strategy rebuild, Phase 1): stamped on the call so the two can be
+	 * graded side by side. Best-effort — a shadow failure must never stop the real call.
+	 */
+	private void recordShadow(Recommendation rec, List<AgentSignal> shadowSignals, Sector sector, MarketRegime regime,
+			Double lastPrice, Double move1d, boolean earningsSoon, ChartStudy chart, DeepView deep,
+			RecommendationPolicy.Standing standing) {
+		try {
+			RecommendationPolicy.Verdict v = shadowSignals.isEmpty() ? null
+					: policy.evaluate(new RecommendationPolicy.Context(rec.getTicker(), recommendations.score(shadowSignals),
+							shadowSignals, sector, regime, lastPrice, move1d, earningsSoon, chart, deep, standing));
+			recommendations.recordShadow(rec, v == null ? RecommendationAction.WATCH : v.action(), v == null ? 0 : v.score());
+		}
+		catch (RuntimeException ex) {
+			log.debug("Shadow verdict for {} failed: {}", rec.getTicker(), ex.getMessage());
+		}
+	}
+
+	/**
 	 * Produce a recommendation for {@code ticker} if the gates allow. Returns the recommendation, or
 	 * empty when suppressed (FROZEN, quiet period, or no signals). Public so tests drive it directly.
 	 */
@@ -178,7 +196,10 @@ public class RecommendationTrigger implements Agent {
 			log.info("Earnings ahead for {} — suppressing probability card (quiet period)", ticker);
 			return Optional.empty();
 		}
-		List<AgentSignal> signals = gatherer.gather(ticker);
+		// One raw read, weighed twice: the live weighting decides, the other is recorded as the shadow (Phase 1).
+		List<AgentSignal> raw = gatherer.gatherRaw(ticker);
+		boolean reportCardLive = gatherer.reportCardLive();
+		List<AgentSignal> signals = gatherer.weigh(ticker, raw, reportCardLive);
 		if (signals.isEmpty()) {
 			return Optional.empty();
 		}
@@ -200,6 +221,8 @@ public class RecommendationTrigger implements Agent {
 				sector.name(), reason == null || reason.length() <= 120 ? reason : reason.substring(0, 117) + "...");
 		log.info("Agent 5 {} {} — conviction {}/100, hold {}d ({} signals)", rec.getTicker(), rec.getAction(),
 				rec.getConvictionScore(), rec.getHoldDays(), signals.size());
+		recordShadow(rec, gatherer.weigh(ticker, raw, !reportCardLive), sector, regime, lastPrice, move1d, earningsSoon,
+				chart, deep, standing);
 		// Every call — WATCH included — is first checked against what the book already holds on this ticker:
 		// a call the other way exits those legs, a WATCH tightens their stops.
 		investor.reviewOpenAgainst(rec);
