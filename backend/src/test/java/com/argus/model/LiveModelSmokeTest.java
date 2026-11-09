@@ -33,7 +33,7 @@ class LiveModelSmokeTest {
 				.ollamaApi(OllamaApi.builder().baseUrl(System.getProperty("argus.live.url", "http://localhost:11434")).build())
 				.options(OllamaChatOptions.builder().model(model).numPredict(1024).build()).build();
 		ModelGatewayProperties props = new ModelGatewayProperties(1, Duration.ofSeconds(280), Duration.ofMinutes(5), model, "llama3.2:3b", "x", false);
-		CostGovernor gov = new CostGovernor(org.mockito.Mockito.mock(CostEventRepository.class), org.mockito.Mockito.mock(LocalModelCallRepository.class), 0);
+		CostGovernor gov = new CostGovernor(org.mockito.Mockito.mock(CostEventRepository.class), org.mockito.Mockito.mock(LocalModelCallRepository.class), null, 0);
 		CostRecorder rec = new CostRecorder(org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class),
 				org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
 		String prompt = """

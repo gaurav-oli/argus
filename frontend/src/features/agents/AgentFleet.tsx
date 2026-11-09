@@ -140,12 +140,11 @@ function BudgetPanel({ b }: { b: BudgetStatus }) {
         ))}
       </div>
 
+      <ClaudeRouteSplit cli={b.cliCalls} api={b.paidCalls} failures={b.cliFailures} />
+
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text-secondary">
         <span>
           Projected <span className="font-mono text-text-primary">{usd(b.projectedUsd)}</span>
-        </span>
-        <span>
-          {b.paidCalls} paid call{b.paidCalls === 1 ? "" : "s"}
         </span>
         <span>
           {b.localModelCalls} Gemma call{b.localModelCalls === 1 ? "" : "s"}
@@ -156,6 +155,37 @@ function BudgetPanel({ b }: { b: BudgetStatus }) {
         )}
       </div>
     </MotionCard>
+  );
+}
+
+/** How this month's Claude calls were routed: Claude Code CLI (subscription) vs the paid API key. */
+function ClaudeRouteSplit({ cli, api, failures }: { cli: number; api: number; failures: number }) {
+  const total = cli + api;
+  const cliPct = total === 0 ? 0 : Math.round((cli / total) * 100);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+        <span className="text-text-secondary">Claude calls this month</span>
+        <span className="text-text-secondary">
+          <span className="font-mono text-gains">{cli.toLocaleString()}</span> via CLI ·{" "}
+          <span className="font-mono text-text-primary">{api.toLocaleString()}</span> via API key
+          {total > 0 && <span> · {cliPct}% on the subscription</span>}
+        </span>
+      </div>
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--hairline)]">
+        {total > 0 && (
+          <>
+            <div className="h-full bg-[var(--color-gains)]" style={{ width: `${cliPct}%` }} />
+            <div className="h-full bg-[var(--color-accent)]" style={{ width: `${100 - cliPct}%` }} />
+          </>
+        )}
+      </div>
+      {failures > 0 && (
+        <span className="text-[11px] text-text-secondary">
+          {failures} CLI call{failures === 1 ? "" : "s"} failed and fell back to the API key
+        </span>
+      )}
+    </div>
   );
 }
 

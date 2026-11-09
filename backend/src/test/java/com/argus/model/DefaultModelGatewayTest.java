@@ -42,14 +42,14 @@ class DefaultModelGatewayTest {
 
 	/** Governor with a 0 budget = governance disabled (always allows paid calls), no repo touched. */
 	private static CostGovernor gov() {
-		return new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), 0);
+		return new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), null, 0);
 	}
 
 	/** Governor at ≥95% spent — paid Haiku must be refused (S-A5 / H5). */
 	private static CostGovernor blockedGov() {
 		CostEventRepository events = mock(CostEventRepository.class);
 		when(events.sumCostSince(any())).thenReturn(BigDecimal.valueOf(19));
-		return new CostGovernor(events, mock(LocalModelCallRepository.class), 20);
+		return new CostGovernor(events, mock(LocalModelCallRepository.class), null, 20);
 	}
 
 	@SuppressWarnings("unchecked")

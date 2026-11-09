@@ -15,7 +15,9 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -44,6 +46,8 @@ public class ClaudeCliClient {
 	private final Semaphore permits;
 	private final ObjectMapper json = JsonMapper.builder().build();
 	private volatile Instant pausedUntil = Instant.EPOCH;
+	/** Records each call in {@code claude_cli_calls}; null in unit tests. */
+	private JdbcTemplate jdbc;
 
 	/** One CLI answer and what it used. */
 	public record Result(String text, long inputTokens, long outputTokens, String model) {
@@ -62,6 +66,11 @@ public class ClaudeCliClient {
 				: "Claude CLI not configured (no CLAUDE_CODE_OAUTH_TOKEN) — Claude calls use the API key");
 	}
 
+	@org.springframework.beans.factory.annotation.Autowired
+	void setJdbc(ObjectProvider<JdbcTemplate> jdbc) {
+		this.jdbc = jdbc.getIfAvailable();
+	}
+
 	/** Whether the CLI is configured and not paused after hitting a usage limit. */
 	public boolean available() {
 		return enabled && Instant.now().isAfter(pausedUntil);
@@ -72,6 +81,11 @@ public class ClaudeCliClient {
 	 * {@link ModelGatewayException} when a call is attempted and fails, so the caller can fall back.
 	 */
 	public Optional<Result> generate(String model, String system, String prompt) {
+		return generate("escalation", model, system, prompt);
+	}
+
+	/** As {@link #generate(String, String, String)}, recording the call under {@code source}. */
+	public Optional<Result> generate(String source, String model, String system, String prompt) {
 		if (!available()) {
 			return Optional.empty();
 		}
@@ -87,10 +101,29 @@ public class ClaudeCliClient {
 			throw new ModelGatewayException("Claude CLI busy — no slot within " + timeout.toSeconds() + "s");
 		}
 		try {
-			return Optional.of(run(model, system, prompt));
+			Result r = run(model, system, prompt);
+			record(source, model, r.inputTokens(), r.outputTokens(), "ok");
+			return Optional.of(r);
+		}
+		catch (ModelGatewayException ex) {
+			record(source, model, 0, 0, "failed");
+			throw ex;
 		}
 		finally {
 			permits.release();
+		}
+	}
+
+	private void record(String source, String model, long in, long out, String outcome) {
+		if (jdbc == null) {
+			return;
+		}
+		try {
+			jdbc.update("insert into claude_cli_calls (model, source, input_tokens, output_tokens, outcome) values (?, ?, ?, ?, ?)",
+					model, source, in, out, outcome);
+		}
+		catch (RuntimeException ex) {
+			log.warn("Could not record Claude CLI call: {}", ex.getMessage());
 		}
 	}
 

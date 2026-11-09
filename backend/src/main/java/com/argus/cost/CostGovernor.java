@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,12 +25,14 @@ public class CostGovernor {
 
 	private final CostEventRepository events;
 	private final LocalModelCallRepository localCalls;
+	private final JdbcTemplate jdbc;
 	private final double budgetUsd;
 
-	public CostGovernor(CostEventRepository events, LocalModelCallRepository localCalls,
+	public CostGovernor(CostEventRepository events, LocalModelCallRepository localCalls, JdbcTemplate jdbc,
 			@Value("${argus.budget.monthly-usd:20}") double budgetUsd) {
 		this.events = events;
 		this.localCalls = localCalls;
+		this.jdbc = jdbc;
 		this.budgetUsd = budgetUsd;
 	}
 
@@ -42,6 +45,9 @@ public class CostGovernor {
 		double spent = monthToDate();
 		long calls = events.countByOccurredAtAfter(startOfMonth());
 		long localModelCalls = localCalls.countByOccurredAtAfter(startOfMonth());
+		long[] cli = jdbc.queryForObject(
+				"select count(*) filter (where outcome = 'ok'), count(*) filter (where outcome <> 'ok') from claude_cli_calls where occurred_at >= ?",
+				(rs, i) -> new long[] { rs.getLong(1), rs.getLong(2) }, java.sql.Timestamp.from(startOfMonth()));
 		double pct = budgetUsd <= 0 ? 0 : (spent / budgetUsd) * 100;
 		LocalDate today = LocalDate.now(ZONE);
 		int dayOfMonth = today.getDayOfMonth();
@@ -49,7 +55,8 @@ public class CostGovernor {
 		double projected = dayOfMonth == 0 ? spent : spent / dayOfMonth * daysInMonth;
 		String band = pct >= 95 ? "CRITICAL" : pct >= 80 ? "WARNING" : pct >= 70 ? "NOTICE" : "NORMAL";
 		return new BudgetStatus(round(spent), budgetUsd, round(pct), band, YearMonth.now(ZONE).toString(),
-				daysInMonth - dayOfMonth, round(projected), pct >= 95, calls, localModelCalls);
+				daysInMonth - dayOfMonth, round(projected), pct >= 95, calls, localModelCalls, cli[0],
+				cli[1]);
 	}
 
 	private double monthToDate() {

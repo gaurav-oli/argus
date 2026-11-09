@@ -115,7 +115,7 @@ public class ModelExperiment implements NightlyStep {
 	Double score(String ticker, String headline, String summary) {
 		String user = "Stock: " + ticker + "\nHeadline: " + headline + (summary.isBlank() ? "" : "\nSummary: " + summary);
 		try {
-			var r = cli.generate(model, SYSTEM, user);
+			var r = cli.generate("model_experiment", model, SYSTEM, user);
 			if (r.isPresent()) {
 				return number(r.get().text());
 			}

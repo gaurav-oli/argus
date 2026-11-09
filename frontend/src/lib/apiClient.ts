@@ -1006,6 +1006,10 @@ export interface BudgetStatus {
   paidCallsBlocked: boolean;
   paidCalls: number;
   localModelCalls: number;
+  /** Claude calls answered through the Claude Code CLI (subscription) this month; paidCalls is the API-key side. */
+  cliCalls: number;
+  /** CLI calls that errored this month, after which the caller fell back to the API key. */
+  cliFailures: number;
 }
 
 export const getBudgetStatus = (): Promise<BudgetStatus> => apiGet<BudgetStatus>("/api/budget/status");

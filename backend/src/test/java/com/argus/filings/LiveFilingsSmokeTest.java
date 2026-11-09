@@ -35,7 +35,7 @@ class LiveFilingsSmokeTest {
 		String model = System.getProperty("argus.live.model", "gemma4:12b");
 		OllamaChatModel chat = OllamaChatModel.builder().ollamaApi(OllamaApi.builder().baseUrl("http://localhost:11434").build())
 				.options(OllamaChatOptions.builder().model(model).numPredict(1024).build()).build();
-		var gateway = new DefaultModelGateway(chat, p -> "FALLBACK", new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), 0),
+		var gateway = new DefaultModelGateway(chat, p -> "FALLBACK", new CostGovernor(mock(CostEventRepository.class), mock(LocalModelCallRepository.class), null, 0),
 				new CostRecorder(mock(org.springframework.beans.factory.ObjectProvider.class), mock(org.springframework.beans.factory.ObjectProvider.class)),
 				new ModelGatewayProperties(1, Duration.ofSeconds(280), Duration.ofMinutes(5), model, "llama3.2:3b", "x", false));
 		FilingDigestRepository repo = mock(FilingDigestRepository.class);

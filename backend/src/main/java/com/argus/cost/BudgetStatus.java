@@ -14,8 +14,11 @@ package com.argus.cost;
  * @param paidCalls        number of paid (Haiku) calls this month
  * @param localModelCalls  number of successful local-model (Gemma) calls this month — free, but worth
  *                         showing alongside spend so the panel isn't only "how much did I spend."
+ * @param cliCalls         Claude calls answered through the Claude Code CLI (subscription) this month — not billed
+ *                         to the API key; {@code paidCalls} is the API-key side
+ * @param cliFailures      CLI calls this month that errored, after which the caller fell back to the API key
  */
 public record BudgetStatus(double spentUsd, double budgetUsd, double percentUsed, String band,
 		String month, int daysLeftInMonth, double projectedUsd, boolean paidCallsBlocked, long paidCalls,
-		long localModelCalls) {
+		long localModelCalls, long cliCalls, long cliFailures) {
 }
