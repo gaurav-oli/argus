@@ -18,6 +18,7 @@ import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
 import com.argus.internet.WebMention;
 import com.argus.internet.WebMentionRepository;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.sec.SecFiling;
@@ -275,7 +276,7 @@ public class ResearchAgentService {
 				[{"label":"short step name","dataSource":"NEWS|MACRO|SOCIAL|INSIDER|WEB|EARNINGS|FINANCIALS|FILINGS|TECHNICAL|DEEP","why":"one sentence"}]
 				""".formatted(ticker, ticker);
 		try {
-			List<Step> parsed = parseSteps(gateway.generate(prompt, ModelTier.BIG));
+			List<Step> parsed = parseSteps(gateway.generateFor(ClaudeFeature.RESEARCH, prompt));
 			if (!parsed.isEmpty()) {
 				return parsed;
 			}
@@ -327,7 +328,7 @@ public class ResearchAgentService {
 				""".formatted(ticker, remaining.get(justCompletedIndex).label(), finding,
 				upcoming.stream().map(Step::label).collect(Collectors.joining(", ")));
 		try {
-			String raw = gateway.generate(prompt, ModelTier.BIG);
+			String raw = gateway.generateFor(ClaudeFeature.RESEARCH, prompt);
 			if (raw == null || raw.strip().toUpperCase(Locale.ROOT).contains("NO_CHANGE") || !raw.contains("[")) {
 				return null;
 			}

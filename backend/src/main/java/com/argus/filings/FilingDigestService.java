@@ -1,6 +1,7 @@
 package com.argus.filings;
 
 import com.argus.intelligence.KnownUniverse;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.LenientJsonParser;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
@@ -157,10 +158,10 @@ public class FilingDigestService {
 			return Optional.empty();
 		}
 		String prompt = prompt(ticker, ref.form(), kind, source);
-		Optional<JsonNode> parsed = LenientJsonParser.parseObject(gateway.generate(prompt, ModelTier.BIG), log);
+		Optional<JsonNode> parsed = LenientJsonParser.parseObject(gateway.generateFor(ClaudeFeature.FILINGS, prompt), log);
 		if (parsed.isEmpty()) {
-			parsed = LenientJsonParser.parseObject(gateway.generate(prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON object.",
-					ModelTier.BIG), log);
+			parsed = LenientJsonParser.parseObject(gateway.generateFor(ClaudeFeature.FILINGS,
+					prompt + "\nYour previous reply was not valid JSON. Reply with ONLY the JSON object."), log);
 		}
 		return parsed.map(p -> build(ticker, ref, kind, source, p));
 	}

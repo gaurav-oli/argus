@@ -3,6 +3,7 @@ package com.argus.briefing;
 import com.argus.calendar.CalendarEvent;
 import com.argus.calendar.CalendarEventRepository;
 import com.argus.intelligence.NewsArticleRepository;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import com.argus.portfolio.HealthScoreService;
 import com.argus.portfolio.LivePortfolioService;
@@ -113,7 +114,7 @@ public class BriefingService {
 
 		Parsed parsed = null;
 		try {
-			parsed = parse(gateway.generate(prompt(facts, firstName))); // BIG (local) tier
+			parsed = parse(gateway.generateFor(ClaudeFeature.WRITING, prompt(facts, firstName)));
 		} catch (RuntimeException ex) {
 			log.warn("Briefing model call failed ({}) — using deterministic fallback", ex.getMessage());
 		}

@@ -66,6 +66,37 @@ class DefaultModelGatewayTest {
 		assertEquals("pong", gateway.generate("ping"));
 	}
 
+	private static DefaultModelGateway claudeFirst(ClaudeCliClient cli, String features) {
+		return new DefaultModelGateway(new MockChatModel("local"), prompt -> "paid api", gov(), recorder(), props(1), cli,
+				"claude-sonnet-5-5", features);
+	}
+
+	@Test
+	void claudeFirstFeaturesUseTheSubscriptionCliWithTheQualityModel() {
+		ClaudeCliClient cli = mock(ClaudeCliClient.class);
+		when(cli.generate("filings", "claude-sonnet-5-5", null, "read this"))
+				.thenReturn(java.util.Optional.of(new ClaudeCliClient.Result("from claude", 1, 1, "claude-sonnet-5-5")));
+
+		assertEquals("from claude", claudeFirst(cli, "filings,chat").generateFor(ClaudeFeature.FILINGS, "read this"));
+	}
+
+	@Test
+	void claudeFirstFallsBackToTheLocalModelNeverThePaidApi() {
+		ClaudeCliClient cli = mock(ClaudeCliClient.class);
+		when(cli.generate(any(), any(), any(), any())).thenThrow(new ModelGatewayException("usage limit"));
+		assertEquals("local", claudeFirst(cli, "filings").generateFor(ClaudeFeature.FILINGS, "x"));
+
+		org.mockito.Mockito.doReturn(java.util.Optional.empty()).when(cli).generate(any(), any(), any(), any());
+		assertEquals("local", claudeFirst(cli, "filings").generateFor(ClaudeFeature.FILINGS, "x"));
+	}
+
+	@Test
+	void aSwitchedOffFeatureStaysOnTheLocalModel() {
+		ClaudeCliClient cli = mock(ClaudeCliClient.class);
+		assertEquals("local", claudeFirst(cli, "filings").generateFor(ClaudeFeature.CHAT, "hi"));
+		org.mockito.Mockito.verifyNoInteractions(cli);
+	}
+
 	@Test
 	void escalateRoutesDirectlyToHaiku() {
 		ModelGateway gateway = new DefaultModelGateway(

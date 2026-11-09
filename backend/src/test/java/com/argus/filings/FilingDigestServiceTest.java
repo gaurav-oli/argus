@@ -30,7 +30,7 @@ class FilingDigestServiceTest {
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 	private final EdgarClient edgar = mock(EdgarClient.class);
 	private final FilingDigestRepository repo = mock(FilingDigestRepository.class);
-	private final ModelGateway gateway = mock(ModelGateway.class);
+	private final ModelGateway gateway = mock(ModelGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS); // generateFor → generate(…, BIG)
 	private final KnownUniverse universe = mock(KnownUniverse.class);
 	private final FilingDigestService service = new FilingDigestService(edgar, repo, gateway, universe);
 

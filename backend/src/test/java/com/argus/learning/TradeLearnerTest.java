@@ -45,7 +45,7 @@ class TradeLearnerTest {
 	private final LearnedRuleRepository rules = mock(LearnedRuleRepository.class);
 	private final LearningReportRepository reports = mock(LearningReportRepository.class);
 	private final LessonBook book = mock(LessonBook.class);
-	private final ModelGateway gateway = mock(ModelGateway.class);
+	private final ModelGateway gateway = mock(ModelGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS); // generateFor → generate(…, BIG)
 	private final List<LearnedRule> store = new ArrayList<>();
 	private final AtomicLong ids = new AtomicLong(100);
 

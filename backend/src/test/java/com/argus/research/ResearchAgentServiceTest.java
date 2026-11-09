@@ -50,7 +50,7 @@ class ResearchAgentServiceTest {
 	private final SecFilingRepository sec = mock(SecFilingRepository.class);
 	private final WebMentionRepository web = mock(WebMentionRepository.class);
 	private final CalendarEventRepository calendar = mock(CalendarEventRepository.class);
-	private final ModelGateway gateway = mock(ModelGateway.class);
+	private final ModelGateway gateway = mock(ModelGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS); // generateFor → generate(…, BIG)
 	private final LivePushService livePush = mock(LivePushService.class);
 	private final ResearchJobProperties props = new ResearchJobProperties(2, 30);
 	private final ChartStudyService charts = mock(ChartStudyService.class);

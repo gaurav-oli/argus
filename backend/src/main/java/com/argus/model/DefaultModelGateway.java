@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -39,10 +41,27 @@ public class DefaultModelGateway implements ModelGateway {
 	private final OllamaChatOptions smallModelOptions;
 	/** Per-call override for BIG generations: no hidden "thinking" tokens (see {@link ModelGatewayProperties#bigThinking()}); null = leave the default. */
 	private final OllamaChatOptions bigModelOptions;
+	/** Claude Code CLI for {@link #generateFor}; null = always the local model. */
+	private final ClaudeCliClient cli;
+	private final String qualityModel;
+	private final java.util.Set<String> claudeFirst;
 
 	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
 			com.argus.cost.CostGovernor costGovernor, com.argus.cost.CostRecorder costRecorder,
 			ModelGatewayProperties properties) {
+		this(chatModel, haikuFallback, costGovernor, costRecorder, properties, null, "", "");
+	}
+
+	@Autowired
+	public DefaultModelGateway(ChatModel chatModel, HaikuFallback haikuFallback,
+			com.argus.cost.CostGovernor costGovernor, com.argus.cost.CostRecorder costRecorder,
+			ModelGatewayProperties properties, ClaudeCliClient cli,
+			@Value("${argus.claude-first.model:claude-sonnet-5-5}") String qualityModel,
+			@Value("${argus.claude-first.features:filings,chat,research,statements,writing,learner}") String features) {
+		this.cli = cli;
+		this.qualityModel = qualityModel;
+		this.claudeFirst = java.util.Arrays.stream(features.split(",")).map(String::strip).filter(f -> !f.isEmpty())
+				.collect(java.util.stream.Collectors.toUnmodifiableSet());
 		if (properties.concurrency() < 1) {
 			// A 0/negative value would create a semaphore no caller can ever acquire, silently
 			// bricking every BIG-tier call — fail loudly at startup instead.
@@ -83,6 +102,23 @@ public class DefaultModelGateway implements ModelGateway {
 		// ModelGatewayException when unavailable → 503 at the edge.
 		log.info("escalating to Haiku (deeper analysis)");
 		return paidFallback(prompt, "deeper analysis");
+	}
+
+	@Override
+	public String generateFor(ClaudeFeature feature, String prompt) {
+		validatePrompt(prompt);
+		if (cli != null && claudeFirst.contains(feature.key())) {
+			try {
+				var r = cli.generate(feature.key(), qualityModel, null, prompt);
+				if (r.isPresent() && !r.get().text().isBlank()) {
+					return r.get().text();
+				}
+			}
+			catch (ModelGatewayException ex) {
+				log.info("Claude CLI unavailable for {} ({}) — using the local model", feature.key(), ex.getMessage());
+			}
+		}
+		return generateBig(prompt);
 	}
 
 	/** Cheap guard against a null/blank prompt (caller bug) or an absurdly oversized one (runaway

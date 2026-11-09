@@ -27,4 +27,12 @@ public interface ModelGateway {
 	 * (no Anthropic API key) or the Haiku call fails.
 	 */
 	String escalate(String prompt);
+
+	/**
+	 * Claude through the subscription CLI first for {@code feature}, the local big model when the CLI is unavailable,
+	 * fails, or the feature is switched off — never the paid API. Defaults to the local big model.
+	 */
+	default String generateFor(ClaudeFeature feature, String prompt) {
+		return generate(prompt, ModelTier.BIG);
+	}
 }

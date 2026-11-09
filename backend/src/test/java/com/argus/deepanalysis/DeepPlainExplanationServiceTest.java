@@ -32,7 +32,7 @@ class DeepPlainExplanationServiceTest {
 	void generatesAndCachesAPlainExplanationOnFirstCall() {
 		DeepAnalysis run = done(DeepVerdict.WORTH_BUYING);
 		when(repo.findById(1L)).thenReturn(Optional.of(run));
-		when(gateway.generate(anyString())).thenReturn("Argus thinks this is a buy.\n\nKEY TERMS:\nMargin — how much profit stays after costs.");
+		when(gateway.generateFor(org.mockito.ArgumentMatchers.eq(com.argus.model.ClaudeFeature.WRITING), anyString())).thenReturn("Argus thinks this is a buy.\n\nKEY TERMS:\nMargin — how much profit stays after costs.");
 
 		String first = service.explain(1L).orElseThrow();
 
@@ -44,20 +44,20 @@ class DeepPlainExplanationServiceTest {
 	void aSecondCallReturnsTheCachedTextWithoutCallingTheModelAgain() {
 		DeepAnalysis run = done(DeepVerdict.WAIT);
 		when(repo.findById(2L)).thenReturn(Optional.of(run));
-		when(gateway.generate(anyString())).thenReturn("First explanation.");
+		when(gateway.generateFor(org.mockito.ArgumentMatchers.eq(com.argus.model.ClaudeFeature.WRITING), anyString())).thenReturn("First explanation.");
 
 		service.explain(2L);
 		String second = service.explain(2L).orElseThrow();
 
 		assertEquals("First explanation.", second);
-		verify(gateway, org.mockito.Mockito.times(1)).generate(anyString());
+		verify(gateway, org.mockito.Mockito.times(1)).generateFor(org.mockito.ArgumentMatchers.eq(com.argus.model.ClaudeFeature.WRITING), anyString());
 	}
 
 	@Test
 	void aModelFailureFallsBackToADeterministicExplanationRatherThanNone() {
 		DeepAnalysis run = done(DeepVerdict.NOT_WORTH_BUYING);
 		when(repo.findById(3L)).thenReturn(Optional.of(run));
-		when(gateway.generate(anyString())).thenThrow(new RuntimeException("model unavailable"));
+		when(gateway.generateFor(org.mockito.ArgumentMatchers.eq(com.argus.model.ClaudeFeature.WRITING), anyString())).thenThrow(new RuntimeException("model unavailable"));
 
 		String text = service.explain(3L).orElseThrow();
 
@@ -73,6 +73,6 @@ class DeepPlainExplanationServiceTest {
 		DeepAnalysis queued = new DeepAnalysis("TSLA", "TEST");
 		when(repo.findById(4L)).thenReturn(Optional.of(queued));
 		assertTrue(service.explain(4L).isEmpty(), "no verdict yet means nothing to explain");
-		verify(gateway, never()).generate(anyString());
+		verify(gateway, never()).generateFor(org.mockito.ArgumentMatchers.eq(com.argus.model.ClaudeFeature.WRITING), anyString());
 	}
 }

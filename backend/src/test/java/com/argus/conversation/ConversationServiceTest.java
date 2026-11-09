@@ -33,7 +33,7 @@ import org.mockito.ArgumentCaptor;
 /** The service grounds the prompt, routes to the BIG tier, and returns the gateway's answer (Stories 7.1/7.2). */
 class ConversationServiceTest {
 
-	private final ModelGateway gateway = mock(ModelGateway.class);
+	private final ModelGateway gateway = mock(ModelGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS); // generateFor → generate(…, BIG)
 	private final LivePortfolioService livePortfolio = mock(LivePortfolioService.class);
 	private final HealthScoreService healthScore = mock(HealthScoreService.class);
 	private final RecommendationService recommendations = mock(RecommendationService.class);

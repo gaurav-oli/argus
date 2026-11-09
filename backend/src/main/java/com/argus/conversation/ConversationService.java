@@ -2,6 +2,7 @@ package com.argus.conversation;
 
 import com.argus.calendar.CalendarEvent;
 import com.argus.calendar.CalendarEventRepository;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import com.argus.portfolio.HealthScoreResult;
@@ -101,7 +102,7 @@ public class ConversationService {
 	/** Compose the prompt and route it: Haiku when escalating, the local BIG model otherwise. */
 	private String answer(String grounding, List<ChatMessage> messages, boolean deeper) {
 		String prompt = composePrompt(grounding, safe(messages));
-		return deeper ? modelGateway.escalate(prompt) : modelGateway.generate(prompt, ModelTier.BIG);
+		return deeper ? modelGateway.escalate(prompt) : modelGateway.generateFor(ClaudeFeature.CHAT, prompt);
 	}
 
 	private static List<ChatMessage> safe(List<ChatMessage> messages) {

@@ -1,5 +1,6 @@
 package com.argus.deepanalysis;
 
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import java.util.Locale;
 import java.util.Optional;
@@ -52,7 +53,7 @@ public class DeepPlainExplanationService {
 		String prompt = DeepPrompts.plainExplanation(run.getTicker(), run.getVerdict().label(), run.getHoldDays(), run.getHeadline(),
 				run.getThesis(), run.getBullCase(), run.getBearCase(), run.getInvalidation());
 		try {
-			String raw = gateway.generate(prompt);
+			String raw = gateway.generateFor(ClaudeFeature.WRITING, prompt);
 			if (raw != null && !raw.isBlank()) {
 				return raw.strip();
 			}

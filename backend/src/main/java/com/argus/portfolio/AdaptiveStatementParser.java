@@ -1,5 +1,6 @@
 package com.argus.portfolio;
 
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
 import org.slf4j.Logger;
@@ -61,7 +62,7 @@ public class AdaptiveStatementParser {
 			try {
 				String prompt = attempt == 1 ? StatementExtraction.PROMPT + text
 						: VERIFY_PREAMBLE.formatted(StatementExtraction.toJson(lastStatement)) + StatementExtraction.PROMPT + text;
-				String raw = model.generate(prompt, ModelTier.BIG); // local Gemma, not Haiku
+				String raw = model.generateFor(ClaudeFeature.STATEMENTS, prompt); // subscription CLI, else local Gemma — not paid Haiku
 				lastStatement = StatementExtraction.readResponse(raw);
 				StatementParser.ParseResult result = StatementExtraction.toParseResult(lastStatement, null);
 				ImportConfidence.Verdict verdict = ImportConfidence.assess(result, text);

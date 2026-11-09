@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  * to Haiku only as a last resort, and always returns something usable. */
 class AdaptiveStatementParserTest {
 
-	private final ModelGateway model = mock(ModelGateway.class);
+	private final ModelGateway model = mock(ModelGateway.class, org.mockito.Mockito.CALLS_REAL_METHODS); // generateFor → generate(…, BIG)
 	private final LlmStatementParser haiku = mock(LlmStatementParser.class);
 	private final AdaptiveStatementParser parser = new AdaptiveStatementParser(model, haiku);
 

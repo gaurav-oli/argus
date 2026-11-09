@@ -3,6 +3,7 @@ package com.argus.learning;
 import com.argus.learning.LessonMiner.Candidate;
 import com.argus.learning.LessonMiner.Observation;
 import com.argus.learning.LessonMiner.Result;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.LenientJsonParser;
 import com.argus.model.ModelGateway;
 import com.argus.model.ModelTier;
@@ -325,7 +326,7 @@ public class TradeLearner {
 				 "explanations":[{"id":<rule id>,"why":"one sentence: the most plausible reason this pattern loses/wins"}]}
 				""".formatted(facts);
 		try {
-			Optional<JsonNode> parsed = LenientJsonParser.parseObject(gateway.generate(prompt, ModelTier.BIG), log);
+			Optional<JsonNode> parsed = LenientJsonParser.parseObject(gateway.generateFor(ClaudeFeature.LEARNER, prompt), log);
 			if (parsed.isEmpty()) return Optional.empty();
 			for (JsonNode e : parsed.get().path("explanations")) {
 				long id = e.path("id").asLong(-1);

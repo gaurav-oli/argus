@@ -1,5 +1,6 @@
 package com.argus.persona;
 
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import com.argus.recommendation.Recommendation;
 import com.argus.recommendation.RecommendationRepository;
@@ -131,7 +132,7 @@ public class PersonaService {
 
 	private Map<Persona, PersonaVerdict> callModel(Recommendation rec) {
 		String canadaFacts = canadianContext.describe(rec.getTicker(), rec.getPriceTarget());
-		String raw = gateway.generate(prompt(rec, canadaFacts)); // BIG (local) tier
+		String raw = gateway.generateFor(ClaudeFeature.WRITING, prompt(rec, canadaFacts));
 		JsonNode array = JSON.readTree(extractJsonArray(raw));
 		Map<Persona, PersonaVerdict> out = new EnumMap<>(Persona.class);
 		for (JsonNode node : array) {

@@ -2,6 +2,7 @@ package com.argus.briefing;
 
 import com.argus.intelligence.NewsArticle;
 import com.argus.intelligence.NewsArticleRepository;
+import com.argus.model.ClaudeFeature;
 import com.argus.model.ModelGateway;
 import java.time.Duration;
 import java.time.Instant;
@@ -109,7 +110,7 @@ public class MarketPulseService {
 			return "No market-impacting news captured yet — check back after the agents' next cycle.";
 		}
 		try {
-			String parsed = extract(gateway.generate(prompt(articles)));
+			String parsed = extract(gateway.generateFor(ClaudeFeature.WRITING, prompt(articles)));
 			if (parsed != null && !parsed.isBlank()) {
 				return parsed;
 			}
