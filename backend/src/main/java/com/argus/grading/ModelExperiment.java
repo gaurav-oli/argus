@@ -50,16 +50,19 @@ public class ModelExperiment implements NightlyStep {
 	private final String model;
 	private final int dailySample;
 	private final boolean enabled;
+	private final com.argus.model.ClaudeCliClient cli;
 
 	public ModelExperiment(JdbcTemplate jdbc, @Value("${argus.haiku.api-key:}") String apiKey,
 			@Value("${argus.experiment.model:claude-opus-5-5}") String model,
 			@Value("${argus.experiment.daily-sample:20}") int dailySample,
-			@Value("${argus.experiment.enabled:true}") boolean enabled) {
+			@Value("${argus.experiment.enabled:true}") boolean enabled, com.argus.model.ClaudeCliClient cli) {
 		this.jdbc = jdbc;
 		this.model = model;
 		this.dailySample = dailySample;
-		this.enabled = enabled && apiKey != null && !apiKey.isBlank();
-		this.client = this.enabled ? AnthropicOkHttpClient.builder().apiKey(apiKey).build() : null;
+		this.cli = cli;
+		boolean hasKey = apiKey != null && !apiKey.isBlank();
+		this.client = hasKey ? AnthropicOkHttpClient.builder().apiKey(apiKey).build() : null;
+		this.enabled = enabled && (hasKey || cli.available());
 	}
 
 	@Override
@@ -102,29 +105,49 @@ public class ModelExperiment implements NightlyStep {
 		log.info("Model experiment: {} of {} sampled headline(s) re-scored by {}", scored, sample.size(), model);
 	}
 
-	/** The stronger model's sentiment toward {@code ticker}, −1..1; null when it gave no usable answer or declined. */
+	static final String SYSTEM = "You rate how a news item bears on a stock's price over the next week. Reply with one number "
+			+ "from -1 (clearly bad for the stock) to 1 (clearly good), 0 if it doesn't matter, and nothing else.";
+
+	/**
+	 * The stronger model's sentiment toward {@code ticker}, −1..1; null when it gave no usable answer or declined.
+	 * Goes through the Claude Code CLI (subscription) first, the API key when the CLI is unavailable or fails.
+	 */
 	Double score(String ticker, String headline, String summary) {
+		String user = "Stock: " + ticker + "\nHeadline: " + headline + (summary.isBlank() ? "" : "\nSummary: " + summary);
+		try {
+			var r = cli.generate(model, SYSTEM, user);
+			if (r.isPresent()) {
+				return number(r.get().text());
+			}
+		}
+		catch (com.argus.model.ModelGatewayException ex) {
+			log.debug("Experiment CLI call failed ({}); trying the API key", ex.getMessage());
+		}
+		if (client == null) {
+			return null;
+		}
 		MessageCreateParams params = MessageCreateParams.builder()
 				.model(model)
 				.maxTokens(2000L)
 				.outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
-				.system("You rate how a news item bears on a stock's price over the next week. Reply with one number "
-						+ "from -1 (clearly bad for the stock) to 1 (clearly good), 0 if it doesn't matter, and nothing else.")
-				.addUserMessage("Stock: " + ticker + "\nHeadline: " + headline + (summary.isBlank() ? "" : "\nSummary: " + summary))
+				.system(SYSTEM)
+				.addUserMessage(user)
 				.build();
 		Message response = client.messages().create(params);
 		recordCost(response);
 		if (response.stopReason().map(r -> r.equals(StopReason.REFUSAL)).orElse(false)) {
 			return null; // a declined sample is skipped, not guessed
 		}
-		String text = response.content().stream().flatMap(b -> b.text().stream()).map(t -> t.text())
-				.reduce("", String::concat).trim();
-		Matcher m = NUMBER.matcher(text);
+		return number(response.content().stream().flatMap(b -> b.text().stream()).map(t -> t.text())
+				.reduce("", String::concat));
+	}
+
+	static Double number(String text) {
+		Matcher m = NUMBER.matcher(text == null ? "" : text.trim());
 		if (!m.find()) {
 			return null;
 		}
-		double v = Double.parseDouble(m.group());
-		return Math.max(-1, Math.min(1, v));
+		return Math.max(-1, Math.min(1, Double.parseDouble(m.group())));
 	}
 
 	private void recordCost(Message response) {

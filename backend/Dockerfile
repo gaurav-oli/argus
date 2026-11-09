@@ -23,11 +23,20 @@ WORKDIR /app
 # ships postgresql-client 18, matching the pgvector/pgvector:0.8.2-pg18 server exactly — no need for
 # the PGDG apt repo. Connects over TCP to the postgres compose service (see BackupTriggerService),
 # not via docker-exec, so the backend image needs its own pg_dump binary.
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client \
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Run as a non-root user.
-RUN groupadd --system argus && useradd --system --gid argus --no-create-home argus
+# Claude Code CLI: Argus's Claude calls go through the owner's subscription (`claude -p`, see ClaudeCliClient),
+# authenticated at runtime by CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`; the API key is the fallback.
+# Installed system-wide (the native installer puts it under root's home, so copy the real binary out).
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && cp -L /root/.local/bin/claude /usr/local/bin/claude && chmod 755 /usr/local/bin/claude \
+    && rm -rf /root/.local /root/.claude
+ENV DISABLE_AUTOUPDATER=1
+
+# Run as a non-root user — with a home, which the Claude CLI needs for its config.
+RUN groupadd --system argus && useradd --system --gid argus --create-home --home-dir /home/argus argus
+ENV HOME=/home/argus
 
 # Single boot jar (layered extraction is a future caching optimization).
 COPY --from=build /app/target/argus-backend-*.jar app.jar

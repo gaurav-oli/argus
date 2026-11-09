@@ -22,9 +22,16 @@ public class GradingJob {
 	private final List<GateEvaluator> evaluators;
 	private final List<NightlyStep> steps;
 	private final boolean enabled;
+	private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+	private final boolean catchUpOnBoot;
+	/** Lets the boot-time candle top-ups land before grading reads them. */
+	private static final java.time.Duration CATCH_UP_DELAY = java.time.Duration.ofMinutes(5);
 
 	public GradingJob(SignalGrader grader, ReportCardService cards, List<GateEvaluator> evaluators, List<NightlyStep> steps,
-			@Value("${argus.grading.enabled:true}") boolean enabled) {
+			@Value("${argus.grading.enabled:true}") boolean enabled, org.springframework.jdbc.core.JdbcTemplate jdbc,
+			@Value("${argus.boot-catch-up.enabled:true}") boolean catchUpOnBoot) {
+		this.jdbc = jdbc;
+		this.catchUpOnBoot = catchUpOnBoot;
 		this.steps = steps;
 		this.grader = grader;
 		this.cards = cards;
@@ -38,6 +45,33 @@ public class GradingJob {
 			return;
 		}
 		runAll();
+	}
+
+	/**
+	 * Boot catch-up: a new install (or a host that was down over 19:30) would otherwise wait for the next evening. If
+	 * nothing has been graded in the last 20 hours, run one pass a few minutes after startup.
+	 */
+	@org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+	public void catchUpOnStartup() {
+		if (!enabled || !catchUpOnBoot) {
+			return;
+		}
+		Thread.startVirtualThread(() -> {
+			try {
+				Thread.sleep(CATCH_UP_DELAY);
+				java.sql.Timestamp last = jdbc.queryForObject("select max(created_at) from signal_grade", java.sql.Timestamp.class);
+				if (last == null || last.toInstant().isBefore(java.time.Instant.now().minus(java.time.Duration.ofHours(20)))) {
+					log.info("Grading startup catch-up: last graded {}", last == null ? "never" : last.toInstant());
+					runAll();
+				}
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+			catch (RuntimeException ex) {
+				log.warn("Grading startup catch-up failed: {}", ex.getMessage());
+			}
+		});
 	}
 
 	/** One full pass; each step isolated so one failure can't skip the rest. */

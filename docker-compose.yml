@@ -128,6 +128,8 @@ services:
       # default of 5 so the news carousel has enough cards to feel like a carousel, not a 2-3-item list.
       ARGUS_NEWS_CARDS_TARGET_READY: ${NEWS_CARDS_TARGET_READY:-10}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Claude Code CLI on the owner's subscription (from `claude setup-token`); calls fall back to the API key.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       # Haiku output cap (argus.haiku.max-tokens). Raised from the 1024 default so the LLM-assisted
       # statement parser can return a full multi-account holdings JSON. It's a ceiling, not a fixed
       # cost — chat answers still use only what they need.

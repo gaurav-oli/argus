@@ -26,9 +26,14 @@ public class HaikuConfig {
 	private static final Logger log = LoggerFactory.getLogger(HaikuConfig.class);
 
 	@Bean
-	HaikuFallback haikuFallback(HaikuProperties props, CostRecorder costRecorder) {
+	HaikuFallback haikuFallback(HaikuProperties props, CostRecorder costRecorder, ClaudeCliClient cli) {
+		// The Claude Code CLI (subscription) goes first when configured; the API key is the fallback.
+		return new CliFirstHaikuFallback(cli, apiFallback(props, costRecorder), props.model());
+	}
+
+	private HaikuFallback apiFallback(HaikuProperties props, CostRecorder costRecorder) {
 		if (props.apiKey() == null || props.apiKey().isBlank()) {
-			log.info("Anthropic API key not set — Haiku escalation unavailable; Argus runs fully local.");
+			log.info("Anthropic API key not set — no API fallback for Claude escalation.");
 			return new UnavailableHaikuFallback();
 		}
 		AnthropicClient client = AnthropicOkHttpClient.builder().apiKey(props.apiKey()).build();
