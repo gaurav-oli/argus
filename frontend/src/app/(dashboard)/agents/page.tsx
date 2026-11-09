@@ -12,6 +12,7 @@ import { LessonsFeed } from "@/features/agents/TradeLessons";
 import { PatternChecks } from "@/features/agents/PatternChecks";
 import { StyleFitMatrix } from "@/features/agents/StyleFitMatrix";
 import { StrategySandbox } from "@/features/agents/StrategySandbox";
+import { Postmortems, ReportCards, StrategyGates } from "@/features/agents/StrategyRebuild";
 import { TradeJournal } from "@/features/agents/TradeJournal";
 import { TradeLedger } from "@/features/agents/TradeLedger";
 
@@ -31,6 +32,19 @@ export default function AgentsPage() {
       />
       <AgentFleet />
       <AgentLogTail />
+
+      <div className="mt-8">
+        <h2 className="mb-1 font-display text-lg font-semibold text-text-primary">Report cards &amp; gates</h2>
+        <p className="mb-4 text-sm text-text-secondary">
+          Who to trust, what&rsquo;s allowed to go live, and why each trade won or lost — all measured against the
+          S&amp;P 500, with the sample size next to every number.
+        </p>
+        <div className="flex flex-col gap-4">
+          <ReportCards />
+          <StrategyGates />
+          <Postmortems />
+        </div>
+      </div>
 
       <div className="mt-8">
         <h2 className="mb-1 font-display text-lg font-semibold text-text-primary">Analyst &amp; Investor</h2>

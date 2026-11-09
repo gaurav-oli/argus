@@ -40,7 +40,8 @@ class ShadowBookPostmortemIntegrationTest {
 		jdbc.update("delete from trade_postmortem where ticker = ?", T);
 		jdbc.update("delete from shadow_trades where ticker = ?", T);
 		jdbc.update("delete from price_candles where ticker = ? ", T);
-		for (int i = 0; i < 3; i++) {
+		// Flat SPY across the shock check's look-back too, so another test's SPY rows can't read as a market shock.
+		for (int i = -10; i < 3; i++) {
 			bar("SPY", d0.plusDays(i), 500, 500, 500, 500);
 		}
 		bar(T, d0, 100, 101, 99, 100);

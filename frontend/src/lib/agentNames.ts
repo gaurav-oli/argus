@@ -15,6 +15,8 @@ const AGENT_NAMES: Record<string, string> = {
   "agent-12-fundamental": "Fundamentals",
   "agent-14-filings": "Filings Reader",
   "agent-15-academic": "Academic Strategies",
+  "exp-news-claude": "News experiment (Claude)",
+  "exp-news-gemma": "News experiment (local model)",
 };
 
 export function agentName(id: string | null | undefined): string {

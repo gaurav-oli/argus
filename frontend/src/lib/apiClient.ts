@@ -2479,3 +2479,89 @@ export interface LearningView {
 
 export const getLearning = (): Promise<LearningView> => apiGet<LearningView>("/api/learning");
 export const runLearning = (): Promise<{ started: boolean }> => apiPost<{ started: boolean }>("/api/learning/run");
+
+// ---- Strategy rebuild: report cards, gates, post-mortems (docs/strategy-rebuild-plan.md) ----
+
+export type ReportCard = {
+  agent: string;
+  horizon_days: number;
+  calls: number;
+  clusters: number;
+  edge_pct: number | null;
+  hit_rate: number | null;
+  strong_edge: number | null;
+  weak_edge: number | null;
+  strength_useful: boolean | null;
+  situational: string;
+  state: "UNGRADED" | "GOOD" | "COIN_FLIP" | "MUTED" | "FLIPPED";
+  target_multiplier: number;
+  multiplier: number;
+  pinned_multiplier: number | null;
+  updated_at: string;
+};
+
+export type StrategyGate = {
+  name: string;
+  status: "SHADOW" | "LIVE" | "REVERTED" | "FAILED";
+  details: string;
+  evaluated_at: string | null;
+  switched_at: string | null;
+  note: string | null;
+};
+
+export type PostmortemBucketRow = {
+  book: "REAL" | "SHADOW";
+  bucket: string;
+  trades: number;
+  final_count: number;
+  avg_excess: number | null;
+};
+
+export type BookSummary = {
+  closed: number;
+  open: number;
+  avg_excess: number | null;
+  win_rate: number | null;
+};
+
+export type PostmortemSummary = {
+  days: number;
+  buckets: PostmortemBucketRow[];
+  books: { shadow: BookSummary; real: BookSummary };
+};
+
+export type PostmortemTrade = {
+  book: string;
+  trade_id: number;
+  ticker: string;
+  direction: string;
+  entry_date: string;
+  closed_date: string | null;
+  exit_reason: string | null;
+  excess_pct: number | null;
+  hold_excess_pct: number | null;
+  bucket: string;
+  relied_on: string | null;
+  relied_right: boolean | null;
+  shock_reason: string | null;
+  agent_checks: string;
+  final: boolean;
+};
+
+export function getReportCards(): Promise<ReportCard[]> {
+  return apiGet<ReportCard[]>("/api/report-cards");
+}
+
+export function getStrategyGates(): Promise<{ killSwitch: boolean; gates: StrategyGate[] }> {
+  return apiGet("/api/report-cards/gates");
+}
+
+export function getPostmortemSummary(days: number): Promise<PostmortemSummary> {
+  return apiGet<PostmortemSummary>(`/api/postmortems/summary?days=${days}`);
+}
+
+export function getPostmortemTrades(book: string, bucket: string, days: number): Promise<PostmortemTrade[]> {
+  return apiGet<PostmortemTrade[]>(
+    `/api/postmortems?book=${encodeURIComponent(book)}&bucket=${encodeURIComponent(bucket)}&days=${days}`,
+  );
+}

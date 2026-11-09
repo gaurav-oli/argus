@@ -70,7 +70,8 @@ public class PostmortemService implements NightlyStep {
 				  and t.entry_at >= ?::date
 				  and not exists (select 1 from trade_postmortem p where p.book = 'REAL' and p.trade_id = t.id and p.final)
 				union all
-				select 'SHADOW', t.id, t.recommendation_id, t.ticker, t.direction, t.entry_at, t.exit_date::timestamptz,
+				select 'SHADOW', t.id, t.recommendation_id, t.ticker, t.direction, t.entry_at,
+				       (t.exit_date + time '16:00') at time zone 'America/New_York',
 				       t.exit_reason, t.excess_return_pct, t.hold_days, t.cost_pct, t.atr_pct, t.sector, r.created_at
 				from shadow_trades t left join recommendations r on r.id = t.recommendation_id
 				where t.status = 'CLOSED' and t.excess_return_pct is not null

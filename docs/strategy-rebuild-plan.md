@@ -182,3 +182,16 @@ whether it predicts better. The Claude CLI/subscription route was considered and
 
 **Open items:** paid delisted-price data (Norgate/Sharadar) only if the EDGAR approach proves too thin; the exact
 "set share of return" for the Phase 4 pass test is to be fixed before that backtest runs.
+
+---
+
+## Outcomes (built 2026-11-09)
+
+| Phase | Result |
+|---|---|
+| 0 — Foundations | **Built.** Nightly grader (`grading/SignalGrader`), realistic fills (`FillModel`, plus a 1%/yr borrow cost on shorts), stamped actionable bar, 10y SPY/QQQ/^VIX history. |
+| 1 — Report card | **Built, in shadow.** `ReportCardMath`/`ReportCardService`/`ReportCardWeights`; every call stamps a shadow verdict; `Phase1Gate` runs the backfill check (fit ≤ 2026-10-16, test ≥ 2026-10-19 — gradable from about 2026-11-17) and the forward check, and goes live only if both pass. Switch-off reverts automatically. Logic review stands down while it's live. Model experiment: `exp-news-claude` vs `exp-news-gemma` on the same daily sample. |
+| 2 — Shadow trades, post-mortems | **Built.** `ShadowBook` (same `PositionRules`, gap-aware stops), `PostmortemService` (5 buckets, fixed order, all vs SPY), Agent 13 learns from shadow trades and puts new rules on **probation** until fresh trades confirm them. |
+| 3 — Don't chase | **Failed its backtest → not built as a rule.** Buy side: hold-out gain −0.01 pts (1,581 clusters), expired calls beat filled ones. Mirror: −0.02 pts. Only 1–2 of Agent 5's 28 graded BUYs were stretched. A `stretch=` feature token lets the learner find it if it matters for Argus specifically. (`research/phase3_stretch_backtest.py`) |
+| 4 — Defense | **Defense failed narrowly → not built.** Max drop cut 30% (bar ≥ 20%) but 28% of return given up (bar ≤ 25%). Macro short: −11.6% over 78 FOMC days, −22.2% over 113 jobs Fridays; runs as a 12-release shadow that drops itself. Calls the day before FOMC/jobs carry a `macro=` token for the learner. Not built: weakest-sector filter, short-interest skip (no data source), CPI dates (no schedule source). (`research/phase4_defense_backtest.py`) |
+| 5 — Core bucket | **Failed its gate → engine not built.** Survivorship-honest test lagged VFV by 1.5 pts/yr (all-zero: −8.4). Buyout deal prices weren't extracted (counted as 0%, conservative); membership came from Wikipedia's S&P 500 change log. Informational: a 25% cash ladder into VFV returned +283–288% vs +304% fully invested over 10y. (`research/phase5_core_backtest.py`) |

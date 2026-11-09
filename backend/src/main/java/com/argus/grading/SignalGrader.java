@@ -75,7 +75,7 @@ public class SignalGrader {
 				                       shadow_action, shadow_conviction, sector, regime)
 				select distinct on (r.ticker, %1$s)
 				       r.ticker, %1$s, r.id, coalesce(r.action, 'WATCH'), r.conviction_score,
-				       coalesce(r.actionable_bar, r.action in ('BUY', 'STRONG_BUY', 'AVOID', 'STRONG_AVOID')),
+				       coalesce(r.actionable_bar, r.action in ('BUY', 'STRONG_BUY', 'AVOID', 'STRONG_AVOID'), false),
 				       r.shadow_action, r.shadow_conviction, r.sector, substring(r.features from '"regime=([A-Z_]+)"')
 				from recommendations r
 				where r.created_at >= ?::date
